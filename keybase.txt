@@ -1,0 +1,54 @@
+==================================================================
+https://keybase.io/oconnor663
+--------------------------------------------------------------------
+
+I hereby claim:
+
+  * I am an admin of https://jacko.io
+  * I am oconnor663 (https://keybase.io/oconnor663) on keybase.
+  * I have a public key ASAtu3eXfC6Y4E9TT_Ua2cErm3crus9f0MzAoDkvbieBPwo
+
+To do so, I am signing this object:
+
+{
+    "body": {
+        "key": {
+            "eldest_kid": "01013e053626ad23686e872fa75b64a5b803125970b5ca7a7b7d98c39ca7825b81a20a",
+            "host": "keybase.io",
+            "kid": "01202dbb77977c2e98e04f534ff51ad9c12b9b772bbacf5fd0ccc0a0392f6e27813f0a",
+            "uid": "41b1f75fb55046d370608425a3208100",
+            "username": "oconnor663"
+        },
+        "service": {
+            "hostname": "jacko.io",
+            "protocol": "https:"
+        },
+        "type": "web_service_binding",
+        "version": 1
+    },
+    "client": {
+        "name": "keybase.io go client",
+        "version": "1.0.0"
+    },
+    "ctime": 1448898614,
+    "expire_in": 504576000,
+    "merkle_root": {
+        "ctime": 1448898600,
+        "hash": "44310af43955d85d2747170d05e51fce21ef15ff94d9a4fff82ff1685cbef4a76137febfc77523d93257d82bf48d4556db1f5192fd74b0be7109f60348953c16",
+        "seqno": 327646
+    },
+    "prev": "d5b600ba9e743cfd83910c040bae02c46fe69bbf8ce18fa26d5e1c4fcfa79304",
+    "seqno": 44,
+    "tag": "signature"
+}
+
+which yields the signature:
+
+g6Rib2R5hqhkZXRhY2hlZMOpaGFzaF90eXBlCqNrZXnEIwEgLbt3l3wumOBPU0/1GtnBK5t3K7rPX9DMwKA5L24ngT8Kp3BheWxvYWTFAvJ7ImJvZHkiOnsia2V5Ijp7ImVsZGVzdF9raWQiOiIwMTAxM2UwNTM2MjZhZDIzNjg2ZTg3MmZhNzViNjRhNWI4MDMxMjU5NzBiNWNhN2E3YjdkOThjMzljYTc4MjViODFhMjBhIiwiaG9zdCI6ImtleWJhc2UuaW8iLCJraWQiOiIwMTIwMmRiYjc3OTc3YzJlOThlMDRmNTM0ZmY1MWFkOWMxMmI5Yjc3MmJiYWNmNWZkMGNjYzBhMDM5MmY2ZTI3ODEzZjBhIiwidWlkIjoiNDFiMWY3NWZiNTUwNDZkMzcwNjA4NDI1YTMyMDgxMDAiLCJ1c2VybmFtZSI6Im9jb25ub3I2NjMifSwic2VydmljZSI6eyJob3N0bmFtZSI6ImphY2tvLmlvIiwicHJvdG9jb2wiOiJodHRwczoifSwidHlwZSI6IndlYl9zZXJ2aWNlX2JpbmRpbmciLCJ2ZXJzaW9uIjoxfSwiY2xpZW50Ijp7Im5hbWUiOiJrZXliYXNlLmlvIGdvIGNsaWVudCIsInZlcnNpb24iOiIxLjAuMCJ9LCJjdGltZSI6MTQ0ODg5ODYxNCwiZXhwaXJlX2luIjo1MDQ1NzYwMDAsIm1lcmtsZV9yb290Ijp7ImN0aW1lIjoxNDQ4ODk4NjAwLCJoYXNoIjoiNDQzMTBhZjQzOTU1ZDg1ZDI3NDcxNzBkMDVlNTFmY2UyMWVmMTVmZjk0ZDlhNGZmZjgyZmYxNjg1Y2JlZjRhNzYxMzdmZWJmYzc3NTIzZDkzMjU3ZDgyYmY0OGQ0NTU2ZGIxZjUxOTJmZDc0YjBiZTcxMDlmNjAzNDg5NTNjMTYiLCJzZXFubyI6MzI3NjQ2fSwicHJldiI6ImQ1YjYwMGJhOWU3NDNjZmQ4MzkxMGMwNDBiYWUwMmM0NmZlNjliYmY4Y2UxOGZhMjZkNWUxYzRmY2ZhNzkzMDQiLCJzZXFubyI6NDQsInRhZyI6InNpZ25hdHVyZSJ9o3NpZ8RAMY9Mprbgxh7yptYIY1s9lN4TBBIrO8pqUG1XJe8e3IFAjAyif3S4SZ4UC+Zqh5jb5CNWFYjt1wDc4tgZycClDahzaWdfdHlwZSCjdGFnzQICp3ZlcnNpb24B
+
+And finally, I am proving ownership of this host by posting or
+appending to this document.
+
+View my publicly-auditable identity here: https://keybase.io/oconnor663
+
+==================================================================
