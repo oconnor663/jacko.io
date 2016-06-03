@@ -14,11 +14,8 @@ Here's some code that Python is perfectly willing to run:
 ```python
 mylist = [1, 2, 3]
 for i in mylist:
-    print(i)
     if i == 2:
         mylist.append(4)
-
-# prints: 1 2 3 4
 ```
 
 Sure, I can modify a list while I'm iterating over it. It might feel a little
@@ -30,7 +27,6 @@ Rust disagrees.
 ```rust
 let mut mylist = vec![1, 2, 3];
 for i in &mylist {
-    println!("{}", i);
     if *i == 2 {
         mylist.push(4); // ERROR: cannot borrow `mylist` as mutable
     }                   // because it is also borrowed as immutable
