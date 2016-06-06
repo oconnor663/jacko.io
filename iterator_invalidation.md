@@ -82,12 +82,12 @@ Traceback (most recent call last):
 BufferError: Existing exports of data: object cannot be re-sized
 ```
 
-`bytearray` increments a counter whenever you take a `memoryview` out of it. As
+`bytearray` increments a counter when you take a `memoryview` out of it. As
 long as a view exists, the `bytearray` isn't allowed to resize. Python's usual
 reference counting also guarantees that the `bytearray` won't be freed.
 
 It's also possible to implement a Python-style list in Rust, though to make it
-work you have to [reference count everything](https://is.gd/Bqh1dO).
+work you have to [reference count everything](https://is.gd/tQs5Rd).
 
 ## A third way
 

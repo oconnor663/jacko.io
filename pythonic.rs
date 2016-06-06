@@ -54,7 +54,7 @@ impl<T> Iterator for PythonicIterator<T> {
     type Item = Rc<T>;
 
     fn next(&mut self) -> Option<Rc<T>> {
-        let ret = self.vec.borrow().get(self.index).map(|x| x.clone());
+        let ret = self.vec.borrow().get(self.index).cloned();
         self.index += 1;
         ret
     }
