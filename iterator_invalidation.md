@@ -39,7 +39,7 @@ rules" for anything to alias a mutable reference, but it feel like such an
 arbitrary limitation right now. Why can't you just do what Python does? It's
 not like this is going to cause *undefined behavior*...is it?
 
-Yes. Yes it sure is.
+Yes it is. Yes it sure is.
 
 [Python envelope] [Rust envelope]
 
@@ -88,3 +88,50 @@ reference counting also guarantees that the `bytearray` won't be freed.
 
 It's also possible to implement a Python-style list in Rust, though to make it
 work you have to [reference count everything](https://is.gd/Bqh1dO).
+
+## A third way
+
+Most languages roughly follow one of these two approaches. Low-level languages
+(C/C++/Rust) allow pointers directly into the memory of their arrays, but they
+have to be very careful about mutation as a result. High-level languages
+(Python/JS/Java) are more permissive about mutation, but they don't hand out
+interior pointers.
+
+One notable exception here is Go, which allows interior pointers *and* makes it
+easy to mutate the collections they point into. This has interesting
+consequences:
+
+```go
+// Create a new list and take a pointer to its first element.
+mylist := []string{"a", "b", "c"}
+first := &mylist[0]
+
+// We can use the pointer to modify `mylist`.
+*first = "a2"
+fmt.Printf("%#v\n", mylist) // []string{"a2", "b", "c"}
+
+// Append a new string to the list. This allocates new memory.
+mylist = append(mylist, "d")
+
+// The pointer can't modify `mylist` anymore, because it points to old memory.
+*first = "a3"
+fmt.Printf("%#v\n", mylist) // []string{"a2", "b", "c", "d"}
+```
+
+This sort of thing is [illegal in Rust](https://is.gd/mMK1we), but it's similar
+to how vectors work in C++, where growing a vector invalidates any existing
+pointers. Because Go is garbage collected, you'll get stale data instead of
+invoking undefined behavior, but the result is probably still going to cause
+bugs.
+
+This kind of slice behavior in Go is tricky, and it might be one reason the Go
+developers decided to make slices a [value
+type](https://blog.golang.org/slices#TOC_4.) instead of a reference type, and
+to rely on [`append` tricks](https://github.com/golang/go/wiki/SliceTricks)
+instead of defining methods for things like insert and delete. The `a =
+append(a, ...)` syntax is kind of awkward, but it does highlight that you're
+getting a *new* slice instead of modifying the one you had before.
+
+Note also that unlike slices, maps in Go are [*not*
+addressable](http://devs.cloudimmunity.com/gotchas-and-common-mistakes-in-go-golang/index.html#map_value_field_update).
+You can't take pointers to the values inside them.
