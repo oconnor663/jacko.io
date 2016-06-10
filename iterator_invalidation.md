@@ -135,3 +135,21 @@ getting a *new* slice instead of modifying the one you had before.
 Note also that unlike slices, maps in Go are [*not*
 addressable](http://devs.cloudimmunity.com/gotchas-and-common-mistakes-in-go-golang/index.html#map_value_field_update).
 You can't take pointers to the values inside them.
+
+
+Thoughts
+
+- Python lets you do the for loop
+- Rust doesn't
+- the reason is that Rust points to interior memory
+- GC'd languages try to avoid defining ownership, but that means that interior
+  memory can't be exposed.
+  - Is this really true? I could take something out of foo.bar, and then foo
+    could swap its bar pointer out, and I would have the wrong thing.
+    - Yes it is true! I can get my hands on foo.bar, but I *can't* get &foo.bar
+      ("the place where a bar would live inside of foo"). So for example, if I
+      have many different types of objects (or fields of a single object) that
+      might hold a bar, and I want a list of pointers to several bar-holding
+      spots for writing, I can't make that list. I would have to use closures
+      that refer to parent objects, or something like that.
+- Go is an unusual exception.
