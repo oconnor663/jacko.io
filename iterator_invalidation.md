@@ -2,27 +2,37 @@
 
 ## or: ARGH why can't this just work like it does in Python?
 
-When I code in Rust, the borrow checker yells at me a lot. On a good day, I
-need to reorder some variables or stick in a pair of curly braces. On a bad
-day, what I've written is deeply offensive to the compiler, and nothing I do is
-going to make it ok. That's annoying when I know my program would be totally
-fine in a different langauge. And it's particularly annoying when all I'm doing
-is looping over a list.
+When Rust yells at me, it always sounds so angry. Your variable **does not live
+long enough**. Your list is **borrowed as immutable**. Your constant is
+**attempting to divide by zero**.
 
-Here's some code that Python is perfectly willing to run:
+[Captain Hammer, "I don't have time for your warnings."]()
+
+Most of the time, Rust just needs a small favor. That "`x` does not live long
+enough" error might mean "please declare `x` earlier in the function". Or "`x`
+is borrowed as immutable" might mean "put some curly braces around those two
+lines." No problem.
+
+But sometimes Rust has...deeper issues. Sometimes "`x` is borrowed as
+immutable" means "this will never work and shame on you for trying". For
+example, maybe you want to mutate something while you're iterating over it. You
+just can't do that. If your code depends on doing that sort of thing, Rust is
+going to make you rewrite it, and all the curly braces in the world aren't
+going to change its mind.
+
+These compiler brick walls are especially frustrating when what you're trying
+to do is allowed in other languages. Check out this Python code:
 
 ```python
 mylist = [1, 2, 3]
 for i in mylist:
     if i == 2:
         mylist.append(4)
+print(mylist)  # [1, 2, 3, 4]
 ```
 
-Sure, I can modify a list while I'm iterating over it. It might feel a little
-dirty, but anyway the meaning is clear. "When you get to 2, append the 4, then
-keep on going." Simple.
-
-Rust disagrees.
+Now no one's saying it's a "good idea" to write that in Python, but anyway it
+seems to work. So why does Rust get so upset?
 
 ```rust
 let mut mylist = vec![1, 2, 3];
@@ -31,8 +41,41 @@ for i in &mylist {
         mylist.push(4); // ERROR: cannot borrow `mylist` as mutable
     }                   // because it is also borrowed as immutable
 }
-
 ```
+
+## Snuggling up to doom
+
+In a perfect world, Rust would let us do everything that's safe in C++, and
+nothing that's unsafe. In the real world, we [know](halting_problem) that's
+impossible. For one thing, C++ lets us do arbitrary math on pointers. A
+compiler can't always tell what our math is doing unless it can solve all
+possible math problems. (And to be fair to the compiler, we can't always tell
+what we're doing either.)
+
+So unfortunately, when we design rules for safe code, we have to forbid a lot
+of things that we wish we could allow. The question becomes, what's left over?
+When we're writing real world programs and the compiler tells us something's
+unsafe, will that be *true*? In practice, can we code right up to the edge of
+doom?
+
+[doom with null and dangling]()
+
+In our iterator example, the answer turns out to be *yes*.
+
+If Rust compiled that code, it would absolutely cause undefined behavior. The
+key difference between Rust and Python here is the variable `i`. In both cases
+`i` is a pointer, but what it's pointing to is very different. In Python, `i`
+points to an integer that has a life of its own somewhere. If `mylist`
+disappears, that `i` will still be perfectly valid. In Rust however, `i` points
+to an integer that lives *inside* of `mylist`'s memory. If `mylist` moves it's
+memory around (like it does when `push` needs it to grow), then `i` turns into
+a dangling pointer!
+
+All the C and C++ programmers at this point are like "welcome to my life".
+
+
+
+
 
 Aww c'mon Rust! Why does this have to be so hard? I know it's "against the
 rules" for anything to alias a mutable reference, but it feel like such an
@@ -140,8 +183,10 @@ You can't take pointers to the values inside them.
 Thoughts
 
 - Python lets you do the for loop
+  - Sort of. Both Java and Python throw errors if you dick with a map.
 - Rust doesn't
 - the reason is that Rust points to interior memory
+  - ALSO because function safety is entirely signature-based.
 - GC'd languages try to avoid defining ownership, but that means that interior
   memory can't be exposed.
   - Is this really true? I could take something out of foo.bar, and then foo
