@@ -45,6 +45,9 @@ for i in &mylist {
 
 ## Snuggling up to doom
 
+[[[Ugh just start the whole thing here please. The intro above isn't
+working.]]]
+
 In a perfect world, Rust would let us do everything that's safe in C++, and
 nothing that's unsafe. In the real world, we [know](halting_problem) that's
 impossible. For one thing, C++ lets us do arbitrary math on pointers. A
