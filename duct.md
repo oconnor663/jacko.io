@@ -33,8 +33,8 @@ they learn to quote everything. Simple string and path operations tend to be
 for lack of libraries. And error handling is limited: errors are either ignored
 by default, or terminate the entire program with `set -e`.
 
-None of this is news to Bash programmers, but sometimes there just aren't other
+None of this is news to Bash programmers, but sometimes there aren't other
 options. When you can't install dependencies on the target machine, what are
-you going to do? Write native code? ... Five years ago, before Rust and Go were
-kicking around, that was a rhetorical question. Now, maybe it's just a long
-shot. Duct aims to make these long shots a little bit shorter.
+you going to do? Write native code? ...? Five years ago, before Rust and Go
+were kicking around, that was a rhetorical question. Now, maybe it's just a
+long shot. Duct aims to make all these long shots a little bit shorter.
