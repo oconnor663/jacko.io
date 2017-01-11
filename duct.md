@@ -13,7 +13,7 @@ aims to do a few things differently:
 - **Use an API that's easy to port.** The Duct API fits in any language that
   has methods. There's no magic, and certainly no string concatenation.
 - **Run any pipeline that Bash can.** Duct expressions are trees of objects,
-  and that lets us do wacky things like `(a && b) | (c && d)`.
+  and that lets us do wacky things like `(a && b) | (c && d) 1>&2`.
 - **Fail fast.** Any non-zero exit status in any child process is an error by
   default. This is similar to `set -e -o pipefail` in Bash.
 
