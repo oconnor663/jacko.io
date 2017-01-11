@@ -17,6 +17,27 @@ aims to do a few things differently:
 - **Fail fast.** Any non-zero exit status in any child process is an error by
   default. This is similar to `set -e -o pipefail` in Bash.
 
+<table>
+<tr>
+<td>
+
+```rust
+let a = 5;
+let b: Vec<_> = b.iter().map(|x| x * 2).collect();
+```
+
+</td>
+<td>
+
+```python
+a = 5;
+b = [x * 2 for x in b]
+```
+
+</td>
+</tr>
+</table>
+
 ## What's wrong with Bash?
 
 First things first, there's a lot that's right with Bash. For programs that
