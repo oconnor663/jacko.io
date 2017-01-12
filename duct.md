@@ -17,6 +17,57 @@ aims to do a few things differently:
 - **Fail fast.** Any non-zero exit status in any child process is an error by
   default. This is similar to `set -e -o pipefail` in Bash.
 
+## Examples
+
+Run a command, in Python. This inherits stdin/stdout/sterr from the parent, and
+it throws if the exit status isn't zero.
+
+```python
+cmd("git", "log").run()
+```
+
+Read the standard output of a command, in Rust. First we do it the long way,
+then we use the `read` convenience method, which behaves like shell backticks:
+
+```rust
+let long_way = cmd!("echo", "foo").stdout_capture().run()?;
+assert_eq!(b"foo\n", &long_way.stdout);
+
+let short_way = cmd!("echo", "foo").read()?;
+assert_eq!("foo", &short_way);
+```
+
+Run a string of shell code in the OS shell, in Python. This will run under `sh`
+on Unix and `cmd.exe` on Windows:
+
+```python
+sh("cat <<EOF\nHello world!\nEOF").run()
+```
+
+Set an env var and redirect stdout to a file, in Rust:
+
+```rust
+cmd!("git", "status").env("GIT_DIR", "/tmp/foo").stdout("/tmp/bar").run()?;
+```
+
+Pipe three expressions into a fourth, in Python:
+
+```python
+echo1 = cmd("echo", "foo")
+echo2 = cmd("echo", "bar")
+echo3 = cmd("echo", "baz")
+grep = sh("grep ba")
+echo1.then(echo2).then(echo3).pipe(grep).run()
+```
+
+Ignore a non-zero exit status, in Rust:
+
+```rust
+let failing_command = cmd!("false");
+let ok_command = failing_command.unchecked();
+ok_command.then(sh("echo ignored it")).run()?;
+```
+
 ## What's wrong with Bash?
 
 First things first, there's a lot that's right with Bash. For programs that
