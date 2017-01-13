@@ -13,60 +13,9 @@ aims to do a few things differently:
 - **Use an API that's easy to port.** The Duct API fits in any language that
   has methods. There's no magic, and certainly no string concatenation.
 - **Run any pipeline that Bash can.** Duct expressions are trees of objects,
-  and that lets us do wacky things like `(a && b) | (c && d) 1>&2`.
+  and that lets us represent wacky things like `(a && b) | (c && d) 1>&2`.
 - **Fail fast.** Any non-zero exit status in any child process is an error by
   default. This is similar to `set -e -o pipefail` in Bash.
-
-## Examples
-
-Run a command, in Python. This inherits stdin/stdout/sterr from the parent, and
-it throws if the exit status isn't zero.
-
-```python
-cmd("git", "log").run()
-```
-
-Read the standard output of a command, in Rust. First we do it the long way,
-then we use the `read` convenience method, which behaves like shell backticks:
-
-```rust
-let long_way = cmd!("echo", "foo").stdout_capture().run()?;
-assert_eq!(b"foo\n", &long_way.stdout);
-
-let short_way = cmd!("echo", "foo").read()?;
-assert_eq!("foo", &short_way);
-```
-
-Run a string of shell code in the OS shell, in Python. This will run under `sh`
-on Unix and `cmd.exe` on Windows:
-
-```python
-sh("cat <<EOF\nHello world!\nEOF").run()
-```
-
-Set an env var and redirect stdout to a file, in Rust:
-
-```rust
-cmd!("git", "status").env("GIT_DIR", "/tmp/foo").stdout("/tmp/bar").run()?;
-```
-
-Pipe three expressions into a fourth, in Python:
-
-```python
-echo1 = cmd("echo", "foo")
-echo2 = cmd("echo", "bar")
-echo3 = cmd("echo", "baz")
-grep = sh("grep ba")
-echo1.then(echo2).then(echo3).pipe(grep).run()
-```
-
-Ignore a non-zero exit status, in Rust:
-
-```rust
-let failing_command = cmd!("false");
-let ok_command = failing_command.unchecked();
-ok_command.then(sh("echo ignored it")).run()?;
-```
 
 ## What's wrong with Bash?
 
@@ -89,3 +38,73 @@ options. When you can't install dependencies on the target machine, what are
 you going to do? Write native code? ...? Five years ago, before Rust and Go
 were kicking around, that was a rhetorical question. Now, maybe it's just a
 long shot. Duct aims to make all these long shots a little bit shorter.
+
+## Python Example
+
+```python
+# Run a command. This inherits stdin/stdout/sterr from the parent, and
+# it throws if the exit status isn't zero.
+cmd("git", "log").run()
+
+# Read the standard output of a command. First we do it the long way.
+result = cmd("echo", "foo").stdout_capture().run()
+assert 0 == result.status
+assert b"foo\n" == result.stdout
+
+# Now do the same thing with the `read` convenience method, which
+# behaves like shell backticks.
+output = cmd("echo", "foo").read()
+assert "foo" == output
+
+# Run a string of shell code in the OS shell. This will run under `/bin/sh`
+# on Unix and `cmd.exe` on Windows:
+sh("cat <<EOF\nHello world!\nEOF").run()
+
+# Set an env var and redirect stdout to a file.
+cmd("git", "status").env("GIT_DIR", "/tmp/foo").stdout("/tmp/bar").run()
+
+# Pipe three expressions into a fourth.
+echo1 = cmd("echo", "foo")
+echo2 = cmd("echo", "bar")
+echo3 = cmd("echo", "baz")
+grep = sh("grep ba")
+echo1.then(echo2).then(echo3).pipe(grep).run()
+
+# Ignore a non-zero exit status.
+cmd("false").unchecked().then(sh("echo ignored the error")).run()
+```
+
+## Rust Example
+
+```rust
+// Run a command. This inherits stdin/stdout/sterr from the parent, and
+// returns an error if the exit status isn't zero.
+cmd!("git", "log").run()?;
+
+// Read the standard output of a command. First we do it the long way.
+let output: std::process::Output = cmd!("echo", "foo").stdout_capture().run()?;
+assert!(output.status.success());
+assert_eq!(&b"foo\n"[..], &output.stdout[..]);
+
+// Now do the same thing with the `read` convenience method, which
+// behaves like shell backticks.
+let output: String = cmd!("echo", "foo").read()?;
+assert_eq!("foo", output);
+
+// Run a string of shell code in the OS shell. This will run under `/bin/sh`
+// on Unix and `cmd.exe` on Windows:
+sh("cat <<EOF\nHello world!\nEOF").run()?;
+
+// Set an env var and redirect stdout to a file.
+cmd!("git", "status").env("GIT_DIR", "/tmp/foo").stdout("/tmp/bar").run()?;
+
+// Pipe three expressions into a fourth.
+let echo1 = cmd!("echo", "foo");
+let echo2 = cmd!("echo", "bar");
+let echo3 = cmd!("echo", "baz");
+let grep = sh("grep ba");
+echo1.then(echo2).then(echo3).pipe(grep).run()?;
+
+// Ignore a non-zero exit status.
+cmd!("false").unchecked().then(sh("echo ignored the error")).run()?;
+```
