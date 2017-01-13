@@ -25,13 +25,15 @@ hilariously flexible pipelines, usually in a single line of code. It has a
 cross-platform install base that Perl and Python dream about. And as the de
 facto standard Unix shell, it's pretty much guaranteed to stay that way.
 
-A lot of systems software and packaging hooks are still written in Bash, but
-Bash makes it hard to write reliable code. Whitespace splitting
-[burns](http://unix.stackexchange.com/q/131766/23305) new programmers until
-they learn to quote everything. Simple string and path operations tend to be
-[buggy shortcuts](https://bugs.chromium.org/p/chromium/issues/detail?id=660145)
-for lack of libraries. And error handling is limited: errors are either ignored
-by default, or terminate the entire program with `set -e`.
+But Bash makes it hard to write reliable code. Whitespace splitting
+[burns new programmers](http://unix.stackexchange.com/q/131766/23305)
+until they learn to quote everything. Simple string and path operations
+tend to be [buggy
+shortcuts](https://bugs.chromium.org/p/chromium/issues/detail?id=660145)
+for lack of libraries. And [error
+handling](http://www.artima.com/intv/handcuffs2.html) is limited: errors
+are either ignored by default, or terminate the entire program with
+`set -e`.
 
 None of this is news to Bash programmers, but sometimes there aren't other
 options. When you can't install dependencies on the target machine, what are
