@@ -1,8 +1,10 @@
 # Announcing Duct
 
 Duct is a library for running child processes and building pipelines. Two
-libraries in fact, one in Python and one in Rust. The goal is to colonize more
-languages and gradually help people stop writing important software in Bash.
+libraries in fact, [one in Python](https://github.com/oconnor663/duct.py) and
+[one in Rust](https://github.com/oconnor663/duct.rs). The goal is to colonize
+more languages and gradually help people stop writing important software in
+Bash.
 
 Rust doesn't have many libraries like this yet, but Python already has
 [lots](https://amoffat.github.io/sh/) and
