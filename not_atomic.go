@@ -14,7 +14,7 @@ func fooWriter(fooPtr *Foo) {
 	for {
 		newFoo := Foo{A: i, B: i}
 		// When we create newFoo, A is always equal to B. However, struct
-		// writes are NOT ATOMIC. That means that another tread reading fooPtr
+		// writes are NOT ATOMIC. That means that another thread reading fooPtr
 		// might see a value of A that's not equal to B.
 		*fooPtr = newFoo
 		i++
