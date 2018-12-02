@@ -2,4 +2,4 @@ imports:
     bao_presentation: www/bao_presentation
 
 git module bao_presentation:
-    url: https://github.com/oconnor663/bao
+    url: https://github.com/oconnor663/bao_presentation
