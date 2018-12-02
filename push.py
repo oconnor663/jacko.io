@@ -23,7 +23,7 @@ def main():
         print("unpushed commits")
         return 1
 
-    cmd("ssh", "jacko@jacko.io", "cd /srv/jacko.io && git pull --ff-only").run()
+    cmd("ssh", "jacko@jacko.io", "cd /srv/jacko.io && git pull --ff-only && peru sync --no-cache").run()
 
 
 if __name__ == "__main__":
