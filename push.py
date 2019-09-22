@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-from duct import cmd, sh
+from duct import cmd
 import os
 from pathlib import Path
 import sys
@@ -11,7 +11,7 @@ here = Path(__file__).parent
 def main():
     os.chdir(str(here))
 
-    status = sh("git status --porcelain").read()
+    status = cmd("git", "status", "--porcelain").read()
     if status:
         print("repo isn't clean")
         return 1
