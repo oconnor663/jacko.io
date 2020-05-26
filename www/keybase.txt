@@ -52,3 +52,62 @@ appending to this document.
 View my publicly-auditable identity here: https://keybase.io/oconnor663
 
 ==================================================================
+
+zconnor663
+Jack O'Connor
+==================================================================
+https://keybase.io/zconnor663
+--------------------------------------------------------------------
+
+I hereby claim:
+
+  * I am an admin of https://jacko.io
+  * I am zconnor663 (https://keybase.io/zconnor663) on keybase.
+  * I have a public key ASAn0boAPxwZlEYQ6gZFGqNtrtu9Rklv9LpXXMknIef6Mgo
+
+To do so, I am signing this object:
+
+{
+  "body": {
+    "key": {
+      "eldest_kid": "012027d1ba003f1c19944610ea06451aa36daedbbd46496ff4ba575cc92721e7fa320a",
+      "host": "keybase.io",
+      "kid": "012027d1ba003f1c19944610ea06451aa36daedbbd46496ff4ba575cc92721e7fa320a",
+      "uid": "102f9472a01f4e29bb60272a2deba719",
+      "username": "zconnor663"
+    },
+    "merkle_root": {
+      "ctime": 1590509183,
+      "hash": "50c17d064d49dd1bdff7b0288111dd457bfdf35fc725acd7747fcafdfbc4eb3e93dfd9ec9721673177c6f9c720c5d97e5c91db70a2e611936e6b22f8f68b5e39",
+      "hash_meta": "59ba54afb0feda978844cf765094a22b08a2bc78def920efa487c51eba7d7cc2",
+      "seqno": 16410404
+    },
+    "service": {
+      "entropy": "YommRxAQSIC0oqvBaGeyoCuZ",
+      "hostname": "jacko.io",
+      "protocol": "https:"
+    },
+    "type": "web_service_binding",
+    "version": 2
+  },
+  "client": {
+    "name": "keybase.io go client",
+    "version": "5.4.2"
+  },
+  "ctime": 1590509259,
+  "expire_in": 504576000,
+  "prev": "1c623a21d630ed9b387ef3e74b8de9ecbdf375cd1fbba91de997f38bb5c34849",
+  "seqno": 4,
+  "tag": "signature"
+}
+
+which yields the signature:
+
+hKRib2R5hqhkZXRhY2hlZMOpaGFzaF90eXBlCqNrZXnEIwEgJ9G6AD8cGZRGEOoGRRqjba7bvUZJb/S6V1zJJyHn+jIKp3BheWxvYWTESpcCBMQgHGI6IdYw7Zs4fvPnS43p7L3zdc0fu6kd6Zfzi7XDSEnEINJKkl2b+e0pIutdK7WHIUPEXmMA/P6nVAHs+RW+wNtNAgHCo3NpZ8RAxKlrFtSH1dopcITJtyH4jfqNF9P//nrSCz41MA/ovT8mcEOtSiVHMaH+ud6tuTiFryRZrEUA/+k6KpETdRSGAqhzaWdfdHlwZSCkaGFzaIKkdHlwZQildmFsdWXEICrem39P/nHwQFHlZuZtqbAR+obBoJChTKNAk6PZXCB2o3RhZ80CAqd2ZXJzaW9uAQ==
+
+And finally, I am proving ownership of this host by posting or
+appending to this document.
+
+View my publicly-auditable identity here: https://keybase.io/zconnor663
+
+==================================================================
