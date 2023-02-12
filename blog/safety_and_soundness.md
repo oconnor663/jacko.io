@@ -20,7 +20,7 @@ answer.
 ## Ok but actually, what's the short answer?
 
 I don't like how dense and abstract this is, but I've tried as best I can to
-make it correct:
+make it correct. Feel free to skip this part.
 
 Rust has a list of [behaviors considered
 undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
@@ -28,12 +28,13 @@ We define "sound" functions like this: any program that only calls sound
 functions, and doesn't contain any other `unsafe` code, can't commit
 UB.[^self_referential] A function that doesn't use any `unsafe` code, either
 directly or indirectly, is guaranteed to be sound.[^soundness_holes] A function
-that doesn't use `unsafe` code directly, and only calls other sound functions,
-is also sound by definition. But functions and modules that use `unsafe` code
-directly have to be careful not to commit UB, and also not to allow their safe
-callers to commit UB. Any unsoundness in the safe, public API of a module is a
-bug.[^module_soundness] There's no formal guarantee that the set of sound
-functions will be _useful_, but it turns out in practice that it is.
+that doesn't use any `unsafe` code directly, and only calls other sound
+functions, is also sound by definition. But functions and modules that use
+`unsafe` code directly have to be careful not to commit UB, and also not to
+allow their safe callers to commit UB. Any unsoundness in the safe, public API
+of a module is a bug.[^module_soundness] There's no formal guarantee that the
+set of sound functions will be *useful*, but in practice it is, and most
+applications contain little or no `unsafe` code.
 
 Let's build up to this with examples.
 
@@ -108,8 +109,8 @@ raw pointers like this isn't allowed in safe Rust, so deleting the `unsafe`
 keyword [is also a compiler
 error](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e032302c44ce33a78b8c189ef488fc50).
 
-But things start to get interesting if we move the `unsafe` keyword down a bit.
-This function compiles:
+But things start to go wrong if we move the `unsafe` keyword down a bit. This
+function compiles:
 
 ```rust
 fn foo3(index: usize) -> u8 {
@@ -125,7 +126,7 @@ can [call `foo3` and commit UB from safe
 code](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=2546a5a170867d564e26ca01edd03b80).
 In other words, `foo3` is *unsound*.
 
-To make matters worse, we could add a bit of indirection:
+We can make the problem worse by adding some indirection:
 
 ```rust
 fn foo4(index: usize) -> u8 {
@@ -137,17 +138,16 @@ fn foo4(index: usize) -> u8 {
 unsound](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=a6d4a020eecfd0f01f8252ed24c4a254).
 But `foo4` doesn't contain any `unsafe` code of its own. Instead, the
 unsoundness of `foo3` has "infected" `foo4`. This is why we can't make a strong
-guarantee that all safe code is sound. Once we call an unsound function, all
-bets are off.
+guarantee that all safe code is sound.
 
-However, there's a slightly weaker guarantee that we _can_ make. If `foo4` is
-unsound, it can't have gotten that way all by itself. There must be some
-`unsafe` code somewhere else that's responsible. In this case of course, it's
-`foo3` that's broken. We have two options to fix it: We could declare that
-`foo3` is `unsafe` in its signature, like `foo2`. That would [make `foo4` a
-compiler
+However, there's a slightly weaker guarantee that we _can_ make. `foo4` doesn't
+contain any `unsafe` code, so it can't be unsound all by itself. There must be
+some `unsafe` code somewhere else that's *responsible*. In this case of course,
+it's `foo3` that's broken. There are two different ways we could fix `foo3`: We
+could declare that it's `unsafe` in its signature, like `foo2`, which would
+[make `foo4` a compiler
 error](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=62bc28bc732a2c861544ccdfd1b4854d).
-Or we could make `foo3` do bounds checks, like `foo1`. That would make `foo4`
+Or we could make it do bounds checks, like `foo1`, which would make `foo4`
 sound with no changes. If we got rid of the `unsafe` code in `foo3`, then one
 way or another Rust would make us do bounds checks.
 
@@ -156,29 +156,32 @@ weaker guarantee above is harder to explain, but it's the more correct idea,
 and it's arguably Rust's most fundamental principle: **A safe caller can't be
 "at fault" for memory corruption or other UB.**
 
-When we write a library that uses `unsafe`, we need to review it carefully to
-make sure it's sound. But after we've gotten it right, safe callers everywhere
-can use our library ["without
-fear"](https://www.youtube.com/watch?v=lO1z-7cuRYI). Libraries like this
-_encapsulate_ `unsafe` code and _extend_ the capabilities of safe Rust.
+This relationship between safe Rust and `unsafe` Rust is similar to what we
+expect when we use a memory-safe language like Python or Java to call into
+"native" C libraries.[^google_jni] If the result is memory corruption, we often
+consider that a bug in the native bindings. Our application code could be buggy
+too, but the language is supposed to handle that by throwing safe exceptions,
+and we usually expect our bindings to do whatever wrapping or checking they
+need to do to make that safe. This is a high bar for correctness, but it's also
+a clear contract that authors and reviers can verify locally. Python and Java
+applications call into native libraries all the time, but most contain little
+or no binding code of their own, and memory corruption is rare.
 
-## How useful is safe code?
+## The catch
 
-If Rust applications were full of `unsafe` code, then safety and soundness
-might not be worth all this trouble. But in practice, most Rust applications
-contain little or no `unsafe` code of their own. Here are some things that safe
-Rust can do, often with no runtime overhead compared to C or C++:
+The catch is that Rust has strict lifetime and aliasing rules. For example,
+Rust [won't usually let
+us](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=5f2b90835dfe746b18d1bddaa43275f5)
+increment an integer while we hold a pointer to it (other than [through that
+pointer](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=83005426f1587180f47aba95e05843e0)).
+Similarly, Rust [won't usually let
+us](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=2c84a02b7a9bf48b45543d23201495cd)
+create a reference cycle between two objects. These rules take a lot of getting
+used to, and using `unsafe` code to break them is [tempting but usually
+UB](https://youtu.be/DG-VLezRkYQ).
 
-- read and write through pointers
-- allocate objects on the stack or the heap
-- destroy objects on the stack or the heap
-- spawn threads and share memory between threads
-- async IO, including multithreaded async IO
-- atomic operations, including relaxed atomics
-- call C libraries like OpenSSL and SQLite
-
-In contrast, here are some things that are difficult, slow, and/or impossible
-to do without `unsafe` code:
+Here are some things that are difficult, slow, and/or impossible to do without
+`unsafe` code:
 
 - call C functions without existing bindings
 - read and write C-style unions
@@ -195,29 +198,14 @@ considered UB. These can all happen in safe code:
 - arithmetic overflows[^overflows]
 - assertion failures and other aborts
 
-## The catch
-
-The catch, the price we pay for safety and performance, is that Rust has very
-strict lifetime and aliasing rules. For example, Rust [won't usually let
-us](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=2a42971e1887c1e5fa69ef819e67a464)
-increment an integer while we hold a pointer to it (other than [through that
-pointer](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=83005426f1587180f47aba95e05843e0)).
-Similarly, Rust [won't usually let
-us](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=0ff812b335e2ea1084ba940d1bf0990f)
-create a reference cycle between two objects. These rules take a lot of getting
-used to, and using `unsafe` code to break them is [tempting but usually
-UB](https://youtu.be/DG-VLezRkYQ). A lot of experienced Rust programmers come
-to believe that following the rules makes their code _better_ in the end, not
-only UB-free but also cleaner and less buggy. But that's a matter of taste.
-
 [^safe_meanings]: The `unsafe` keyword can show up in different places: in the
   signature of a function, in its body, in the body of some other function it
-  calls, or in [unsafe
-  traits](https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html#implementing-an-unsafe-trait).
-  Each of those has different consequences for the function, and so what we
-  mean when we say that some piece of code is "safe" depends on context.
-  Sometimes we even talk about safety and soundness interchangeably. But in
-  this article I want to emphasize and clarify the differences between them.
+  calls, or in [`unsafe` trait
+  implementations](https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html#implementing-an-unsafe-trait).
+  Each of those has different consequences, so what we mean when we say that
+  some piece of code is "safe" depends on context. Sometimes we also talk about
+  safety and soundness interchangeably. But in this article I want to emphasize
+  and clarify the differences between them.
 
 [^undefined_behavior]: "Undefined behavior" (UB) has a specific meaning in
   languages like C, C++, and Rust, which might not be familiar to folks coming
@@ -273,7 +261,8 @@ only UB-free but also cleaner and less buggy. But that's a matter of taste.
   public API is sound.
 
 [^implicit_return]: When the last line of a Rust function doesn't end in a
-  semicolon, that's an implicit `return`.
+  semicolon, that's an implicit `return`. Similarly, if the last line of a code
+  block doesn't end in a semicolon, it's the value of the block.
 
 [^uninitialized]: An "uninitialized" variable is one that's been given a name
   but no value. This doesn't come up in langauges like Python, which requires
@@ -289,6 +278,10 @@ only UB-free but also cleaner and less buggy. But that's a matter of taste.
   call the function, if it can't lead to UB? One answer could be that the
   function is expected to become unsound in the future, so it's marked `unsafe`
   now for compatibility.
+
+[^google_jni]: I'm lifting this analogy from Google Security Blog post about
+  [Memory Safe Languages in Android
+  13](https://security.googleblog.com/2022/12/memory-safe-languages-in-android-13.html).
 
 [^weird_exceptions]: Apart from "soundness holes"[^soundness_holes] in the
   compiler, it's also possible to corrupt memory by asking the OS to do it for
