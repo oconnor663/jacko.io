@@ -142,10 +142,10 @@ guarantee that all safe code is sound.
 
 However, there's a slightly weaker guarantee that we _can_ make. `foo4` doesn't
 contain any `unsafe` code, so it can't be unsound all by itself. There must be
-some `unsafe` code somewhere else that's *responsible*. In this case of course,
-it's `foo3` that's broken. There are two different ways we could fix `foo3`: We
-could declare that it's `unsafe` in its signature, like `foo2`, which would
-[make `foo4` a compiler
+some `unsafe` code somewhere else that's *responsible*.[^weird_exceptions] In
+this case of course, it's `foo3` that's broken. There are two different ways we
+could fix `foo3`: We could declare that it's `unsafe` in its signature, like
+`foo2`, which would [make `foo4` a compiler
 error](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=62bc28bc732a2c861544ccdfd1b4854d).
 Or we could make it do bounds checks, like `foo1`, which would make `foo4`
 sound with no changes. If we got rid of the `unsafe` code in `foo3`, then one
