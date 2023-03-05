@@ -150,9 +150,7 @@ fn render_markdown(markdown_input: &str) -> String {
                 Tag::Emphasis => output.push_str("<em>"),
                 Tag::Link(kind, dest, _title) => {
                     assert_eq!(kind, LinkType::Inline);
-                    output.push_str(&format!(
-                        r#"<a class="custom-link-color no-tufte-underline" href="{dest}">"#
-                    ));
+                    output.push_str(&format!(r#"<a class="custom-link-color" href="{dest}">"#));
                 }
                 Tag::CodeBlock(_kind) => output.push_str("\n\n<pre><code>"),
                 Tag::List(_) => output.push_str("<ul>\n"),
