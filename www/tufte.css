@@ -264,6 +264,12 @@ li .marginnote {
     margin-right: -65%;
 }
 
+/* similar to above */
+blockquote .sidenote,
+blockquote .marginnote {
+    margin-right: -61%;
+}
+
 .sidenote-number {
     counter-increment: sidenote-counter;
 }

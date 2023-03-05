@@ -6,30 +6,28 @@ code that can't cause memory corruption or other undefined
 behavior.[^undefined_behavior] One of Rust's most important features is the
 promise that all safe code is sound. But that promise can be broken when
 `unsafe` code is involved, and `unsafe` code is almost always involved
-somewhere. Standard data structures like `Vec` and `HashMap` have `unsafe` code
-in their implementations, as does any function like `File::open` that talks to
-the OS. This leads to a common question: **"If Rust can't actually guarantee
-that all safe code is sound, how is it any safer than C or C++?"** It's hard to
-give a short answer to that question, so this post is my attempt at a
-medium-length answer.
+somewhere. Data structures like `Vec` and `HashMap` have `unsafe` code in their
+implementations, as does any function like `File::open` that talks to the OS.
+This leads to a common question: **"If Rust can't guarantee that all safe code
+is sound, how can it be a memory-safe language?"** It's hard to give a short
+answer to that question, so this post is my attempt at a medium-length answer.
 
 ## The short answer
 
-This is the sort of answer that only makes sense when you already know what
-it's trying to say. I recommend taking a quick look at it, moving on to the
-next section, and then coming back for a second look at the end.
+This version is dense and technical. You might want to take a quick look at it,
+move on to the next section, and then come back for a another look at the end.
 
-Rust has a list of [behaviors considered
-undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
-A "sound" function is one that upholds the following invariant: any program
-that only calls sound functions and doesn't contain any other `unsafe` code,
-can't commit UB.[^self_referential] A function that doesn't use any `unsafe`
-code, either directly or indirectly, is guaranteed to be
-sound.[^soundness_holes] A function that doesn't use any `unsafe` code
-directly, and only calls other sound functions, is also sound by definition.
-But functions and modules that use `unsafe` code directly might be unsound, and
-any transitive caller of an unsound function might also be unsound. Unsoundness
-in the safe, public API of a module is a bug.[^module_soundness]
+> Rust has a list of [behaviors considered
+> undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
+> A "sound" function is one that maintains the following invariant: any program
+> that only calls sound functions and doesn't contain any other `unsafe` code,
+> can't commit UB.[^self_referential] A function that doesn't use any `unsafe`
+> code, either directly or indirectly, is guaranteed to be
+> sound.[^soundness_holes] A function that doesn't use any `unsafe` code
+> directly and only calls other sound functions, is also sound by definition.
+> But functions and modules that use `unsafe` code directly could be unsound,
+> and a transitive caller of an unsound function could also be unsound. Any
+> unsoundness in the safe, public API of a module is a bug.[^module_soundness]
 
 ## The medium-length answer
 
@@ -59,12 +57,12 @@ char foo1(size_t index) {
 ```
 
 Both versions of `foo1` bounds-check the value of `index` before they use it.
-This check is automatic in the Rust version, but in C we need to write it
-ourselves. Because of this check, we can't make `foo1` commit UB just by giving
-it a large `index`. Instead, the only way I can think of to make `foo1` commit
-UB is to [give it an _uninitialized_ `index`](https://godbolt.org/z/e5bbq95hx).
-In C, we'd probably think of the resulting UB as "the caller's fault". In Rust,
-using an uninitialized argument [won't compile in safe
+This check is automatic in the Rust version. Because of this check, we can't
+make `foo1` commit UB just by giving it a large `index`. Instead, the only way
+I can think of to make `foo1` commit UB is to [give it an _uninitialized_
+`index`](https://godbolt.org/z/e5bbq95hx). In C, we'd probably think of the
+resulting UB as "the caller's fault". In Rust, using an uninitialized argument
+[won't compile in safe
 code](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e23c9b052892c7c3e2b8bf5cd9f5cd98),
 and doing it with `unsafe` code is [already UB in the
 caller](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=be72905a4c634a62298d4aca5cca6dc4),
@@ -82,7 +80,7 @@ unsafe fn foo2(index: usize) -> u8 {
 }
 ```
 
-Here's the C version of `foo2`:
+Here's a C version of `foo2`:
 
 ```c
 char foo2(size_t index) {
@@ -95,10 +93,10 @@ past the end of `BYTES`, which is UB. Note that the Rust version of `foo2` is
 declared `unsafe` in its signature, so calling it outside of another `unsafe`
 function or `unsafe` block [is a compiler
 error](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=ad9e08dd2e82a7411549a959c3eecf6b).
-Since we can't call `foo2` in safe code, we don't usually ask whether it's
-sound or unsound; we just call it "unsafe".[^unsafe_and_sound] Dereferencing
-raw pointers like this isn't allowed in safe Rust, so deleting the `unsafe`
-keyword [is also a compiler
+Since we can't call `foo2` in safe code, we don't usually ask whether `foo2` is
+sound or unsound; we just say that it's "unsafe".[^unsafe_and_sound]
+Dereferencing raw pointers like this isn't allowed in safe Rust, so deleting
+the `unsafe` keyword [is also a compiler
 error](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e032302c44ce33a78b8c189ef488fc50).
 
 But if we move the `unsafe` keyword down a bit, we start to get into trouble.
@@ -118,7 +116,7 @@ can [call `foo3` and commit UB from safe
 code](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=2546a5a170867d564e26ca01edd03b80).
 In other words, `foo3` is **unsound**.
 
-We can get in even deeper trouble by adding some indirection:
+We can get in deeper trouble by adding some indirection:
 
 ```rust
 fn foo4(index: usize) -> u8 {
@@ -126,18 +124,19 @@ fn foo4(index: usize) -> u8 {
 }
 ```
 
-`foo4` is just a thin wrapper around `foo3`, so `foo4` is [also
+`foo4` is a thin wrapper around `foo3`, so `foo4` is [also
 unsound](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=a6d4a020eecfd0f01f8252ed24c4a254).
 But `foo4` doesn't contain any `unsafe` code of its own. Instead, the
 unsoundness of `foo3` has "infected" `foo4`. This sort of thing is why we can't
 make a strong guarantee that all safe code is sound.
 
-However, there's a slightly weaker guarantee that we _can_ make. `foo4` doesn't
-contain any `unsafe` code, so it can't be unsound all by itself. There must be
-some `unsafe` code somewhere else that's *responsible*.[^weird_exceptions] In
-this case of course, it's `foo3` that's broken. There are two different ways we
-could fix `foo3`: We could declare that it's `unsafe` in its signature, like
-`foo2`, which would [make `foo4` a compiler
+However, there's a slightly weaker guarantee that we can make. `foo4` doesn't
+contain any `unsafe` code of its own, so it can't be unsound all by itself.
+There must be some `unsafe` code somewhere that's
+responsible.[^weird_exceptions] In this case of course, it's `foo3` that's
+broken. There are two different ways we could fix `foo3`: We could declare that
+it's `unsafe` in its signature, like `foo2`, which would [make `foo4` a
+compiler
 error](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=62bc28bc732a2c861544ccdfd1b4854d).
 Or we could make it do bounds checks, like `foo1`, which would make `foo4`
 sound with no changes. If we got rid of the `unsafe` code in `foo3`, then one
@@ -151,9 +150,10 @@ and it's arguably Rust's most fundamental principle: **A safe caller can't be
 In this sense, wrapping `unsafe` Rust in a safe API is similar to wrapping C
 code in a Python API, or in any other memory-safe language.[^google_jni]
 Mistakes in Python aren't supposed to cause memory corruption, and if they do,
-we usually consider that a bug in the C bindings. Writing or reviewing bindings
-isn't easy, but most applications contain little or no binding code of their
-own. Python code calls into C all the time, but memory corruption is rare.
+we usually consider that a bug in the C bindings. Writing and reviewing
+bindings isn't easy, but most applications contain little or no binding code of
+their own. Similarly, most Rust applications contain little or no `unsafe` code
+of their own, and memory corruption is rare.
 
 ---
 
@@ -205,10 +205,10 @@ Discuss this post at [example.com](https://example.com).
   [write your PhD thesis about](https://research.ralfj.de/thesis.html).
 
 [^module_soundness]: We usually evaluate soundness at module boundaries,
-  because safe writes to private fields that `unsafe` code depends on is often
-  enough to commit UB. For example, any function in the implementation of `Vec`
-  could overwrite the private `len` field and then do out-of-bounds reads and
-  writes without using the `unsafe` keyword directly.
+  because a safe write to a private field that other `unsafe` code depends on
+  is often enough to commit UB. For example, any function in the implementation
+  of `Vec` could overwrite the private `len` field and then do out-of-bounds
+  reads and writes without using the `unsafe` keyword directly.
 
 [^implicit_return]: When the last line of a Rust function doesn't end in a
   semicolon, that's an implicit `return`.
@@ -224,8 +224,8 @@ Discuss this post at [example.com](https://example.com).
   between `unsafe` Rust and JNI in Java.
 
 [^weird_exceptions]: Apart from "soundness holes" in the compiler, it's also
-  possible to corrupt memory by asking the OS to do it for you in ways the
-  compiler doesn't know about. This includes tricks like writing to
+  possible for safe code to corrupt memory by asking the OS to do it in ways
+  the compiler doesn't know about. This includes tricks like writing to
   `/proc/$PID/mem`, or spawning a debugger and attaching it to yourself. If we
   wanted to execute _malicious_ safe code and still guarantee memory safety,
   we'd need lots of help from the OS, and relying on process isolation instead
