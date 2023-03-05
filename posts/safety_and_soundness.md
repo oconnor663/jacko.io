@@ -2,37 +2,36 @@
 
 Rust is designed around **safety** and **soundness**. Roughly speaking, safe
 code is code that doesn't use the `unsafe` keyword,[^safe_meanings] and sound
-code is code that can't cause memory corruption or other undefined behavior
-(UB).[^undefined_behavior] One of Rust's most important features is the promise
-that all safe code is sound. But that promise can be broken when `unsafe` code
-is involved, and `unsafe` code is almost always involved somewhere. Standard
-data structures like `Vec` and `HashMap` have `unsafe` code in their
-implementations, as does any function like `File::open` that talks to the OS.
-This leads to a common question: **"If Rust can't actually guarantee that all
-safe code is sound, how is it any safer than C or C++?"** It's hard to give a
-short answer to that question, so this article is my attempt at a medium-length
-answer.
+code is code that can't cause memory corruption or other undefined
+behavior.[^undefined_behavior] One of Rust's most important features is the
+promise that all safe code is sound. But that promise can be broken when
+`unsafe` code is involved, and `unsafe` code is almost always involved
+somewhere. Standard data structures like `Vec` and `HashMap` have `unsafe` code
+in their implementations, as does any function like `File::open` that talks to
+the OS. This leads to a common question: **"If Rust can't actually guarantee
+that all safe code is sound, how is it any safer than C or C++?"** It's hard to
+give a short answer to that question, so this article is my attempt at a
+medium-length answer.
 
-## Ok but actually, what's the short answer?
+## The short answer
 
-I don't like how dense and abstract this is, but I've tried as best I can to
-make it correct. Feel free to skip this part.
+This is dense and overly formal, so feel free to skip it. We'll build up to it
+with examples below.
 
-> Rust has a list of [behaviors considered
-> undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
-> We define "sound" functions like this: any program that only calls sound
-> functions, and doesn't contain any other `unsafe` code, can't commit
-> UB.[^self_referential] A function that doesn't use any `unsafe` code, either
-> directly or indirectly, is guaranteed to be sound.[^soundness_holes] A
-> function that doesn't use any `unsafe` code directly, and only calls other
-> sound functions, is also sound by definition. But functions and modules that
-> use `unsafe` code directly have to be careful not to commit UB, and also not
-> to allow their safe callers to commit UB. Any unsoundness in the safe, public
-> API of a module is a bug.[^module_soundness] There's no formal guarantee that
-> the set of sound functions will be *useful*, but in practice it is, and most
-> applications contain little or no `unsafe` code.
-
-Let's build up to this with examples.
+Rust has a list of [behaviors considered
+undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
+A "sound" function is one that upholds the following invariant: any program
+that only calls sound functions, and doesn't contain any other `unsafe` code,
+can't commit UB.[^self_referential] A function that doesn't use any `unsafe`
+code, either directly or indirectly, is guaranteed to be
+sound.[^soundness_holes] A function that doesn't use any `unsafe` code
+directly, and only calls other sound functions, is also sound by definition.
+But functions and modules that use `unsafe` code directly have to be careful
+not to commit UB, and also not to allow their safe callers to commit UB. Any
+unsoundness in the safe, public API of a module is a bug.[^module_soundness]
+There's no formal guarantee that the set of sound functions will be *useful*,
+but in practice it is, and most applications contain little or no `unsafe`
+code.
 
 ## The medium-length answer
 
@@ -152,16 +151,12 @@ weaker guarantee above is harder to explain, but it's the more correct idea,
 and it's arguably Rust's most fundamental principle: **A safe caller can't be
 "at fault" for memory corruption or other UB.**
 
-This relationship between safe Rust and `unsafe` Rust is similar to what we
-expect when we use a memory-safe language like Python or Java to call into
-"native" C libraries.[^google_jni] If the result is memory corruption, we often
-consider that a bug in the native bindings. Our application code could be buggy
-too, but the language is supposed to handle that by throwing safe exceptions,
-and we usually expect our bindings to do whatever wrapping or checking they
-need to do to make that safe. This is a high bar for correctness, but it's also
-a clear contract that authors and reviers can verify locally. Python and Java
-applications call into native libraries all the time, but most contain little
-or no binding code of their own, and memory corruption is rare.
+In this sense, wrapping `unsafe` Rust in a safe API is similar to wrapping a C
+library in a Python API, or in any other memory-safe language.[^google_jni]
+Mistakes in Python aren't supposed to cause memory corruption, and if they do,
+we usually consider that a bug in the bindings. Writing or reviewing bindings
+isn't easy, but most applications contain little or no binding code of their
+own. Python code calls into C all the time, but memory corruption is rare.
 
 ## The catch
 
@@ -204,8 +199,8 @@ Discuss this post at [example.com](https://example.com).
   implementations](https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html#implementing-an-unsafe-trait).
   Each of those has different consequences, so what we mean when we say that
   some piece of code is "safe" depends on context. Sometimes we also talk about
-  safety and soundness interchangeably. But in this article I want to emphasize
-  and clarify the differences between them.
+  safety and soundness interchangeably. But here I want to emphasize the
+  differences between them.
 
 [^undefined_behavior]: "Undefined behavior" (UB) has a specific meaning in
   languages like C, C++, and Rust, which might not be familiar to folks coming
@@ -279,7 +274,7 @@ Discuss this post at [example.com](https://example.com).
   function is expected to become unsound in the future, so it's marked `unsafe`
   now for compatibility.
 
-[^google_jni]: I'm lifting this analogy from Google Security Blog post about
+[^google_jni]: I'm lifting this analogy from a Google Security Blog post about
   [Memory Safe Languages in Android
   13](https://security.googleblog.com/2022/12/memory-safe-languages-in-android-13.html).
 
