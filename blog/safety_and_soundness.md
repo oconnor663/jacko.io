@@ -283,13 +283,13 @@ considered UB. These can all happen in safe code:
   [Memory Safe Languages in Android
   13](https://security.googleblog.com/2022/12/memory-safe-languages-in-android-13.html).
 
-[^weird_exceptions]: Apart from "soundness holes"[^soundness_holes] in the
-  compiler, it's also possible to corrupt memory by asking the OS to do it for
-  you in ways the compiler doesn't know about. This includes tricks like
-  writing to `/proc/$PID/mem`, or spawning a debugger and attaching it to
-  yourself. If we wanted to execute _malicious_ safe code and still guarantee
-  memory safety, we'd need lots of help from the OS, and relying on process
-  isolation instead of memory safety would probably make more sense.
+[^weird_exceptions]: Apart from "soundness holes" in the compiler, it's also
+  possible to corrupt memory by asking the OS to do it for you in ways the
+  compiler doesn't know about. This includes tricks like writing to
+  `/proc/$PID/mem`, or spawning a debugger and attaching it to yourself. If we
+  wanted to execute _malicious_ safe code and still guarantee memory safety,
+  we'd need lots of help from the OS, and relying on process isolation instead
+  of memory safety would probably make more sense.
 
 [^linked_lists]: Implementing new data structures is relatively more
   complicated in Rust than in other languages, because of the lifetime and
