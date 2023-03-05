@@ -158,8 +158,9 @@ of their own, and memory corruption is rare.
 ---
 
 Discussion threads on
-[r/rust](https://www.reddit.com/r/rust/comments/11j8k8d/safety_and_soundness_in_rust/?)
-and [Hacker News](https://news.ycombinator.com/item?id=35032915).
+[r/rust](https://www.reddit.com/r/rust/comments/11j8k8d/safety_and_soundness_in_rust/?),
+[Hacker News](https://news.ycombinator.com/item?id=35032915), and
+[lobste.rs](https://lobste.rs/s/tpstyz/safety_soundness_rust).
 
 [^safe_meanings]: What we mean by "safe" depends on context, which is partly
   what this post is about. Sometimes we even talk about safety and soundness
