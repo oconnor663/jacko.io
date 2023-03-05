@@ -188,6 +188,7 @@ fn render_markdown(markdown_input: &str) -> String {
             Event::Html(s) => output.push_str(&s),
             Event::SoftBreak => output.push_str("\n"),
             Event::Code(s) => output.push_str(&format!("<code>{s}</code>")),
+            Event::Rule => output.push_str(&format!("\n\n<hr>")),
             Event::FootnoteReference(s) => {
                 output.add_footnote_reference(s.to_string());
             }

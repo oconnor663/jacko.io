@@ -194,6 +194,10 @@ considered UB. These can all happen in safe code:
 - arithmetic overflows[^overflows]
 - assertion failures and other aborts
 
+---
+
+Discuss this post at [example.com](https://example.com).
+
 [^safe_meanings]: The `unsafe` keyword can show up in different places: in the
   signature of a function, in its body, in the body of some other function it
   calls, or in [`unsafe` trait
