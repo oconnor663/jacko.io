@@ -312,13 +312,6 @@ img {
     top: -0.5rem;
 }
 
-blockquote .sidenote,
-blockquote .marginnote {
-    margin-right: -82%;
-    min-width: 59%;
-    text-align: left;
-}
-
 div.fullwidth,
 table.fullwidth {
     width: 100%;
