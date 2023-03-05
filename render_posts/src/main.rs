@@ -1,6 +1,7 @@
 use pulldown_cmark::{Event, HeadingLevel, LinkType, Options, Parser, Tag};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::prelude::*;
+use std::fs;
+use std::path::Path;
 
 const HEADER: &str = r#"<html>
 <head>
@@ -108,14 +109,11 @@ impl Output {
     }
 }
 
-fn main() -> anyhow::Result<()> {
-    let mut input = String::new();
-    std::io::stdin().read_to_string(&mut input)?;
-
+fn render_markdown(markdown_input: &str) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_FOOTNOTES);
-    let parser = Parser::new_ext(&input, options);
+    let parser = Parser::new_ext(markdown_input, options);
 
     let mut output = Output::new();
     output.push_str(HEADER);
@@ -214,8 +212,23 @@ fn main() -> anyhow::Result<()> {
         }
     }
     document_with_footnotes += &output.document[current_offset..];
+    document_with_footnotes
+}
 
-    print!("{document_with_footnotes}");
-
+fn main() -> anyhow::Result<()> {
+    let cargo_toml_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let posts_dir = cargo_toml_dir.join("../posts");
+    let render_dir = cargo_toml_dir.join("../www");
+    for post_entry in fs::read_dir(posts_dir)? {
+        let post_entry = post_entry?;
+        let post_name = post_entry.file_name().to_string_lossy().to_string();
+        println!("rendering {post_name}");
+        let post_markdown = fs::read_to_string(post_entry.path())?;
+        let post_html = render_markdown(&post_markdown);
+        fs::write(
+            render_dir.join(post_name.replace(".md", ".html")),
+            &post_html,
+        )?;
+    }
     Ok(())
 }
