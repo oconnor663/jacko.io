@@ -1,7 +1,11 @@
-use pulldown_cmark::{Event, HeadingLevel, LinkType, Options, Parser, Tag};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::Path;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{Style, ThemeSet};
+use syntect::html::{styled_line_to_highlighted_html, IncludeBackground};
+use syntect::parsing::SyntaxSet;
 
 const HEADER: &str = r#"<html>
 <head>
@@ -24,10 +28,17 @@ struct Footnote {
     contents: String,
 }
 
+struct CodeBlock {
+    language: String,
+    contents: String,
+}
+
 struct Output {
     document: String,
     // Each footnote is parsed incrementally, just like the document is.
     current_footnote: Option<Footnote>,
+    // Unfortunately code blocks are also parsed incrementally, which is kind of awkward.
+    current_code_block: Option<CodeBlock>,
     // map of name to contents
     footnotes: HashMap<String, String>,
     // sorted map of offset to name
@@ -39,6 +50,7 @@ impl Output {
         Self {
             document: String::new(),
             current_footnote: None,
+            current_code_block: None,
             footnotes: HashMap::new(),
             footnote_references: BTreeMap::new(),
         }
@@ -47,6 +59,8 @@ impl Output {
     fn push_str(&mut self, text: &str) {
         if let Some(footnote) = &mut self.current_footnote {
             footnote.contents += text;
+        } else if let Some(code_block) = &mut self.current_code_block {
+            code_block.contents += text;
         } else {
             self.document += text;
         }
@@ -54,6 +68,7 @@ impl Output {
 
     fn start_footnote(&mut self, name: String) {
         assert!(self.current_footnote.is_none(), "already in a footnote");
+        assert!(self.current_code_block.is_none(), "already in a codeblock");
         assert!(
             !self.footnotes.contains_key(&name),
             "footnote {name} already exists",
@@ -102,6 +117,58 @@ impl Output {
                 "footnote {name} has no references",
             );
         }
+    }
+
+    fn start_code_block(&mut self, language: String) {
+        assert!(self.current_code_block.is_none(), "already in a codeblock");
+        assert!(self.current_footnote.is_none(), "already in a footnote");
+        self.current_code_block = Some(CodeBlock {
+            language,
+            contents: String::new(),
+        });
+    }
+
+    fn finish_code_block(&mut self) {
+        let Some(code_block) = self.current_code_block.take() else {
+            panic!("not in a codeblock");
+        };
+
+        // The syntect syntax names have names like "Rust" and "C", not "rust" and "c". Make sure
+        // (only) the first letter is capitalized.
+        let mut first = true;
+        let capitalized_language: String = code_block
+            .language
+            .chars()
+            .map(|c| {
+                if first {
+                    first = false;
+                    c.to_ascii_uppercase()
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect();
+
+        self.document += "\n\n<pre><code>";
+
+        // syntax highlighting
+        // https://github.com/trishume/syntect/blob/c61ce60c72d67ad4e3dd06d60ff3b13ef4d2698c/examples/synhtml.rs
+        let syntax_set = SyntaxSet::load_defaults_newlines();
+        let syntax = syntax_set
+            .find_syntax_by_name(&capitalized_language)
+            .unwrap();
+        let theme_set = ThemeSet::load_defaults();
+        let mut line_highlighter =
+            HighlightLines::new(syntax, &theme_set.themes["Solarized (light)"]);
+        for line in code_block.contents.lines() {
+            let ranges: Vec<(Style, &str)> =
+                line_highlighter.highlight_line(line, &syntax_set).unwrap();
+            let html = styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No).unwrap();
+            self.document += &html;
+            self.document += "<br>";
+        }
+
+        self.document += "</code></pre>";
     }
 }
 
@@ -153,7 +220,12 @@ fn render_markdown(markdown_input: &str) -> String {
                     assert_eq!(kind, LinkType::Inline);
                     output.push_str(&format!(r#"<a class="custom-link-color" href="{dest}">"#));
                 }
-                Tag::CodeBlock(_kind) => output.push_str("\n\n<pre><code>"),
+                Tag::CodeBlock(kind) => {
+                    let CodeBlockKind::Fenced(language) = kind else {
+                        panic!("unsupported code block: {:?}", kind);
+                    };
+                    output.start_code_block(language.to_string());
+                }
                 Tag::List(_) => output.push_str("<ul>\n"),
                 Tag::Item => output.push_str("<li>\n"),
                 Tag::FootnoteDefinition(s) => {
@@ -173,7 +245,9 @@ fn render_markdown(markdown_input: &str) -> String {
                 Tag::Strong => output.push_str("</strong>"),
                 Tag::Emphasis => output.push_str("</em>"),
                 Tag::Link(_kind, _dest, _title) => output.push_str("</a>"),
-                Tag::CodeBlock(_kind) => output.push_str("</code></pre>"),
+                Tag::CodeBlock(_kind) => {
+                    output.finish_code_block();
+                }
                 Tag::List(_) => output.push_str("</ul>"),
                 Tag::Item => output.push_str("</li>"),
                 Tag::FootnoteDefinition(s) => {
