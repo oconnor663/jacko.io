@@ -227,8 +227,8 @@ fn render_markdown(markdown_input: &str) -> String {
                     };
                     output.start_code_block(language.to_string());
                 }
-                Tag::List(_) => output.push_str("<ul>\n"),
-                Tag::Item => output.push_str("<li>\n"),
+                Tag::List(_) => output.push_str("\n\n<ul>"),
+                Tag::Item => output.push_str("\n<li>"),
                 Tag::FootnoteDefinition(s) => {
                     output.start_footnote(s.to_string());
                 }
@@ -249,7 +249,7 @@ fn render_markdown(markdown_input: &str) -> String {
                 Tag::CodeBlock(_kind) => {
                     output.finish_code_block();
                 }
-                Tag::List(_) => output.push_str("</ul>"),
+                Tag::List(_) => output.push_str("\n</ul>"),
                 Tag::Item => output.push_str("</li>"),
                 Tag::FootnoteDefinition(s) => {
                     output.finish_footnote(s.to_string());
