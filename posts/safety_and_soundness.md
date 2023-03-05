@@ -90,7 +90,7 @@ Here's the C version of `foo2`:
 
 ```c
 char foo2(size_t index) {
-  return *(BYTES + index);
+    return *(BYTES + index);
 }
 ```
 
