@@ -21,7 +21,7 @@ def main():
     cmd(
         "ssh",
         "jacko@jacko.io",
-        "cd /srv/jacko.io && git pull --ff-only && peru sync --no-cache",
+        "cd /srv/jacko.io && git pull --ff-only && peru sync --no-cache && (cd render_posts && cargo run)",
     ).run()
 
 
