@@ -230,7 +230,7 @@ figure.fullwidth figcaption {
 /* Links: replicate underline that clears descenders */
 a:link,
 a:visited {
-    color: inherit;
+    color: #144bb8;
 }
 
 .no-tufte-underline:link {

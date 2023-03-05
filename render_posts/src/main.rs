@@ -6,11 +6,6 @@ use std::path::Path;
 const HEADER: &str = r#"<html>
 <head>
 <link rel="stylesheet" href="tufte.css"/>
-<style>
-a.custom-link-color {
-    color: #144bb8;
-}
-</style>
 </head>
 <body>
 <article>"#;
