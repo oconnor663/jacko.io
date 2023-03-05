@@ -8,7 +8,8 @@ const HEADER: &str = r#"<html>
 <link rel="stylesheet" href="tufte.css"/>
 </head>
 <body>
-<article>"#;
+<article>
+<p><a href="index.html">> Home</a></p>"#;
 
 const FOOTER: &str = r#"
 
