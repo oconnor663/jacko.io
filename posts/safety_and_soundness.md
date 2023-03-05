@@ -10,7 +10,7 @@ somewhere. Standard data structures like `Vec` and `HashMap` have `unsafe` code
 in their implementations, as does any function like `File::open` that talks to
 the OS. This leads to a common question: **"If Rust can't actually guarantee
 that all safe code is sound, how is it any safer than C or C++?"** It's hard to
-give a short answer to that question, so this article is my attempt at a
+give a short answer to that question, so this post is my attempt at a
 medium-length answer.
 
 ## The short answer
@@ -72,9 +72,9 @@ code](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e2
 and doing it with `unsafe` code is [already UB in the
 caller](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=be72905a4c634a62298d4aca5cca6dc4),
 before we even get to the body of `foo1`. Since the Rust version of `foo1` will
-never cause UB without the caller committing UB first, `foo1` is *sound*. Rust
-guarantees that functions like `foo1`, which don't use any `unsafe` code either
-directly or indirectly, will always be sound.
+never cause UB without the caller committing UB first, `foo1` is **sound**.
+Rust guarantees that functions like `foo1`, which don't use any `unsafe` code
+either directly or indirectly, will always be sound.
 
 Now consider a slightly different function, `foo2`, which doesn't do a bounds
 check:
@@ -104,8 +104,8 @@ raw pointers like this isn't allowed in safe Rust, so deleting the `unsafe`
 keyword [is also a compiler
 error](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e032302c44ce33a78b8c189ef488fc50).
 
-But things start to go wrong if we move the `unsafe` keyword down a bit. This
-function compiles:
+But if we move the `unsafe` keyword down a bit, we start to get into trouble.
+This function compiles:
 
 ```rust
 fn foo3(index: usize) -> u8 {
@@ -115,13 +115,13 @@ fn foo3(index: usize) -> u8 {
 }
 ```
 
-`foo3` is like `foo2`, except that we've removed the `unsafe` keyword from the
+`foo3` is like `foo2`, except we've removed the `unsafe` keyword from the
 declaration and replaced it with an `unsafe` block in the body. That means we
 can [call `foo3` and commit UB from safe
 code](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=2546a5a170867d564e26ca01edd03b80).
-In other words, `foo3` is *unsound*.
+In other words, `foo3` is **unsound**.
 
-We can make the problem worse by adding some indirection:
+We can get in even deeper trouble by adding some indirection:
 
 ```rust
 fn foo4(index: usize) -> u8 {
@@ -132,8 +132,8 @@ fn foo4(index: usize) -> u8 {
 `foo4` is just a thin wrapper around `foo3`, so `foo4` is [also
 unsound](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=a6d4a020eecfd0f01f8252ed24c4a254).
 But `foo4` doesn't contain any `unsafe` code of its own. Instead, the
-unsoundness of `foo3` has "infected" `foo4`. This is why we can't make a strong
-guarantee that all safe code is sound.
+unsoundness of `foo3` has "infected" `foo4`. This sort of thing is why we can't
+make a strong guarantee that all safe code is sound.
 
 However, there's a slightly weaker guarantee that we _can_ make. `foo4` doesn't
 contain any `unsafe` code, so it can't be unsound all by itself. There must be
@@ -151,43 +151,12 @@ weaker guarantee above is harder to explain, but it's the more correct idea,
 and it's arguably Rust's most fundamental principle: **A safe caller can't be
 "at fault" for memory corruption or other UB.**
 
-In this sense, wrapping `unsafe` Rust in a safe API is similar to wrapping a C
-library in a Python API, or in any other memory-safe language.[^google_jni]
+In this sense, wrapping `unsafe` Rust in a safe API is similar to wrapping C
+code in a Python API, or in any other memory-safe language.[^google_jni]
 Mistakes in Python aren't supposed to cause memory corruption, and if they do,
-we usually consider that a bug in the bindings. Writing or reviewing bindings
+we usually consider that a bug in the C bindings. Writing or reviewing bindings
 isn't easy, but most applications contain little or no binding code of their
 own. Python code calls into C all the time, but memory corruption is rare.
-
-## The catch
-
-The catch is that Rust has strict lifetime and aliasing rules. For example,
-Rust [won't usually let
-us](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=5f2b90835dfe746b18d1bddaa43275f5)
-increment an integer while we hold a pointer to it (other than [through that
-pointer](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=83005426f1587180f47aba95e05843e0)).
-Similarly, Rust [won't usually let
-us](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=2c84a02b7a9bf48b45543d23201495cd)
-create a reference cycle between two objects. These rules take a lot of getting
-used to, and using `unsafe` code to break them is [tempting but usually
-UB](https://youtu.be/DG-VLezRkYQ).
-
-Here are some things that are difficult, slow, and/or impossible to do without
-`unsafe` code:
-
-- call C functions without existing bindings
-- read and write C-style unions
-- implement cyclic data structures like doubly-linked lists and graphs[^linked_lists]
-- write maximum-performance SIMD code or raw assembly
-- memory-map a file
-
-And for completeness, here are some usually-buggy behaviors that aren't
-considered UB. These can all happen in safe code:
-
-- deadlocks
-- memory leaks[^memory_leaks]
-- race conditions that aren't "data races"[^data_races]
-- arithmetic overflows[^overflows]
-- assertion failures and other aborts
 
 ---
 
@@ -285,44 +254,3 @@ Discuss this post at [example.com](https://example.com).
   wanted to execute _malicious_ safe code and still guarantee memory safety,
   we'd need lots of help from the OS, and relying on process isolation instead
   of memory safety would probably make more sense.
-
-[^linked_lists]: Implementing new data structures is relatively more
-  complicated in Rust than in other languages, because of the lifetime and
-  aliasing rules. This is especially true of pointer-based data structures like
-  linked lists and trees, which tend to require `Option<Box<T>>` and other
-  tricky patterns, and _especially_ especially true of cyclic data structures
-  like doubly-linked lists and graphs, which tend to require `unsafe` code.
-  This can be surprising to programmers coming from other languages, where
-  implementing a linked list is a beginner project. For an exhaustive study of
-  these issues, see [Learn Rust With Entirely Too Many Linked
-  Lists](https://rust-unofficial.github.io/too-many-lists/)
-
-[^memory_leaks]: Rust usually frees memory automatically in destructors, so
-  memory leaks are rare in practice, but it's possible to prevent destructors
-  from running in safe code. You can do this deliberately by calling
-  [`std::mem::forget`](https://doc.rust-lang.org/std/mem/fn.forget.html) or
-  creating a
-  [`ManuallyDrop`](https://doc.rust-lang.org/std/mem/struct.ManuallyDrop.html)
-  object. The most common way to do this accidentally is to create a reference
-  cycle with [`Rc`](https://doc.rust-lang.org/std/rc/struct.Rc.html) or
-  [`Arc`](https://doc.rust-lang.org/std/sync/struct.Arc.html), the
-  reference-counted smart pointer types, which are similar to
-  [`std::shared_ptr`](https://en.cppreference.com/w/cpp/memory/shared_ptr) in
-  C++.
-
-[^data_races]: A "data race" is a specific kind of race condition, where one
-  thread is writing something in memory while another thread is reading or
-  writing the same thing, without locks, atomics, or some other
-  synchronization. This is always UB in C, C++, and Rust, even in cases where
-  the underlying hardware might be ok with it. On the other hand, an example of
-  a race condition that isn't a data race could be two threads printing at the
-  same time, where the order of their prints might change from run to run.
-
-[^overflows]: Arithmetic overflow is defined behavior in Rust. By default it
-  panics in debug mode and wraps in release mode, but this is
-  [configurable](https://doc.rust-lang.org/cargo/reference/profiles.html#overflow-checks).
-  Rust integer types also support explicit methods like
-  [`wrapping_add`](https://doc.rust-lang.org/stable/std/primitive.i32.html#method.wrapping_add)
-  and
-  [`checked_add`](https://doc.rust-lang.org/stable/std/primitive.i32.html#method.checked_add),
-  for cases where overflow is expected.
