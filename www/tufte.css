@@ -191,7 +191,7 @@ section > dl,
 section > ol,
 section > ul {
     width: 50%;
-    -webkit-padding-start: 5%;
+    padding-left: 3%;
 }
 
 dt:not(:first-child),
@@ -256,6 +256,12 @@ img {
     line-height: 1.3;
     vertical-align: baseline;
     position: relative;
+}
+
+/* https://github.com/edwardtufte/tufte-css/pull/171/files */
+li .sidenote,
+li .marginnote {
+    margin-right: -65%;
 }
 
 .sidenote-number {
