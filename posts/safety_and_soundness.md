@@ -15,7 +15,7 @@ answer to that question, so this post is my attempt at a medium-length answer.
 ## The short answer
 
 This version is dense and technical. You might want to take a quick look at it,
-move on to the next section, and then come back for a another look at the end.
+move on to the next section, and then come back for another look at the end.
 
 > Rust has a list of [behaviors considered
 > undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
