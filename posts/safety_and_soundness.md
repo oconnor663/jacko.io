@@ -64,10 +64,9 @@ Both versions of `foo1` bounds-check the value of `index` before they use it.
 This check is automatic in the Rust version, but in C we need to write it
 ourselves. Because of this check, we can't make `foo1` commit UB just by giving
 it a large `index`. Instead, the only way I can think of to make `foo1` commit
-UB is to [give it an _uninitialized_
-`index`](https://godbolt.org/z/e5bbq95hx).[^uninitialized] In C, we'd probably
-think of the resulting UB as "the caller's fault". In Rust, using an
-uninitialized argument [won't compile in safe
+UB is to [give it an _uninitialized_ `index`](https://godbolt.org/z/e5bbq95hx).
+In C, we'd probably think of the resulting UB as "the caller's fault". In Rust,
+using an uninitialized argument [won't compile in safe
 code](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e23c9b052892c7c3e2b8bf5cd9f5cd98),
 and doing it with `unsafe` code is [already UB in the
 caller](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=be72905a4c634a62298d4aca5cca6dc4),
@@ -162,22 +161,14 @@ own. Python code calls into C all the time, but memory corruption is rare.
 
 Discuss this post at [example.com](https://example.com).
 
-[^safe_meanings]: The `unsafe` keyword can show up in different places: in the
-  signature of a function, in its body, in the body of some other function it
-  calls, or in [`unsafe` trait
-  implementations](https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html#implementing-an-unsafe-trait).
-  Each of those has different consequences, so what we mean when we say that
-  some piece of code is "safe" depends on context. Sometimes we also talk about
-  safety and soundness interchangeably. But here I want to emphasize the
-  differences between them.
+[^safe_meanings]: What we mean by "safe" depends on context, which is partly
+  what this post is about. Sometimes we even talk about safety and soundness
+  interchangeably, but here I want to emphasize the differences between them.
 
-[^undefined_behavior]: "Undefined behavior" (UB) has a specific meaning in
-  languages like C, C++, and Rust, which might not be familiar to folks coming
-  from languages like Python or Java. UB is different from "unspecified" or
-  "undocumented" behavior. It comes up most often when we work with things like
-  pointers or uninitialized memory, where breaking the rules means our program
-  could do almost anything, including running arbitrary code from some
-  attacker. This is a common source of security vulnerabilities.
+[^undefined_behavior]: "Undefined behavior" (UB) has a [specific
+  meaning](https://en.wikipedia.org/wiki/Undefined_behavior) in languages like
+  C, C++, and Rust, which is different from "unspecified" or
+  "implementation-defined" behavior.
 
 [^formal_spec]: Rust doesn't yet have a formal specification, but [there's
   general agreement](https://blog.m-ou.se/rust-standard/) that it needs one,
@@ -215,27 +206,14 @@ Discuss this post at [example.com](https://example.com).
   project](https://plv.mpi-sws.org/rustbelt/) and the sort of thing you might
   [write your PhD thesis about](https://research.ralfj.de/thesis.html).
 
-[^module_soundness]: A private function in a module might be able to commit UB
-  without `unsafe` code, by modifying a private field that other `unsafe` code
-  relies on. For example, any function in the implementation of `Vec` could
-  overwrite the private `len` field and then do out-of-bounds reads and writes
-  without using the `unsafe` keyword directly. This can lead to unsoundness in
-  safe-looking private helper functions. But whether such functions should
-  always be marked `unsafe` is a matter of taste, as long as the module's
-  public API is sound.
+[^module_soundness]: We usually evaluate soundness at module boundaries,
+  because safe writes to private fields that `unsafe` code depends on is often
+  enough to commit UB. For example, any function in the implementation of `Vec`
+  could overwrite the private `len` field and then do out-of-bounds reads and
+  writes without using the `unsafe` keyword directly.
 
 [^implicit_return]: When the last line of a Rust function doesn't end in a
-  semicolon, that's an implicit `return`. Similarly, if the last line of a code
-  block doesn't end in a semicolon, it's the value of the block.
-
-[^uninitialized]: An "uninitialized" variable is one that's been given a name
-  but no value. This doesn't come up in langauges like Python, which requires
-  an initial value when you declare a variable, or in languages like Go, where
-  variables without an initial value get a default zero/empty value. But it
-  does come up in C, C++, and `unsafe` Rust, and it can cause confusing UB. For
-  example, an uninitialized variable might not have any consistent value at
-  all, which can lead to seemingly impossible outcomes like passing a bounds
-  check and then indexing out of bounds.
+  semicolon, that's an implicit `return`.
 
 [^unsafe_and_sound]: In theory there's nothing wrong with a function that's
   both sound and `unsafe`, but in practice it's odd. Why not allow safe code to
@@ -243,9 +221,9 @@ Discuss this post at [example.com](https://example.com).
   function is expected to become unsound in the future, so it's marked `unsafe`
   now for compatibility.
 
-[^google_jni]: I'm lifting this analogy from a Google Security Blog post about
-  [Memory Safe Languages in Android
-  13](https://security.googleblog.com/2022/12/memory-safe-languages-in-android-13.html).
+[^google_jni]: The Google Security Blog [made a similar
+  comparison](https://security.googleblog.com/2022/12/memory-safe-languages-in-android-13.html)
+  between `unsafe` Rust and JNI in Java.
 
 [^weird_exceptions]: Apart from "soundness holes" in the compiler, it's also
   possible to corrupt memory by asking the OS to do it for you in ways the
