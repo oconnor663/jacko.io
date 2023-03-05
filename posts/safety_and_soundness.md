@@ -1,8 +1,8 @@
 # Safety and Soundness in Rust <p class="subtitle">5 March 2023</p>
 
-Rust is designed around **safety** and **soundness**. Roughly speaking, safe
-code is code that doesn't use the `unsafe` keyword,[^safe_meanings] and sound
-code is code that can't cause memory corruption or other undefined
+Rust is designed around safety and soundness. Roughly speaking, safe code is
+code that doesn't use the `unsafe` keyword,[^safe_meanings] and sound code is
+code that can't cause memory corruption or other undefined
 behavior.[^undefined_behavior] One of Rust's most important features is the
 promise that all safe code is sound. But that promise can be broken when
 `unsafe` code is involved, and `unsafe` code is almost always involved
@@ -15,23 +15,21 @@ medium-length answer.
 
 ## The short answer
 
-This is dense and overly formal, so feel free to skip it. We'll build up to it
-with examples below.
+This is the sort of answer that only makes sense when you already know what
+it's trying to say. I recommend taking a quick look at it, moving on to the
+next section, and then coming back for a second look at the end.
 
 Rust has a list of [behaviors considered
 undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
 A "sound" function is one that upholds the following invariant: any program
-that only calls sound functions, and doesn't contain any other `unsafe` code,
+that only calls sound functions and doesn't contain any other `unsafe` code,
 can't commit UB.[^self_referential] A function that doesn't use any `unsafe`
 code, either directly or indirectly, is guaranteed to be
 sound.[^soundness_holes] A function that doesn't use any `unsafe` code
 directly, and only calls other sound functions, is also sound by definition.
-But functions and modules that use `unsafe` code directly have to be careful
-not to commit UB, and also not to allow their safe callers to commit UB. Any
-unsoundness in the safe, public API of a module is a bug.[^module_soundness]
-There's no formal guarantee that the set of sound functions will be *useful*,
-but in practice it is, and most applications contain little or no `unsafe`
-code.
+But functions and modules that use `unsafe` code directly might be unsound, and
+any transitive caller of an unsound function might also be unsound. Unsoundness
+in the safe, public API of a module is a bug.[^module_soundness]
 
 ## The medium-length answer
 
