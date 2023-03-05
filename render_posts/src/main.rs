@@ -14,7 +14,7 @@ const HEADER: &str = r#"<html>
 </head>
 <body>
 <article>
-<p><a href="index.html">⮌ Home</a></p>"#;
+<p><a href="index.html">↫ Home</a></p>"#;
 
 const FOOTER: &str = r#"
 
