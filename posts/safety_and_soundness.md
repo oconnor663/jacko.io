@@ -1,7 +1,3 @@
-> This is a draft. I'd like this article to be as accurate as reasonably
-> possible (for its length), and I want to get feedback and corrections before
-> I publish it anywhere more broadly.
-
 # Safety and Soundness in Rust
 
 Rust is designed around **safety** and **soundness**. Roughly speaking, safe
