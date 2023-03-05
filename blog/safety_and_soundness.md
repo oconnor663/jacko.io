@@ -22,19 +22,19 @@ answer.
 I don't like how dense and abstract this is, but I've tried as best I can to
 make it correct. Feel free to skip this part.
 
-Rust has a list of [behaviors considered
-undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
-We define "sound" functions like this: any program that only calls sound
-functions, and doesn't contain any other `unsafe` code, can't commit
-UB.[^self_referential] A function that doesn't use any `unsafe` code, either
-directly or indirectly, is guaranteed to be sound.[^soundness_holes] A function
-that doesn't use any `unsafe` code directly, and only calls other sound
-functions, is also sound by definition. But functions and modules that use
-`unsafe` code directly have to be careful not to commit UB, and also not to
-allow their safe callers to commit UB. Any unsoundness in the safe, public API
-of a module is a bug.[^module_soundness] There's no formal guarantee that the
-set of sound functions will be *useful*, but in practice it is, and most
-applications contain little or no `unsafe` code.
+> Rust has a list of [behaviors considered
+> undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
+> We define "sound" functions like this: any program that only calls sound
+> functions, and doesn't contain any other `unsafe` code, can't commit
+> UB.[^self_referential] A function that doesn't use any `unsafe` code, either
+> directly or indirectly, is guaranteed to be sound.[^soundness_holes] A
+> function that doesn't use any `unsafe` code directly, and only calls other
+> sound functions, is also sound by definition. But functions and modules that
+> use `unsafe` code directly have to be careful not to commit UB, and also not
+> to allow their safe callers to commit UB. Any unsoundness in the safe, public
+> API of a module is a bug.[^module_soundness] There's no formal guarantee that
+> the set of sound functions will be *useful*, but in practice it is, and most
+> applications contain little or no `unsafe` code.
 
 Let's build up to this with examples.
 
