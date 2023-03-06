@@ -67,9 +67,9 @@ code](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e2
 and doing it with `unsafe` code is [already UB in the
 caller](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=be72905a4c634a62298d4aca5cca6dc4),
 before we even get to the body of `foo1`. Since the Rust version of `foo1` will
-never cause UB without the caller committing UB first, `foo1` is **sound**.
-Rust guarantees that functions like `foo1`, which don't use any `unsafe` code
-either directly or indirectly, will always be sound.
+never cause UB without the caller writing `unsafe` first,[^fclose] `foo1` is
+**sound**. Rust guarantees that functions like `foo1`, which don't use any
+`unsafe` code either directly or indirectly, will always be sound.
 
 Now consider a slightly different function, `foo2`, which doesn't do a bounds
 check:
@@ -216,15 +216,15 @@ Discussion threads on
 [^implicit_return]: When the last line of a Rust function doesn't end in a
   semicolon, that's an implicit `return`.
 
+[^fclose]: This line originally read "without the caller committing UB first",
+  but Peter Ammon [pointed out](https://news.ycombinator.com/item?id=35035347)
+  that printing to `stderr` can become UB after `fclose(stderr)` or `fork()`.
+
 [^unsafe_and_sound]: In theory there's nothing wrong with a function that's
   both sound and `unsafe`, but in practice it's odd. Why not allow safe code to
   call the function, if it can't lead to UB? One answer could be that the
   function is expected to become unsound in the future, so it's marked `unsafe`
   now for compatibility.
-
-[^google_jni]: The Google Security Blog [made a similar
-  comparison](https://security.googleblog.com/2022/12/memory-safe-languages-in-android-13.html)
-  between `unsafe` Rust and JNI in Java.
 
 [^weird_exceptions]: Apart from "soundness holes" in the compiler, it's also
   possible for safe code to corrupt memory by asking the OS to do it in ways
@@ -233,3 +233,7 @@ Discussion threads on
   wanted to execute _malicious_ safe code and still guarantee memory safety,
   we'd need lots of help from the OS, and relying on process isolation instead
   of memory safety would probably make more sense.
+
+[^google_jni]: The Google Security Blog [made a similar
+  comparison](https://security.googleblog.com/2022/12/memory-safe-languages-in-android-13.html)
+  between `unsafe` Rust and JNI in Java.
