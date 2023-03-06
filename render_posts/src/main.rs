@@ -7,10 +7,12 @@ use syntect::highlighting::{Style, ThemeSet};
 use syntect::html::{styled_line_to_highlighted_html, IncludeBackground};
 use syntect::parsing::SyntaxSet;
 
-const HEADER: &str = r#"<html>
+const HEADER: &str = r#"<!DOCTYPE html>
+<html lang="en">
 <head>
-<link rel="stylesheet" href="tufte.css"/>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="tufte.css">
 </head>
 <body>
 <article>
