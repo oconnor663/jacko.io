@@ -12,6 +12,7 @@ const HEADER: &str = r#"<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- tufte.css is adapted from https://github.com/edwardtufte/tufte-css, MIT licensed -->
 <link rel="stylesheet" href="tufte.css">
 <title>__TITLE__</title>
 </head>
