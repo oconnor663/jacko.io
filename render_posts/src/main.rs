@@ -13,10 +13,14 @@ const HEADER: &str = r#"<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="tufte.css">
+<title>__TITLE__</title>
 </head>
 <body>
 <article>
-<p><a href="index.html">↫ Home</a></p>"#;
+<p><a href="index.html">↫ Home</a></p>
+<h1>__TITLE__</h1>
+<p class="subtitle">__SUBTITLE__</p>
+<section>"#;
 
 const FOOTER: &str = r#"
 
@@ -38,6 +42,10 @@ struct CodeBlock {
 
 struct Output {
     document: String,
+    title: String,
+    in_title: bool,
+    subtitle: String,
+    in_subtitle: bool,
     // Each footnote is parsed incrementally, just like the document is.
     current_footnote: Option<Footnote>,
     // Unfortunately code blocks are also parsed incrementally, which is kind of awkward.
@@ -52,6 +60,10 @@ impl Output {
     fn new() -> Self {
         Self {
             document: String::new(),
+            title: String::new(),
+            in_title: false,
+            subtitle: String::new(),
+            in_subtitle: false,
             current_footnote: None,
             current_code_block: None,
             footnotes: HashMap::new(),
@@ -60,7 +72,13 @@ impl Output {
     }
 
     fn push_str(&mut self, text: &str) {
-        if let Some(footnote) = &mut self.current_footnote {
+        if self.in_title {
+            assert!(!self.in_subtitle);
+            self.title += text;
+        } else if self.in_subtitle {
+            assert!(!self.in_title);
+            self.subtitle += text;
+        } else if let Some(footnote) = &mut self.current_footnote {
             footnote.contents += text;
         } else if let Some(code_block) = &mut self.current_code_block {
             code_block.contents += text;
@@ -70,6 +88,8 @@ impl Output {
     }
 
     fn start_footnote(&mut self, name: String) {
+        assert!(!self.in_title);
+        assert!(!self.in_subtitle);
         assert!(self.current_footnote.is_none(), "already in a footnote");
         assert!(self.current_code_block.is_none(), "already in a codeblock");
         assert!(
@@ -123,6 +143,8 @@ impl Output {
     }
 
     fn start_code_block(&mut self, language: String) {
+        assert!(!self.in_title);
+        assert!(!self.in_subtitle);
         assert!(self.current_code_block.is_none(), "already in a codeblock");
         assert!(self.current_footnote.is_none(), "already in a footnote");
         self.current_code_block = Some(CodeBlock {
@@ -182,7 +204,6 @@ fn render_markdown(markdown_input: &str) -> String {
     let parser = Parser::new_ext(markdown_input, options);
 
     let mut output = Output::new();
-    output.push_str(HEADER);
 
     let mut nested_p_tag = false;
     for (event, _range) in parser.into_offset_iter() {
@@ -209,14 +230,13 @@ fn render_markdown(markdown_input: &str) -> String {
                     output.push_str("<p>");
                 }
                 Tag::Heading(level, _fragment, _class) => {
-                    if level == HeadingLevel::H2 {
-                        output.push_str(&format!("\n</section>"));
+                    if level == HeadingLevel::H1 {
+                        output.in_title = true;
+                    } else if level == HeadingLevel::H6 {
+                        output.in_subtitle = true;
+                    } else {
+                        output.push_str(&format!("\n</section>\n\n<section>\n<{level}>"));
                     }
-                    output.push_str("\n\n");
-                    if level == HeadingLevel::H2 {
-                        output.push_str("<section>\n");
-                    }
-                    output.push_str(&format!("<{level}>"));
                 }
                 Tag::Strong => output.push_str("<strong>"),
                 Tag::Emphasis => output.push_str("<em>"),
@@ -241,9 +261,12 @@ fn render_markdown(markdown_input: &str) -> String {
                 Tag::BlockQuote => output.push_str("</blockquote>"),
                 Tag::Paragraph => output.push_str("</p>"),
                 Tag::Heading(level, _fragment, _class) => {
-                    output.push_str(&format!("</{}>", level));
                     if level == HeadingLevel::H1 {
-                        output.push_str(&format!("\n\n<section>"));
+                        output.in_title = false;
+                    } else if level == HeadingLevel::H6 {
+                        output.in_subtitle = false;
+                    } else {
+                        output.push_str(&format!("</{}>", level));
                     }
                 }
                 Tag::Strong => output.push_str("</strong>"),
@@ -262,8 +285,6 @@ fn render_markdown(markdown_input: &str) -> String {
             other => unimplemented!("{:?}", other),
         }
     }
-
-    output.document += FOOTER;
 
     output.validate_footnotes();
 
@@ -284,7 +305,12 @@ fn render_markdown(markdown_input: &str) -> String {
         }
     }
     document_with_footnotes += &output.document[current_offset..];
-    document_with_footnotes
+
+    HEADER
+        .replace("__TITLE__", &output.title)
+        .replace("__SUBTITLE__", &output.subtitle)
+        + &document_with_footnotes
+        + FOOTER
 }
 
 fn main() -> anyhow::Result<()> {
