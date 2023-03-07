@@ -295,7 +295,7 @@ fn render_markdown(markdown_input: &str) -> String {
         document_with_footnotes += &output.document[current_offset..offset];
         current_offset = offset;
         document_with_footnotes += &format!(
-            r#"<label for="sidenote-{name}" class="margin-toggle sidenote-number"></label><input type="checkbox" id="sidenote-{name}" class="margin-toggle"/>"#,
+            r#"<label for="sidenote-{name}" class="margin-toggle sidenote-number"></label><input type="checkbox" id="sidenote-{name}" class="margin-toggle">"#,
         );
         if !already_seen.contains(&name) {
             document_with_footnotes += r#"<span class="sidenote">"#;
