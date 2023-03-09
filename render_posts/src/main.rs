@@ -8,6 +8,7 @@ use syntect::html::{styled_line_to_highlighted_html, IncludeBackground};
 use syntect::parsing::SyntaxSet;
 
 const HEADER: &str = r#"<!DOCTYPE html>
+<!-- rendered by https://github.com/oconnor663/jacko.io/blob/master/render_posts/src/main.rs -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
