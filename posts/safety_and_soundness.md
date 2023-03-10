@@ -27,8 +27,8 @@ move on to the next section, and then come back for another look at the end.
 > sound.[^soundness_holes] A function that doesn't use any `unsafe` code
 > directly and only calls other sound functions, is also sound by definition.
 > But functions and modules that use `unsafe` code directly could be unsound,
-> and a transitive caller of an unsound function could also be unsound. Any
-> unsoundness in the safe, public API of a module is a bug.[^module_soundness]
+> and a caller of an unsound function could also be unsound. Any unsoundness in
+> the safe, public API of a module is a bug.[^module_soundness]
 
 ## The medium-length answer
 
