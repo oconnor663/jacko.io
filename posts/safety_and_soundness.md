@@ -94,7 +94,7 @@ past the end of `BYTES`, which is UB. Note that the Rust version of `foo2` is
 declared `unsafe` in its signature, so calling it outside of another `unsafe`
 function or `unsafe` block [is a compiler
 error](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=ad9e08dd2e82a7411549a959c3eecf6b).
-Since we can't call `foo2` in safe code, we don't usually ask whether `foo2` is
+Since we can't call `foo2` in safe code, we don't usually ask whether it's
 sound or unsound; we just say that it's "unsafe".[^unsafe_and_sound]
 Dereferencing raw pointers like this isn't allowed in safe Rust, so deleting
 the `unsafe` keyword [is also a compiler
@@ -136,10 +136,10 @@ contain any `unsafe` code of its own, so it can't be unsound all by itself.
 There must be some `unsafe` code somewhere that's
 responsible.[^weird_exceptions] In this case of course, it's `foo3` that's
 broken. There are two different ways we could fix `foo3`: We could declare that
-it's `unsafe` in its signature, like `foo2`, which would [make `foo4` a
+it's `unsafe` in its signature like `foo2`, which would [make `foo4` a
 compiler
 error](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=62bc28bc732a2c861544ccdfd1b4854d).
-Or we could make it do bounds checks, like `foo1`, which would make `foo4`
+Or we could make it do bounds checks like `foo1`, which would make `foo4`
 sound with no changes. If we got rid of the `unsafe` code in `foo3`, then one
 way or another Rust would make us do bounds checks.
 
@@ -148,9 +148,9 @@ weaker guarantee above is harder to explain, but it's the more correct idea,
 and it's arguably Rust's most fundamental principle: **A safe caller can't be
 "at fault" for memory corruption or other UB.**
 
-In this sense, wrapping `unsafe` Rust in a safe API is similar to wrapping C
-code in a Python API, or in any other memory-safe language.[^google_jni]
-Mistakes in Python aren't supposed to cause memory corruption, and if they do,
+In this sense, wrapping `unsafe` Rust in a safe API is like wrapping C
+in a Python API, or in any other memory-safe language.[^google_jni]
+Mistakes in Python aren't supposed to corrupt memory, and if they do,
 we usually consider that a bug in the C bindings. Writing and reviewing
 bindings isn't easy, but most applications contain little or no binding code of
 their own. Similarly, most Rust applications contain little or no `unsafe` code
