@@ -326,8 +326,8 @@ h3 > code {
     font-size: 0.80em;
 }
 
-.marginnote > code,
-.sidenote > code {
+.marginnote code,
+.sidenote code {
     font-size: 0.9rem;
 }
 
