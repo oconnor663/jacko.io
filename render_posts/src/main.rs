@@ -178,25 +178,37 @@ impl Output {
 
         self.document += "\n\n<pre><code>";
 
-        // syntax highlighting
-        // https://github.com/trishume/syntect/blob/c61ce60c72d67ad4e3dd06d60ff3b13ef4d2698c/examples/synhtml.rs
-        let syntax_set = SyntaxSet::load_defaults_newlines();
-        let syntax = syntax_set
-            .find_syntax_by_name(&capitalized_language)
-            .unwrap();
-        let theme_set = ThemeSet::load_defaults();
-        let mut line_highlighter =
-            HighlightLines::new(syntax, &theme_set.themes["Solarized (light)"]);
-        for line in code_block.contents.lines() {
-            let ranges: Vec<(Style, &str)> =
-                line_highlighter.highlight_line(line, &syntax_set).unwrap();
-            let html = styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No).unwrap();
-            self.document += &html;
-            self.document += "<br>";
+        if !capitalized_language.is_empty() {
+            // syntax highlighting
+            // https://github.com/trishume/syntect/blob/c61ce60c72d67ad4e3dd06d60ff3b13ef4d2698c/examples/synhtml.rs
+            let syntax_set = SyntaxSet::load_defaults_newlines();
+            let syntax = syntax_set
+                .find_syntax_by_name(&capitalized_language)
+                .expect("unknown language name");
+            let theme_set = ThemeSet::load_defaults();
+            let mut line_highlighter =
+                HighlightLines::new(syntax, &theme_set.themes["Solarized (light)"]);
+            for line in code_block.contents.lines() {
+                let ranges: Vec<(Style, &str)> =
+                    line_highlighter.highlight_line(line, &syntax_set).unwrap();
+                let html =
+                    styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No).unwrap();
+                self.document += &html;
+                self.document += "<br>";
+            }
+        } else {
+            for line in code_block.contents.lines() {
+                self.document += &escape_tags(line);
+                self.document += "<br>";
+            }
         }
 
         self.document += "</code></pre>";
     }
+}
+
+fn escape_tags(s: &str) -> String {
+    s.replace("<", "&lt;").replace(">", "&gt;")
 }
 
 fn render_markdown(markdown_input: &str) -> String {
@@ -213,7 +225,7 @@ fn render_markdown(markdown_input: &str) -> String {
             Event::Text(s) => output.push_str(&s),
             Event::Html(s) => output.push_str(&s),
             Event::SoftBreak => output.push_str("\n"),
-            Event::Code(s) => output.push_str(&format!("<code>{s}</code>")),
+            Event::Code(s) => output.push_str(&format!("<code>{}</code>", escape_tags(&s))),
             Event::Rule => output.push_str(&format!("\n\n<hr>")),
             Event::FootnoteReference(s) => {
                 output.add_footnote_reference(s.to_string());
