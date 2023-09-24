@@ -55,7 +55,7 @@ struct Output {
     // map of name to contents
     footnotes: HashMap<String, String>,
     // sorted map of offset to name
-    footnote_references: BTreeMap<usize, String>,
+    footnote_references: BTreeMap<usize, Vec<String>>,
 }
 
 impl Output {
@@ -121,21 +121,23 @@ impl Output {
     fn add_footnote_reference(&mut self, name: String) {
         assert!(self.current_footnote.is_none(), "no footnotes in footnotes");
         let offset = self.document.len();
-        self.footnote_references.insert(offset, name);
+        self.footnote_references
+            .entry(offset)
+            .or_insert(Vec::new())
+            .push(name);
     }
 
     fn validate_footnotes(&self) {
-        for name in self.footnote_references.values() {
-            assert!(
-                self.footnotes.contains_key(name),
-                "reference to unknown footnote {name}",
-            );
+        let mut referenced_names = HashSet::new();
+        for names in self.footnote_references.values() {
+            for name in names {
+                assert!(
+                    self.footnotes.contains_key(name),
+                    "reference to unknown footnote {name}",
+                );
+                referenced_names.insert(name.clone());
+            }
         }
-        let referenced_names: HashSet<String> = self
-            .footnote_references
-            .iter()
-            .map(|(_offset, name)| name.clone())
-            .collect();
         for name in self.footnotes.keys() {
             assert!(
                 referenced_names.contains(name),
@@ -304,18 +306,30 @@ fn render_markdown(markdown_input: &str) -> String {
 
     let mut document_with_footnotes = String::new();
     let mut current_offset = 0;
-    let mut already_seen: HashSet<String> = HashSet::new();
-    for (offset, name) in output.footnote_references {
-        document_with_footnotes += &output.document[current_offset..offset];
-        current_offset = offset;
-        document_with_footnotes += &format!(
-            r#"<label for="sidenote-{name}" class="margin-toggle sidenote-number"></label><input type="checkbox" id="sidenote-{name}" class="margin-toggle">"#,
-        );
-        if !already_seen.contains(&name) {
-            document_with_footnotes += r#"<span class="sidenote">"#;
-            document_with_footnotes += &output.footnotes[&name];
-            document_with_footnotes += r#"</span>"#;
-            already_seen.insert(name);
+    let mut already_seen: HashSet<&str> = HashSet::new();
+    for (&offset, names) in &output.footnote_references {
+        for name in names {
+            document_with_footnotes += &output.document[current_offset..offset];
+            document_with_footnotes += r#"<span style="white-space: nowrap">"#;
+            if current_offset == offset {
+                // If there's more than one footnote at the same point in the text, put a space in
+                // between them.
+                document_with_footnotes += " ";
+            } else {
+                // We don't want a space before the first footnote, but we still need something
+                // here for nowrap to work.
+                document_with_footnotes += "&ZeroWidthSpace;";
+            }
+            current_offset = offset;
+            document_with_footnotes += &format!(
+                r#"<label for="sidenote-{name}" class="margin-toggle sidenote-number"></label><input type="checkbox" id="sidenote-{name}" class="margin-toggle"></span>"#,
+            );
+            if !already_seen.contains(name.as_str()) {
+                document_with_footnotes += r#"<span class="sidenote">"#;
+                document_with_footnotes += &output.footnotes[name];
+                document_with_footnotes += r#"</span>"#;
+                already_seen.insert(name);
+            }
         }
     }
     document_with_footnotes += &output.document[current_offset..];
