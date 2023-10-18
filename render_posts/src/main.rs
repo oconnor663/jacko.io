@@ -227,7 +227,16 @@ fn render_markdown(markdown_input: &str) -> String {
             Event::Text(s) => output.push_str(&s),
             Event::Html(s) => output.push_str(&s),
             Event::SoftBreak => output.push_str("\n"),
-            Event::Code(s) => output.push_str(&format!("<code>{}</code>", escape_tags(&s))),
+            Event::Code(s) => {
+                for (i, word) in s.split_whitespace().enumerate() {
+                    if i > 0 {
+                        // Full size spaces in inline code strings are uncomfortably wide. Hack in
+                        // shorter spaces.
+                        output.push_str("&nbsp;");
+                    }
+                    output.push_str(&format!("<code>{}</code>", escape_tags(&word)));
+                }
+            }
             Event::Rule => output.push_str(&format!("\n\n<hr>")),
             Event::FootnoteReference(s) => {
                 output.add_footnote_reference(s.to_string());

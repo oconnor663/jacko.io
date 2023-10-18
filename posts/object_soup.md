@@ -4,12 +4,12 @@
 When objects come and go and change all the time, and their relationships are
 also changing and full of cycles, I call it "object soup". It's hard to write
 object soup in Rust, because it breaks the rules for references.[^the_rules]
-But sometimes it's how the world works: A creature in a game can target another
-creature, but its target might disappear. A cell in a spreadsheet can depend on
-another cell, and then the other cell's value might change. A playlist has many
-songs, and each song can be in many lists. These programs are object soup by
-design, but Rust won't let us build them out of references. So how do we build
-them?
+But sometimes it's just how the world works: A creature in a game can target
+another creature, but its target might disappear. A cell in a spreadsheet can
+depend on another cell, and then the other cell's value might change. A
+playlist has many songs, and each song can be in many lists. These programs are
+object soup by design, but Rust won't let us do these things with references.
+So what do we do?
 
 [^the_rules]: I'm assuming that you've already seen Rust's ownership,
     borrowing, and mutability rules. If not, here's here's [an overview from a
@@ -18,7 +18,7 @@ them?
     here's [the relevant chapter of The
     Book](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html).
 
-The short answer is, we **use indexes instead of references**. To see why,
+The short answer is, **we use indexes instead of references**. To see why,
 we'll start by looking at three other approaches that don't work. If you just
 want to see the code that works, skip to part four.
 
@@ -40,15 +40,8 @@ alice.add_friend(bob)
 bob.add_friend(alice)
 ```
 
-That's it. It's simple, boring Python, and it would be simple and boring in
-most other languages. But in Rust it's tricky.[^other_languages]
-
-[^other_languages]: Some of the issues below come up in any language that
-    doesn't have a background garbage collector, including C, C++, and Swift.
-    The lifetime and aliasing rules are also similar to the rules we have to
-    follow when we write multithreaded code in any language. But Rust is
-    somewhat unique in forcing us to solve these issues even in single-threaded
-    toy examples.
+This is simple, boring Python, and it would be simple and boring in most other
+languages. But in Rust it's tricky.
 
 ## Part One: Move Semantics
 
@@ -94,13 +87,13 @@ error[E0382]: borrow of moved value: `bob`
    |     ^^^^^^^^^^^^^^^^^^^^^ value borrowed here after move
 ```
 
-Passing `bob` to `add_friend` by value moves him, because `Person` is not
+Passing Bob to `add_friend` by value moves him, because `Person` isn't
 `Copy`.[^move_semantics] A quick fix is to add `#[derive(Clone)]` to `Person`
-and to `.clone()` each argument to `add_friend`
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=67ffa8e875c6c518bccbcb83202dbbb3)).
-But cloning is a "deep copy", and that's not what we want when we're writing
-object soup. The real Alice and Bob are going to change over time, and copies
-of them will quickly get out of sync. [^already_wrong]
+and to `clone` each argument to `add_friend`
+([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=3d1931a063c9a404233e5f8ff4e68c87)).
+But copying or cloning isn't what we want when we're writing object soup. The
+real Alice and Bob will change over time, and any copies of them will quickly
+get out of sync.[^already_wrong]
 
 [^move_semantics]: Again I'm assuming that you've already seen move semantics
     in Rust. If not, here's [the relevant chapter of The
@@ -108,10 +101,10 @@ of them will quickly get out of sync. [^already_wrong]
     and here's [a comparison with move semantics in C++ from one of my
     talks](https://www.youtube.com/watch?v=IPmRDS0OSxM&t=3020).
 
-[^already_wrong]: In fact, one of the copies has already gotten out of sync
-    even in that tiny Playground example. The copy of Bob in Alice's friends
+[^already_wrong]: In fact, one of the clones has already gotten out of sync
+    even in this tiny Playground example. The copy of Bob in Alice's friends
     list [didn't get
-    updated](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=7b0b02c01d8b5d5e093ea5e4421ec80c)
+    updated](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e8bc304b0542b5db3cb8855912c197de)
     by the second call to `add_friend`.
 
 Like most garbage-collected languages, Python doesn't have this problem,
@@ -120,10 +113,9 @@ because it passes objects around "by reference". Can we use references in Rust?
 ## Part Two: Borrowing
 
 No we can't, because Rust doesn't let us mutate objects that are
-borrowed.[^interior_mutability] If the friends list was holding shared
-references, [as in this Playground
-example,](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=86e3feb50c34e1659ca614c536ac512d)
-we'd get a compiler error when we tried to modify Bob:
+borrowed.[^interior_mutability] If we use shared references
+([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=86e3feb50c34e1659ca614c536ac512d)),
+we'll get a compiler error when we try to modify Bob:
 
 [^interior_mutability]: The exception to this rule is "interior mutability",
     and we'll get to that in the next section.
@@ -142,17 +134,14 @@ error[E0502]: cannot borrow `bob` as mutable because it is also borrowed
    |     mutable borrow occurs here
 ```
 
-Switching to mutable references doesn't help.[^many_to_many] We could avoid
-taking a second reference to Bob by going through Alice's friends list to
-modify him, [as in this second Playground
-example](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f4036832326cf76f4e72e7fa8f18868c),
-but we'd still get an error for breaking the uniqueness rule with respect to
-Alice:
+If we use mutable references
+([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f4036832326cf76f4e72e7fa8f18868c)),
+we can avoid aliasing Bob by going through Alice's friends list to modify
+him,[^many_to_many] but we'll still get an error about aliasing Alice:
 
-[^many_to_many]: The uniqueness rule means we can never use mutable references
-    for many-to-many relationships, so it's not surprising that we can't make
-    object soup out of them in general. But in fact even this toy example is
-    too much.
+[^many_to_many]: The uniqueness rule means we can't use mutable references for
+    many-to-many relationships, so we know we can't make object soup out of
+    them in general. But it was worth a shot.
 
 ```
 error[E0499]: cannot borrow `alice` as mutable more than once at a time
@@ -165,53 +154,41 @@ error[E0499]: cannot borrow `alice` as mutable more than once at a time
    |     first mutable borrow occurs here
 ```
 
-It's educational to play with these examples, but there's no way to make them
-work.[^party_trick] Object soup is all about doing aliasing and mutation at the
-same time, which is exactly what references in Rust are designed to
-prevent.[^advice] We need a different approach.
+Playing with these examples is good practice,[^advice] but there's no way to
+make them work.[^party_trick] Object soup wants aliasing and mutation at the
+same time, and that's exactly what references in Rust are designed to prevent.
+We need something different.
 
-[^party_trick]: Ok I lied. You can make it work [by combining shared references
-    and interior
-    mutability](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=5062e6d7f9d3ba52b69140a73614f796).
+[^party_trick]: Ok I lied. You can get something working [by combining shared
+    references and interior
+    mutability](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=cee3ebe1debd9f241a8159b3203051ea).
     Circular borrows in safe code! It's a neat party trick, but it's not useful
-    in real programs, because it [breaks if you move
+    in real programs, because it [breaks if you try to move
     anything](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=1c56892372f33c4e6e492ada3000571e).
 
-[^advice]: Unfortunately, lots of people go through a painful phase of
-    "fighting the borrow checker" while they learn these rules. My advice for
-    beginners is, no matter what the compiler says, don't put any lifetimes
-    parameters on structs.
+[^advice]: It's worth spending some time "fighting the borrow checker" to build
+    up intuition about what works and what doesn't. But when you get stuck, a
+    good rule of thumb is to avoid putting lifetime parameters on structs.
 
 ## Part Three: Interior Mutability
 
-If you Google "how to mutate a shared object in Rust", you'll find articles
-about [`Rc`](https://doc.rust-lang.org/std/rc/struct.Rc.html) and
-[`RefCell`](https://doc.rust-lang.org/std/cell/struct.RefCell.html).[^arc_mutex]
-In short, `Rc` is like a shared reference without a
-lifetime,[^reference_counting] and `RefCell` lets you get a mutable reference
-from a shared one.[^flag] But in my opinion, **`Rc<RefCell<T>>` is an
-anti-pattern.** It can work in small doses, but it's not a good way to organize
-your whole program.
+If you search for "how to mutate a shared object in Rust", you'll find articles
+about [`Rc`](https://doc.rust-lang.org/std/rc/struct.Rc.html)[^rc] and
+[`RefCell`](https://doc.rust-lang.org/std/cell/struct.RefCell.html),[^refcell]
+but **`Rc<RefCell<T>>` doesn't work well for object soup.** To see why, let's
+try it
+([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f47eed8da77a7bf5801679639ff9c6c9)):
 
-[^arc_mutex]: You'll also find articles about
-    [`Arc`](https://doc.rust-lang.org/std/sync/struct.Arc.html) and
-    [`Mutex`](https://doc.rust-lang.org/std/sync/struct.Mutex.html). These are
-    important and useful tools for multithreaded code, but in single-threaded
-    code they're just more expensive versions of `Rc` and `RefCell`.
+[^rc]: `Rc` stands for ["reference
+    counting"](https://en.wikipedia.org/wiki/Reference_counting), which is the
+    strategy it uses to free its contents. It behaves like a shared reference
+    with no lifetime. It's similar to `std::shared_ptr` in C++ and automatic
+    reference counting in Swift.
 
-[^reference_counting]: `Rc` stands for ["reference
-    counted"](https://en.wikipedia.org/wiki/Reference_counting), which is the
-    strategy it uses to free its contents. It's similar to `std::shared_ptr` in
-    C++ and also similar to how Python works under the hood.
-
-[^flag]: `RefCell` is essentially an
+[^refcell]: `RefCell` is like an
     [`RwLock`](https://doc.rust-lang.org/stable/std/sync/struct.RwLock.html)
-    that doesn't support blocking and can't be shared across threads. Since it
-    doesn't require any OS support, it's [available in
-    `core`](https://doc.rust-lang.org/core/cell/index.html).
-
-Here's what it looks like when we use it
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=48ce017229dd12f24d5999830b172985)):
+    that panics instead of blocking and can't be shared across threads. It lets
+    us get `&mut T` from `&RefCell<T>`.
 
 ```rust
 use std::cell::RefCell;
@@ -240,31 +217,42 @@ fn main() {
 }
 ```
 
-This compiles and runs on the Playground, but it has a memory
-leak.[^difficult_to_leak] We can confirm that with ASan
-[(Godbolt)](https://godbolt.org/z/65r8xc1jK). To fix it, we either need to
-explicitly break cycles before Alice and Bob go out of scope
-[(Godbolt)](https://godbolt.org/z/WzqbnaTY7), or we need to use
+This is verbose, and there's a lot going on,[^a_lot_going_on] but it compiles
+and runs. That's progress! Unfortunately, if we run it under ASan
+([Godbolt](https://godbolt.org/z/dE6s5qKes)), we see that it's leaking
+memory.[^difficult_to_leak] To fix that, we either need to explicitly break
+cycles before Alice and Bob go out of scope
+([Godbolt](https://godbolt.org/z/G8z4sjPW6)), or we need to use
 [`Weak`](https://doc.rust-lang.org/std/rc/struct.Weak.html) references
-[(Godbolt)](https://godbolt.org/z/nh3Kq3qd8). Both options are
+([Godbolt](https://godbolt.org/z/GTo3svrY8)). Both options are
 error-prone.[^weak_semantics]
 
-[^difficult_to_leak]: Usually it's hard to leak memory by accident in Rust, and
-    the functions that do it on purpose have obvious names like
-    [`Box::leak`](https://doc.rust-lang.org/std/boxed/struct.Box.html#method.leak)
-    and [`mem::forget`](https://doc.rust-lang.org/std/mem/fn.forget.html). But
-    reference cycles in `Rc` and `Arc` are the exception. Again this is similar
-    to `std::shared_ptr` in C++.
+[^a_lot_going_on]: `borrow_mut` returns a [smart
+    pointer](https://doc.rust-lang.org/book/ch15-00-smart-pointers.html) type
+    called [`RefMut`](https://doc.rust-lang.org/std/cell/struct.RefMut.html)
+    that implements the
+    [`Deref`](https://doc.rust-lang.org/std/ops/trait.Deref.html) and
+    [`DerefMut`](https://doc.rust-lang.org/std/ops/trait.DerefMut.html) traits.
+    A lot of Rust magic works through those traits and ["deref
+    coercions"](https://doc.rust-lang.org/book/ch15-02-deref.html), and it's
+    worth [writing out all the
+    types](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=96fd41ae782d60c44647f3a797cd4392)
+    to see exactly what's going on. The same pattern comes up with
+    `Arc<Mutex<T>>`, which is fundamental for multithreading.
+
+[^difficult_to_leak]: Usually it's hard to leak memory by accident in Rust, but
+    reference cycles in `Rc` and `Arc` are the main exception. Again this is
+    similar to C++ and Swift, and the same thing happens in Python if you call
+    [`gc.disable`](https://docs.python.org/3/library/gc.html#gc.disable).
 
 [^weak_semantics]: `Weak` references are a good fit for asymmetrical
-    relationships, like child pointers (strong) and parent pointers (weak) in a
-    tree, but here it's not clear who should be the "strong friend" or the
-    "weak friend".
+    relationships like child nodes and parent nodes in a tree, but "strong
+    friends" and "weak friends" don't really make sense.
 
-As our program grows, the uniqueness rule will also come back in the form of
-`RefCell` panics. To trigger this, let's add a check to `add_friend` to make
-sure people don't befriend themselves. Here's the one-line change in Python
-([Godbolt](https://godbolt.org/z/EY7xe545j)):
+As our program grows, the uniqueness rule will also come back to bite us in the
+form of `RefCell` panics. To trigger this, let's change `add_friend` to check
+for people befriending themselves. Here's the change in Python
+([Godbolt](https://godbolt.org/z/EY7xe545j)):[^same_name]
 
 ```python
 def add_friend(self, other):
@@ -272,9 +260,9 @@ def add_friend(self, other):
         self.friends.append(other)
 ```
 
-Again this is simple, boring Python.[^same_name] What about Rust?
+[^same_name]: No two people ever have the same name. It's fine.
 
-[^same_name]: As long as no two people have the same name. It's fine.
+And in Rust:
 
 ```rust
 fn add_friend(&mut self, other: &Rc<RefCell<Person>>) {
@@ -284,33 +272,29 @@ fn add_friend(&mut self, other: &Rc<RefCell<Person>>) {
 }
 ```
 
-The Rust version compiles, but if we test it by making Alice call `add_friend`
-on herself, it panics
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=732713c6149a652504e4ed7160c1fd64)).
+The Rust version compiles, but if we try to make Alice call `add_friend` on
+herself, it panics
+([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=732713c6149a652504e4ed7160c1fd64)):
 
 ```
 thread 'main' panicked at 'already mutably borrowed: BorrowError',
 src/main.rs:15:18
 ```
 
-The caller has locked the `RefCell` to give us `&mut self`, and that conflicts
-with `other.borrow()` when `other` is also Alice.[^deadlock] We can fix it by
-avoiding `&mut self` methods and keeping our borrows short-lived
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e5e9ce34c0d8eace668a542a9e91f8c9)).
-But that's starting to get painfully verbose, and the bigger problem is that
-it's error-prone. We needed a test case to catch that panic.
+The problem is that we "locked" the `RefCell` to get `&mut self`, and that
+conflicts with `other.borrow()` when `other` is aliasing `self`. The fix is to
+avoid `&mut self` methods and keep our borrows short-lived
+([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e5e9ce34c0d8eace668a542a9e91f8c9)),
+but this is also error-prone. We might've missed this bug without a test case.
 
-[^deadlock]: If we were using `Arc<Mutex<T>>` instead of `Rc<RefCell<T>>`, this
-    would be a deadlock instead.
-
-`Rc<RefCell<T>>` causes problems when our data is full of cycles, and it's not
-a good way to write object soup. Again we need a different approach.
+`Rc<RefCell<T>>` isn't a good way to write object soup, because it has problems
+with cycles. Again we need something different.
 
 ## Part Four: Indexes
 
-It turns out that we can do better with simpler tools. We can keep Alice and
-Bob in a `Vec` and have them refer to each other by index
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=9d48e173702419dcc7bc4e312ea98912)):
+It turns out we can do better with simpler tools. We can keep Alice and Bob in
+a `Vec` and have them refer to each other by index
+([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=edc7d9ebf27a9785e8ac7cc2a8e32296)):
 
 ```rust
 struct Person {
@@ -335,46 +319,35 @@ fn main() {
     let bob_id = new_person(&mut people, "Bob");
     add_friend(&mut people, alice_id, bob_id);
     add_friend(&mut people, bob_id, alice_id);
+    add_friend(&mut people, alice_id, alice_id); // no-op
 }
 ```
 
-Some of the verbosity from the `RefCell` approach is still here. We're avoiding
-`&mut self` methods, and the `people` parameter shows up everywhere. But unlike
-above, mistakes here are compiler errors instead of runtime panics, and there's
-no risk of memory leaks. This is how you write object soup in Rust.
+Some of the verbosity from the `RefCell` approach is still here: we're avoiding
+`&mut self` methods, and each function takes a new `people` argument. But
+unlike above, mistakes here are compiler errors instead of runtime panics, and
+there's no risk of memory leaks ([Godbolt](https://godbolt.org/z/hfK5bMTav)).
+This is how you write object soup in Rust.
 
 ## Part Five: Next Steps
 
-While ASan would agree that the code above has no memory leaks
-([Godbolt](https://godbolt.org/z/vb35Ya3Ej)), we also can't delete anything
-from the `Vec` without messing up the indexes of other elements. One way to
-support deletion is to replace `Vec<People>` with `HashMap<u64, People>`, using
-an incrementing counter for new indexes. For programs with higher performance
-requirements that don't mind taking dependencies, there are specialized data
-structures like [`SlotMap`](https://docs.rs/slotmap/latest/slotmap/index.html).
+Even though we're technically not leaking memory, we still can't delete
+anything from the `Vec` without messing up the indexes of other elements. One
+way to allow for deletion is to replace `Vec` with `HashMap`, using either an
+incrementing counter or [random UUIDs](https://docs.rs/uuid) for new indexes.
+If you need higher performance and you don't mind taking a dependency, there
+are also specialized data structures like [`Slab`](https://docs.rs/slab) and
+[`SlotMap`](https://docs.rs/slotmap).
 
-When we have more than one type of object, we'll want to group our containers
-into a larger struct and call it something like `World` or `Context` or
-`Entities`. At that point our design might start to look like an "entity
-component system".[^ecs] [Catherine West's 2018 keynote on game development in
-Rust](https://www.youtube.com/watch?v=aKLntZcp27M) is mandatory viewing on this
-subject.
+When you have more than one type of object to keep track of, you'll probably
+want to group them in a struct with a name like `World` or `State` or
+`Entities`. In her [2018 keynote on game development in
+Rust](https://www.youtube.com/watch?v=aKLntZcp27M),[^inspiration] Catherine
+West talked about how this pattern is a precursor to what game developers call
+an "entity component system". These patterns solve borrowing and mutability
+problems in Rust, but they also solve problems like serialization,
+synchronization, and cache locality that come up when we write object soup in
+any language.
 
-[^ecs]: The [ECS design
-    pattern](https://en.wikipedia.org/wiki/Entity_component_system) is common
-    for games in many languages. This is partly because it's good for
-    performance, but it also reflects the fact that lifetime and aliasing
-    problems aren't unique to Rust.
-
-Using indexes makes our object soup easier to serialize. We could
-[`#[derive(Serialize)]`](https://serde.rs/derive.html) on all our types, encode
-the `World` as JSON, and save it to a file. Or if our program is less of a game
-and more of a network service, we could replace `Vec` or `SlotMap` with a table
-in a database. Our functions already refer to objects by ID and take a context
-object from the caller.
-
-One of Catherine West's most important points in her keynote above is that
-programs in all languages run into these problems as they grow, and they tend
-to converge on similar design patterns. Rust forces us to adopt these patterns
-earlier, when out programs are still small. That's a cost in terms of learning
-and prototyping, but it has its benefits.
+[^inspiration]: This article is really just a rehash of Catherine's talk. I
+    can't recommend it highly enough.
