@@ -1,5 +1,5 @@
 # Safety and Soundness in Rust
-###### 5 March 2023
+###### 2023 March 5
 
 Rust is designed around safety and soundness. Roughly speaking, safe code is
 code that doesn't use the `unsafe` keyword,[^safe_meanings] and sound code is

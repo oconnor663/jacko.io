@@ -1,5 +1,5 @@
 # Object Soup is Made of Indexes
-###### DRAFT
+###### 2023 October 23
 
 When objects come and go and change all the time, and any one might point to
 any other, I call that "object soup".[^graph] It's hard to write object soup in
