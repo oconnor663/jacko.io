@@ -39,6 +39,13 @@
     font-display: swap;
 }
 
+@font-face {
+  font-family: "Ubuntu Mono";
+  src:
+    local("Ubuntu Mono"),
+    url("UbuntuMono-Regular.ttf") format("truetype"),
+}
+
 /* Tufte CSS styles */
 html {
     font-size: 15px;
@@ -304,21 +311,11 @@ div.table-wrapper {
     font-family: "Trebuchet MS", "Gill Sans", "Gill Sans MT", sans-serif;
 }
 
-.sans {
-    font-family: "Gill Sans", "Gill Sans MT", Calibri, sans-serif;
-    letter-spacing: .03em;
-}
-
 code, pre > code {
-    font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
-    font-size: 1.1rem;
-    line-height: 1.42;
+    font-family: "Ubuntu Mono", monospace;
+    font-size: 1.3rem;
     -webkit-text-size-adjust: 100%; /* Prevent adjustments of font size after orientation changes in iOS. See https://github.com/edwardtufte/tufte-css/issues/81#issuecomment-261953409 */
     white-space: pre;
-}
-
-.sans > code {
-    font-size: 1.2rem;
 }
 
 h1 > code,
@@ -329,15 +326,16 @@ h3 > code {
 
 .marginnote code,
 .sidenote code {
-    font-size: 0.9rem;
+    font-size: 1.0rem;
 }
 
 pre > code {
-    font-size: 1.1rem;
+    line-height: 1.2;
     width: 52.5%;
     margin-left: 2.5%;
     overflow-x: auto;
     display: block;
+    color: #657b83;
 }
 
 pre.fullwidth > code {
