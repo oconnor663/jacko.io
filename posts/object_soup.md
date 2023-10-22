@@ -1,15 +1,18 @@
 # Object Soup is Made of Indexes
 ###### DRAFT
 
-When objects come and go and change unpredictably, and their relationships are
-also changing and full of cycles, I call it "object soup". It's hard to write
-object soup in Rust, because it breaks the rules for references.[^the_rules]
-But sometimes it's just how the world works: A creature in a game targets
-another creature, and then its target disappears. A cell in a spreadsheet
-depends on another cell, and then the other cell's value changes. A song in a
-music player links to the singer, and the singer links to their songs. These
-programs are object soup by design, but Rust doesn't let us do things like this
-with references. So what do we do?
+When objects come and go and change all the time, and any one might point to
+any other, I call that "object soup".[^graph] It's hard to write object soup in
+Rust, because it breaks the rules for references.[^the_rules] But sometimes
+it's just how the world works: A creature in a game targets another creature,
+and then its target disappears. A cell in a spreadsheet depends on another
+cell, and the other cell's value changes. A song in a music player links to a
+singer, and the singer links to their songs. These programs are object soup by
+design, but Rust doesn't let us do things like this with references. So what do
+we do?
+
+[^graph]: In other words, object soup is an implicit, heterogeneous, mutable
+    graph in a program that might not look like it's trying to build a graph.
 
 [^the_rules]: I'm assuming that you've already seen Rust's ownership,
     borrowing, and mutability rules. If not, here's [an overview from a talk by
@@ -17,9 +20,9 @@ with references. So what do we do?
     here's [the relevant chapter of The
     Book](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html).
 
-The short answer is, we **use indexes instead of references**. To see why,
-we'll start by looking at three other approaches that don't work. If you just
-want to see the code that works, skip to part four.
+The short answer is: **use indexes instead of references**. To see why, we'll
+look at three other approaches that don't work. If you just want to see the
+code that works, skip to part four.
 
 Our object soup of the day is a toy program that models two friends, Alice and
 Bob. Here's the Python version ([Godbolt](https://godbolt.org/z/cdMjoqGc7)):
@@ -126,6 +129,7 @@ borrowed.[^interior_mutability] If we use shared references
 alice.add_friend(&bob);
 bob.add_friend(&alice);
 ```
+
 We'll get a compiler error when we try to modify Bob:
 
 ```
@@ -170,15 +174,15 @@ error[E0499]: cannot borrow `alice` as mutable more than once at a time
 ```
 
 Playing with these examples is educational,[^advice] but there's no way to make
-them work.[^party_trick] Object soup wants aliasing and mutation at the same
-time, and that's exactly what references in Rust are designed to prevent. We
-need something different.
+them work.[^party_trick] Object soup wants to do aliasing and mutation at the
+same time, and that's exactly what references in Rust are supposed to prevent.
+We need something different.
 
-[^party_trick]: Ok I lied. You can get something working [by combining shared
+[^party_trick]: Ok I lied. We can get something working [by combining shared
     references and interior
     mutability](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=cee3ebe1debd9f241a8159b3203051ea).
     Circular borrows in safe code! It's a neat party trick, but it's not useful
-    in real programs, because it [breaks if you try to move
+    in real programs, because it [breaks if we try to move
     anything](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=1c56892372f33c4e6e492ada3000571e).
 
 [^advice]: It's worth spending some time "fighting the borrow checker" to build
@@ -213,11 +217,11 @@ bob.borrow_mut().add_friend(Rc::clone(&alice));
 ```
 
 There's a lot going on there,[^a_lot_going_on] and it's pretty verbose, but it
-compiles and runs. Progress! Unfortunately, if we run it under ASan
-([Godbolt](https://godbolt.org/z/dE6s5qKes)), we see that it's leaking
-memory.[^difficult_to_leak] To fix that, we either need to explicitly break
-cycles before Alice and Bob go out of scope
-([Godbolt](https://godbolt.org/z/G8z4sjPW6)), or we need to use
+compiles and runs. That's progress! Unfortunately it has a memory
+leak,[^difficult_to_leak] which we can see if we run it under ASan
+([Godbolt](https://godbolt.org/z/dE6s5qKes)) or Miri.[^miri] To fix that, we
+need to either explicitly break cycles before Alice and Bob go out of scope
+([Godbolt](https://godbolt.org/z/G8z4sjPW6)) or use
 [`Weak`](https://doc.rust-lang.org/std/rc/struct.Weak.html) references
 ([Godbolt](https://godbolt.org/z/GTo3svrY8)). Both options are
 error-prone.[^weak_semantics]
@@ -237,12 +241,17 @@ error-prone.[^weak_semantics]
 
 [^difficult_to_leak]: Usually it's hard to leak memory by accident in Rust, but
     reference cycles in `Rc` and `Arc` are the main exception. Again this is
-    similar to C++ and Swift, and the same thing happens in Python if you call
-    [`gc.disable`](https://docs.python.org/3/library/gc.html#gc.disable).
+    similar to C++ and Swift, and you can make Python do the same thing if you
+    call [`gc.disable`](https://docs.python.org/3/library/gc.html#gc.disable).
+
+[^miri]: Tools → Miri [on the
+    Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f47eed8da77a7bf5801679639ff9c6c9)
 
 [^weak_semantics]: `Weak` references are a good fit for asymmetrical
-    relationships like child nodes and parent nodes in a tree, but "strong
-    friends" and "weak friends" don't really make sense.
+    relationships like child nodes and parent nodes in a tree, but here it's
+    not clear who should be weak and who should be strong. If all friends are
+    weak, then we need to hold strong references somewhere else to keep people
+    alive.
 
 As our program grows, the uniqueness rule will also come back to bite us in the
 form of `RefCell` panics. To provoke that, let's change `add_friend` to check
@@ -269,7 +278,7 @@ fn add_friend(&mut self, other: &Rc<RefCell<Person>>) {
 
 The Rust version compiles, but if we make Alice call `add_friend` on herself,
 it panics
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=732713c6149a652504e4ed7160c1fd64)):
+([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=4d582d82e555531e8c88230a8417457d)):
 
 ```
 thread 'main' panicked at 'already mutably borrowed: BorrowError',
@@ -279,7 +288,7 @@ src/main.rs:15:18
 The problem is that we "locked" the `RefCell` to get `&mut self`, and that
 conflicts with `other.borrow()` when `other` is aliasing `self`. The fix is to
 avoid `&mut self` methods and keep our borrows short-lived
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e5e9ce34c0d8eace668a542a9e91f8c9)),
+([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=fc37e8bfff23667a046aaad994c93af7)),
 but this is also error-prone. We might've missed this bug without a test case.
 
 `Rc<RefCell<T>>` isn't a good way to write object soup, because it has problems
@@ -293,8 +302,8 @@ with aliasing and cycles.[^unsafe_code] Again we need something different.
 
 ## Part Four: Indexes
 
-It turns out we can do better with simpler tools. We can keep Alice and Bob in
-a `Vec` and have them refer to each other by index
+We can do better with simpler tools. Keep Alice and Bob in a `Vec` and have
+them refer to each other by index
 ([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=edc7d9ebf27a9785e8ac7cc2a8e32296)):
 
 ```rust
@@ -324,23 +333,29 @@ fn main() {
 }
 ```
 
-Some of the verbosity from the `RefCell` approach is still here: we're avoiding
-`&mut self` methods, and each function has a new `people` argument. But unlike
-above, aliasing mistakes are compiler errors instead of runtime panics
+
+This is how we write object soup in Rust. We still need to avoid `&mut self`
+methods, and each function has an extra `people` argument. But aliasing
+mistakes are compiler errors instead of panics
 ([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e81e266eca0254b2488aa76a99eac4f4)),
 and there's no risk of memory leaks
-([Godbolt](https://godbolt.org/z/hfK5bMTav)). This is how you write object soup
-in Rust.
+([Godbolt](https://godbolt.org/z/hfK5bMTav)). We can also [serialize the `Vec`
+with `serde`](https://serde.rs/derive.html)[^serialize_rc] or [parallelize it
+with `rayon`](https://docs.rs/rayon/latest/rayon/iter/index.html).
+
+[^serialize_rc]: `Rc` implements `Serialize` if you [enable the `rc`
+    feature](https://serde.rs/feature-flags.html#rc), but trying to serialize a
+    reference cycle will [trigger infinite recursion and
+    panic](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=5d8626fb10ab2a7053cdc0661661bba9).
 
 ## Part Five: Next Steps
 
-Even though we're technically not leaking memory, we still can't delete
-anything from the `Vec` without messing up the indexes of other elements. One
-way to allow for deletion is to replace `Vec` with `HashMap`, using either an
-incrementing counter or [random UUIDs](https://docs.rs/uuid) for the keys. If
-you need better performance and you don't mind taking a dependency, there are
-also specialized data structures like [`Slab`](https://docs.rs/slab) and
-[`SlotMap`](https://docs.rs/slotmap).
+Even though we're technically not leaking memory, we can't delete anything from
+the `Vec` without messing up the indexes of other elements. One way to allow
+for deletion is to replace the `Vec` with a `HashMap`, using either an
+incrementing counter or [random UUIDs](https://docs.rs/uuid) for the keys.
+There are also more specialized data structures like
+[`Slab`](https://docs.rs/slab) and [`SlotMap`](https://docs.rs/slotmap).
 
 When you have more than one type of object to keep track of, you'll probably
 want to group them in a struct with a name like `World` or `State` or
