@@ -331,14 +331,15 @@ fn render_markdown(markdown_input: &str) -> String {
             }
             current_offset = offset;
             document_with_footnotes += &format!(
-                r#"<label for="sidenote-{name}" class="margin-toggle sidenote-number"></label><input type="checkbox" id="sidenote-{name}" class="margin-toggle"></span>"#,
+                r#"<label for="sidenote-{name}" class="margin-toggle sidenote-number"></label><input type="checkbox" id="sidenote-{name}" class="margin-toggle">"#,
             );
             if !already_seen.contains(name.as_str()) {
-                document_with_footnotes += r#"<span class="sidenote">"#;
+                document_with_footnotes += r#"<span class="sidenote" style="white-space: normal">"#;
                 document_with_footnotes += &output.footnotes[name];
                 document_with_footnotes += r#"</span>"#;
                 already_seen.insert(name);
             }
+            document_with_footnotes += "</span>";
         }
     }
     document_with_footnotes += &output.document[current_offset..];

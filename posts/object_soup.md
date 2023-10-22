@@ -126,7 +126,7 @@ borrowed.[^interior_mutability] If we use shared references
 alice.add_friend(&bob);
 bob.add_friend(&alice);
 ```
-We'll get a compiler error where we try to modify Bob:
+We'll get a compiler error when we try to modify Bob:
 
 ```
 error[E0502]: cannot borrow `bob` as mutable because it is also borrowed
