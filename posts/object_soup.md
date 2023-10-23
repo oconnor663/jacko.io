@@ -375,5 +375,6 @@ any language.
 ---
 
 Discussion threads on
-[r/rust](https://www.reddit.com/r/rust/comments/17ehphv/object_soup_is_made_of_indexes/?)
-and [Hacker News](https://news.ycombinator.com/item?id=37983998)
+[r/rust](https://www.reddit.com/r/rust/comments/17ehphv/object_soup_is_made_of_indexes/?),
+[Hacker News](https://news.ycombinator.com/item?id=37983998), and
+[lobste.rs](https://lobste.rs/s/zhbv0i/object_soup_is_made_indexes_rust).
