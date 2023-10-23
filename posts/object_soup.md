@@ -371,3 +371,9 @@ any language.
 
 [^inspiration]: This article is really just a rehash of Catherine's talk. I
     can't recommend it highly enough.
+
+---
+
+Discussion threads on
+[r/rust](https://www.reddit.com/r/rust/comments/17ehphv/object_soup_is_made_of_indexes/?)
+and [Hacker News](https://news.ycombinator.com/item?id=37983998)
