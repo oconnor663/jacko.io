@@ -106,8 +106,8 @@ get out of sync.[^already_wrong]
 [^move_semantics]: Again I'm assuming that you've already seen move semantics
     in Rust. If not, here's [the relevant chapter of The
     Book](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move),
-    and here's [a comparison with move semantics in C++ from one of my
-    talks](https://www.youtube.com/watch?v=IPmRDS0OSxM&t=3020).
+    and here's [a comparison with move semantics in
+    C++](https://www.youtube.com/watch?v=IPmRDS0OSxM&t=3020).
 
 [^already_wrong]: In fact, one of the clones in this example is already out of
     sync. The copy of Bob in Alice's friends list [doesn't get
@@ -341,9 +341,9 @@ methods, and each function has an extra `people` argument. But [aliasing
 mistakes](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e81e266eca0254b2488aa76a99eac4f4)
 are compiler errors instead of panics, and there's [no risk of memory
 leaks](https://godbolt.org/z/hfK5bMTav). We can also [serialize the `Vec` with
-`serde`](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=fab15ba231541907868b0e0bf9f15fc6)[^serialize_rc]
+`serde`](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=4bbd85e5c3cde825f3c2bcb8f3e843f1)[^serialize_rc]
 or [parallelize it with
-`rayon`](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=7a647b2a0f3b09ad6a0e41d3e1ae0ddb).
+`rayon`](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=7a96859d09b52c29433c129ab59a1d73).
 
 [^serialize_rc]: `Rc` implements `Serialize` if you [enable the `rc`
     feature](https://serde.rs/feature-flags.html#rc), but trying to serialize a
