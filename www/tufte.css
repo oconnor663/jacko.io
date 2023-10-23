@@ -41,9 +41,7 @@
 
 @font-face {
   font-family: "Ubuntu Mono";
-  src:
-    local("Ubuntu Mono"),
-    url("UbuntuMono-Regular.ttf") format("truetype"),
+  src: local("Ubuntu Mono"), url("UbuntuMono-Regular.ttf") format("truetype");
 }
 
 /* Tufte CSS styles */
