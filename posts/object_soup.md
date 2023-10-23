@@ -25,7 +25,7 @@ look at three other approaches that don't work. If you just want to see the
 code that works, skip to part four.
 
 Our object soup of the day is a toy program that models two friends, Alice and
-Bob. Here's the Python version ([Godbolt](https://godbolt.org/z/cdMjoqGc7)):
+Bob. Here's [the Python version](https://godbolt.org/z/cdMjoqGc7):
 
 ```python
 class Person:
@@ -52,8 +52,9 @@ languages.[^dark_corners] But in Rust it's surprisingly tricky.
 
 ## Part One: Move Semantics
 
-A naive Rust translation doesn't compile
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e78b6cc6d878ff7226a33f8697a0c5f5)):
+A [naive Rust
+translation](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e78b6cc6d878ff7226a33f8697a0c5f5)
+doesn't compile:
 
 ```rust
 struct Person {
@@ -96,8 +97,8 @@ error[E0382]: borrow of moved value: `bob`
 
 Passing Bob to `add_friend` by value moves him, because `Person` isn't
 `Copy`.[^move_semantics] A quick fix is to add `#[derive(Clone)]` to `Person`
-and to `clone` each argument to `add_friend`
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=3d1931a063c9a404233e5f8ff4e68c87)).
+and to [`clone` each argument to
+`add_friend`](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=3d1931a063c9a404233e5f8ff4e68c87).
 But copying or cloning isn't what we want when we're writing object soup. The
 real Alice and Bob will change over time, and any copies of them will quickly
 get out of sync.[^already_wrong]
@@ -119,8 +120,8 @@ because it passes objects around "by reference". Can we use references in Rust?
 ## Part Two: Borrowing
 
 No we can't, because Rust doesn't let us mutate objects that are
-borrowed.[^interior_mutability] If we use shared references
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=86e3feb50c34e1659ca614c536ac512d)):
+borrowed.[^interior_mutability] If we [use shared
+references](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=86e3feb50c34e1659ca614c536ac512d):
 
 [^interior_mutability]: The exception to this rule is "interior mutability",
     and we'll get to that in the next section.
@@ -146,8 +147,8 @@ error[E0502]: cannot borrow `bob` as mutable because it is also borrowed
    |     mutable borrow occurs here
 ```
 
-If we use mutable references
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f4036832326cf76f4e72e7fa8f18868c)),
+If we [use mutable
+references](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f4036832326cf76f4e72e7fa8f18868c),
 we can avoid aliasing Bob by going through Alice's friends list to modify
 him:[^many_to_many]
 
@@ -192,19 +193,18 @@ We need something different.
 ## Part Three: Interior Mutability
 
 If you search for "how to mutate a shared object in Rust", you'll find articles
-about [`Rc`](https://doc.rust-lang.org/std/rc/struct.Rc.html)[^rc] and
-[`RefCell`](https://doc.rust-lang.org/std/cell/struct.RefCell.html),[^refcell]
-but **`Rc<RefCell<T>>` doesn't work well for object soup.** To see why, let's
-try it
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f47eed8da77a7bf5801679639ff9c6c9)):
+about `Rc`[^rc] and `RefCell`,[^refcell] but **`Rc<RefCell<T>>` doesn't work
+well for object soup.** To see why, [let's try
+it](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f47eed8da77a7bf5801679639ff9c6c9):
 
-[^rc]: `Rc` stands for ["reference
-    counting"](https://en.wikipedia.org/wiki/Reference_counting), which is the
-    strategy it uses to free its contents. It behaves like a shared reference
-    with no lifetime. It's similar to `std::shared_ptr` in C++ and automatic
-    reference counting in Swift.
+[^rc]: [`Rc`](https://doc.rust-lang.org/std/rc/struct.Rc.html) stands for
+    ["reference counting"](https://en.wikipedia.org/wiki/Reference_counting),
+    which is the strategy it uses to free its contents. It behaves like a
+    shared reference with no lifetime. It's similar to `std::shared_ptr` in C++
+    and automatic reference counting in Swift.
 
-[^refcell]: `RefCell` is like an
+[^refcell]: [`RefCell`](https://doc.rust-lang.org/std/cell/struct.RefCell.html)
+    is like an
     [`RwLock`](https://doc.rust-lang.org/stable/std/sync/struct.RwLock.html)
     that panics instead of blocking and can't be shared across threads. It lets
     us get `&mut T` from `&RefCell<T>` (which we get from `Rc`).
@@ -218,13 +218,12 @@ bob.borrow_mut().add_friend(Rc::clone(&alice));
 
 There's a lot going on there,[^a_lot_going_on] and it's pretty verbose, but it
 compiles and runs. That's progress! Unfortunately it has a memory
-leak,[^difficult_to_leak] which we can see if we run it under ASan
-([Godbolt](https://godbolt.org/z/dE6s5qKes)) or Miri.[^miri] To fix that, we
-need to either explicitly break cycles before Alice and Bob go out of scope
-([Godbolt](https://godbolt.org/z/G8z4sjPW6)) or use
-[`Weak`](https://doc.rust-lang.org/std/rc/struct.Weak.html) references
-([Godbolt](https://godbolt.org/z/GTo3svrY8)). Both options are
-error-prone.[^weak_semantics]
+leak,[^difficult_to_leak] which we can see if we [run it under
+ASan](https://godbolt.org/z/dE6s5qKes) or Miri.[^miri] To fix that, we need to
+either [explicitly break cycles](https://godbolt.org/z/G8z4sjPW6) before Alice
+and Bob go out of scope or [use `Weak`
+references](https://godbolt.org/z/GTo3svrY8). Both options are
+error-prone.[^asymmetrical]
 
 [^a_lot_going_on]: `borrow_mut` returns a [smart
     pointer](https://doc.rust-lang.org/book/ch15-00-smart-pointers.html) type
@@ -247,7 +246,7 @@ error-prone.[^weak_semantics]
 [^miri]: Tools → Miri [on the
     Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f47eed8da77a7bf5801679639ff9c6c9)
 
-[^weak_semantics]: `Weak` references are a good fit for asymmetrical
+[^asymmetrical]: `Weak` references are a good fit for asymmetrical
     relationships like child nodes and parent nodes in a tree, but here it's
     not clear who should be weak and who should be strong. If all friends are
     weak, then we need to hold strong references somewhere else to keep people
@@ -255,8 +254,10 @@ error-prone.[^weak_semantics]
 
 As our program grows, the uniqueness rule will also come back to bite us in the
 form of `RefCell` panics. To provoke that, let's change `add_friend` to check
-for people befriending themselves. Here's the change in Python
-([Godbolt](https://godbolt.org/z/EY7xe545j)):[^same_name]
+for people befriending themselves. Here's [the change in
+Python](https://godbolt.org/z/EY7xe545j):[^same_name]
+
+[^same_name]: No two people ever have the same name. It's fine.
 
 ```python
 def add_friend(self, other):
@@ -264,9 +265,8 @@ def add_friend(self, other):
         self.friends.append(other)
 ```
 
-[^same_name]: No two people ever have the same name. It's fine.
-
-And in Rust:
+And [in
+Rust](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=bc0c8107b901d4a9ca3b1d87bb9fc463):
 
 ```rust
 fn add_friend(&mut self, other: &Rc<RefCell<Person>>) {
@@ -276,9 +276,10 @@ fn add_friend(&mut self, other: &Rc<RefCell<Person>>) {
 }
 ```
 
-The Rust version compiles, but if we make Alice call `add_friend` on herself,
-it panics
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=4d582d82e555531e8c88230a8417457d)):
+The Rust version compiles, but if we [make Alice call `add_friend` on
+herself](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=4d582d82e555531e8c88230a8417457d),
+it panics:
+
 
 ```
 thread 'main' panicked at 'already mutably borrowed: BorrowError',
@@ -287,9 +288,10 @@ src/main.rs:15:18
 
 The problem is that we "locked" the `RefCell` to get `&mut self`, and that
 conflicts with `other.borrow()` when `other` is aliasing `self`. The fix is to
-avoid `&mut self` methods and keep our borrows short-lived
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=fc37e8bfff23667a046aaad994c93af7)),
-but this is also error-prone. We might've missed this bug without a test case.
+[avoid `&mut self`
+methods](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=fc37e8bfff23667a046aaad994c93af7)
+and keep our borrows short-lived, but this is also error-prone. We might've
+missed this bug without a test case.
 
 `Rc<RefCell<T>>` isn't a good way to write object soup, because it has problems
 with aliasing and cycles.[^unsafe_code] Again we need something different.
@@ -303,8 +305,8 @@ with aliasing and cycles.[^unsafe_code] Again we need something different.
 ## Part Four: Indexes
 
 We can do better with simpler tools. Keep Alice and Bob in a `Vec` and have
-them refer to each other by index
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=edc7d9ebf27a9785e8ac7cc2a8e32296)):
+them [refer to each other by
+index](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=edc7d9ebf27a9785e8ac7cc2a8e32296):
 
 ```rust
 struct Person {
@@ -335,13 +337,13 @@ fn main() {
 
 
 This is how we write object soup in Rust. We still need to avoid `&mut self`
-methods, and each function has an extra `people` argument. But aliasing
-mistakes are compiler errors instead of panics
-([Playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e81e266eca0254b2488aa76a99eac4f4)),
-and there's no risk of memory leaks
-([Godbolt](https://godbolt.org/z/hfK5bMTav)). We can also [serialize the `Vec`
-with `serde`](https://serde.rs/derive.html)[^serialize_rc] or [parallelize it
-with `rayon`](https://docs.rs/rayon/latest/rayon/iter/index.html).
+methods, and each function has an extra `people` argument. But [aliasing
+mistakes](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e81e266eca0254b2488aa76a99eac4f4)
+are compiler errors instead of panics, and there's [no risk of memory
+leaks](https://godbolt.org/z/hfK5bMTav). We can also [serialize the `Vec` with
+`serde`](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=fab15ba231541907868b0e0bf9f15fc6)[^serialize_rc]
+or [parallelize it with
+`rayon`](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=7a647b2a0f3b09ad6a0e41d3e1ae0ddb).
 
 [^serialize_rc]: `Rc` implements `Serialize` if you [enable the `rc`
     feature](https://serde.rs/feature-flags.html#rc), but trying to serialize a
