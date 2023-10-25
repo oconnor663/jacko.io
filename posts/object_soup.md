@@ -109,10 +109,11 @@ get out of sync.[^already_wrong]
     and here's [a comparison with move semantics in
     C++](https://www.youtube.com/watch?v=IPmRDS0OSxM&t=3020).
 
-[^already_wrong]: In fact, one of the clones in this example is already out of
-    sync. The copy of Bob in Alice's friends list [doesn't get
+[^already_wrong]: In fact this example is already out of sync. The copy of Bob
+    in Alice's friends list [doesn't get
     updated](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e8bc304b0542b5db3cb8855912c197de)
-    by the second call to `add_friend`.
+    by the second call to `add_friend`. A [naive C++
+    translation](https://godbolt.org/z/boY8cMfdd) has the same problem.
 
 Like most garbage-collected languages, Python doesn't have this problem,
 because it passes objects around "by reference". Can we use references in Rust?
