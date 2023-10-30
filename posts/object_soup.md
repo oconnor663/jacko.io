@@ -132,7 +132,7 @@ alice.add_friend(&bob);
 bob.add_friend(&alice);
 ```
 
-We'll get a compiler error when we try to modify Bob:
+We get a compiler error when we try to modify Bob:
 
 ```
 error[E0502]: cannot borrow `bob` as mutable because it is also borrowed
@@ -153,16 +153,16 @@ references](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&g
 we can avoid aliasing Bob by going through Alice's friends list to modify
 him:[^many_to_many]
 
-[^many_to_many]: The uniqueness rule means we can't use mutable references for
-    many-to-many relationships, so we definitely can't make object soup out of
-    them in general.
+[^many_to_many]: This is worth a shot, but the uniqueness rule means we can't
+    use mutable references for many-to-many relationships, so we definitely
+    can't make object soup out of them in general.
 
 ```rust
 alice.add_friend(&mut bob);
 alice.friends[0].add_friend(&mut alice);
 ```
 
-But we'll still get an error about aliasing Alice:
+But we still get an error about aliasing Alice:
 
 ```
 error[E0499]: cannot borrow `alice` as mutable more than once at a time
