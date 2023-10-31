@@ -34,26 +34,26 @@ const FOOTER: &str = r#"
 
 struct Footnote {
     name: String,
-    contents: String,
+    contents_html: String,
 }
 
 struct CodeBlock {
     language: String,
-    contents: String,
+    contents_text: String,
 }
 
 struct Output {
-    document: String,
-    title: String,
+    document_html: String,
+    title_html: String,
     in_title: bool,
-    subtitle: String,
+    subtitle_html: String,
     in_subtitle: bool,
     // Each footnote is parsed incrementally, just like the document is.
     current_footnote: Option<Footnote>,
     // Unfortunately code blocks are also parsed incrementally, which is kind of awkward.
     current_code_block: Option<CodeBlock>,
     // map of name to contents
-    footnotes: HashMap<String, String>,
+    footnotes: HashMap<String, Footnote>,
     // sorted map of offset to name
     footnote_references: BTreeMap<usize, Vec<String>>,
 }
@@ -61,10 +61,10 @@ struct Output {
 impl Output {
     fn new() -> Self {
         Self {
-            document: String::new(),
-            title: String::new(),
+            document_html: String::new(),
+            title_html: String::new(),
             in_title: false,
-            subtitle: String::new(),
+            subtitle_html: String::new(),
             in_subtitle: false,
             current_footnote: None,
             current_code_block: None,
@@ -73,19 +73,29 @@ impl Output {
         }
     }
 
-    fn push_str(&mut self, text: &str) {
+    fn push_text(&mut self, text: &str) {
+        if let Some(code_block) = &mut self.current_code_block {
+            code_block.contents_text += text;
+        } else {
+            self.push_html(&html_escape::encode_text(text));
+        }
+    }
+
+    fn push_html(&mut self, html: &str) {
+        assert!(
+            self.current_code_block.is_none(),
+            "code blocks only take text"
+        );
         if self.in_title {
             assert!(!self.in_subtitle);
-            self.title += text;
+            self.title_html += html;
         } else if self.in_subtitle {
             assert!(!self.in_title);
-            self.subtitle += text;
+            self.subtitle_html += html;
         } else if let Some(footnote) = &mut self.current_footnote {
-            footnote.contents += text;
-        } else if let Some(code_block) = &mut self.current_code_block {
-            code_block.contents += text;
+            footnote.contents_html += html;
         } else {
-            self.document += text;
+            self.document_html += html;
         }
     }
 
@@ -100,7 +110,7 @@ impl Output {
         );
         self.current_footnote = Some(Footnote {
             name,
-            contents: String::new(),
+            contents_html: String::new(),
         });
     }
 
@@ -109,18 +119,22 @@ impl Output {
             panic!("not in a footnote");
         };
         assert_eq!(name, footnote.name, "name mismatch");
-        let trimmed_note = footnote
-            .contents
+        let trimmed_html = footnote
+            .contents_html
             .trim()
             .trim_start_matches("<p>")
             .trim_end_matches("</p>");
+        let trimmed_footnote = Footnote {
+            name: footnote.name.clone(),
+            contents_html: trimmed_html.to_string(),
+        };
         self.footnotes
-            .insert(footnote.name, trimmed_note.to_string());
+            .insert(footnote.name.clone(), trimmed_footnote);
     }
 
     fn add_footnote_reference(&mut self, name: String) {
         assert!(self.current_footnote.is_none(), "no footnotes in footnotes");
-        let offset = self.document.len();
+        let offset = self.document_html.len();
         self.footnote_references
             .entry(offset)
             .or_insert(Vec::new())
@@ -153,7 +167,7 @@ impl Output {
         assert!(self.current_footnote.is_none(), "already in a footnote");
         self.current_code_block = Some(CodeBlock {
             language,
-            contents: String::new(),
+            contents_text: String::new(),
         });
     }
 
@@ -178,7 +192,7 @@ impl Output {
             })
             .collect();
 
-        self.document += "\n\n<pre><code>";
+        self.document_html += "\n\n<pre><code>";
 
         if !capitalized_language.is_empty() {
             // syntax highlighting
@@ -190,27 +204,24 @@ impl Output {
             let theme_set = ThemeSet::load_defaults();
             let mut line_highlighter =
                 HighlightLines::new(syntax, &theme_set.themes["Solarized (light)"]);
-            for line in code_block.contents.lines() {
-                let ranges: Vec<(Style, &str)> =
-                    line_highlighter.highlight_line(line, &syntax_set).unwrap();
-                let html =
+            for line_text in code_block.contents_text.lines() {
+                let ranges: Vec<(Style, &str)> = line_highlighter
+                    .highlight_line(line_text, &syntax_set)
+                    .unwrap();
+                let line_html =
                     styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No).unwrap();
-                self.document += &html;
-                self.document += "<br>";
+                self.document_html += &line_html;
+                self.document_html += "<br>";
             }
         } else {
-            for line in code_block.contents.lines() {
-                self.document += &escape_tags(line);
-                self.document += "<br>";
+            for line_text in code_block.contents_text.lines() {
+                self.document_html += &html_escape::encode_text(line_text);
+                self.document_html += "<br>";
             }
         }
 
-        self.document += "</code></pre>";
+        self.document_html += "</code></pre>";
     }
-}
-
-fn escape_tags(s: &str) -> String {
-    s.replace("<", "&lt;").replace(">", "&gt;")
 }
 
 fn render_markdown(markdown_input: &str) -> String {
@@ -224,35 +235,35 @@ fn render_markdown(markdown_input: &str) -> String {
     let mut nested_p_tag = false;
     for (event, _range) in parser.into_offset_iter() {
         match event {
-            Event::Text(s) => output.push_str(&s),
-            Event::Html(s) => output.push_str(&s),
-            Event::SoftBreak => output.push_str("\n"),
+            Event::Text(s) => output.push_text(&s),
+            Event::Html(s) => output.push_html(&s),
+            Event::SoftBreak => output.push_html("\n"),
             Event::Code(s) => {
                 for (i, word) in s.split_whitespace().enumerate() {
                     if i > 0 {
                         // Full size spaces in inline code strings are uncomfortably wide. Hack in
                         // shorter spaces.
-                        output.push_str("&nbsp;");
+                        output.push_html("&nbsp;");
                     }
-                    output.push_str(&format!("<code>{}</code>", escape_tags(&word)));
+                    output.push_html(&format!("<code>{}</code>", html_escape::encode_text(&word)));
                 }
             }
-            Event::Rule => output.push_str(&format!("\n\n<hr>")),
+            Event::Rule => output.push_html(&format!("\n\n<hr>")),
             Event::FootnoteReference(s) => {
                 output.add_footnote_reference(s.to_string());
             }
             Event::Start(tag) => match tag {
                 Tag::BlockQuote => {
-                    output.push_str("\n\n<blockquote>");
+                    output.push_html("\n\n<blockquote>");
                     nested_p_tag = true;
                 }
                 Tag::Paragraph => {
                     if nested_p_tag {
                         nested_p_tag = false;
                     } else {
-                        output.push_str("\n\n");
+                        output.push_html("\n\n");
                     }
-                    output.push_str("<p>");
+                    output.push_html("<p>");
                 }
                 Tag::Heading(level, _fragment, _class) => {
                     if level == HeadingLevel::H1 {
@@ -260,14 +271,14 @@ fn render_markdown(markdown_input: &str) -> String {
                     } else if level == HeadingLevel::H6 {
                         output.in_subtitle = true;
                     } else {
-                        output.push_str(&format!("\n</section>\n\n<section>\n<{level}>"));
+                        output.push_html(&format!("\n</section>\n\n<section>\n<{level}>"));
                     }
                 }
-                Tag::Strong => output.push_str("<strong>"),
-                Tag::Emphasis => output.push_str("<em>"),
+                Tag::Strong => output.push_html("<strong>"),
+                Tag::Emphasis => output.push_html("<em>"),
                 Tag::Link(kind, dest, _title) => {
                     assert_eq!(kind, LinkType::Inline);
-                    output.push_str(&format!(r#"<a class="custom-link-color" href="{dest}">"#));
+                    output.push_html(&format!(r#"<a class="custom-link-color" href="{dest}">"#));
                 }
                 Tag::CodeBlock(kind) => {
                     let CodeBlockKind::Fenced(language) = kind else {
@@ -275,33 +286,33 @@ fn render_markdown(markdown_input: &str) -> String {
                     };
                     output.start_code_block(language.to_string());
                 }
-                Tag::List(_) => output.push_str("\n\n<ul>"),
-                Tag::Item => output.push_str("\n<li>"),
+                Tag::List(_) => output.push_html("\n\n<ul>"),
+                Tag::Item => output.push_html("\n<li>"),
                 Tag::FootnoteDefinition(s) => {
                     output.start_footnote(s.to_string());
                 }
                 other => unimplemented!("{:?}", other),
             },
             Event::End(tag) => match tag {
-                Tag::BlockQuote => output.push_str("</blockquote>"),
-                Tag::Paragraph => output.push_str("</p>"),
+                Tag::BlockQuote => output.push_html("</blockquote>"),
+                Tag::Paragraph => output.push_html("</p>"),
                 Tag::Heading(level, _fragment, _class) => {
                     if level == HeadingLevel::H1 {
                         output.in_title = false;
                     } else if level == HeadingLevel::H6 {
                         output.in_subtitle = false;
                     } else {
-                        output.push_str(&format!("</{}>", level));
+                        output.push_html(&format!("</{}>", level));
                     }
                 }
-                Tag::Strong => output.push_str("</strong>"),
-                Tag::Emphasis => output.push_str("</em>"),
-                Tag::Link(_kind, _dest, _title) => output.push_str("</a>"),
+                Tag::Strong => output.push_html("</strong>"),
+                Tag::Emphasis => output.push_html("</em>"),
+                Tag::Link(_kind, _dest, _title) => output.push_html("</a>"),
                 Tag::CodeBlock(_kind) => {
                     output.finish_code_block();
                 }
-                Tag::List(_) => output.push_str("\n</ul>"),
-                Tag::Item => output.push_str("</li>"),
+                Tag::List(_) => output.push_html("\n</ul>"),
+                Tag::Item => output.push_html("</li>"),
                 Tag::FootnoteDefinition(s) => {
                     output.finish_footnote(s.to_string());
                 }
@@ -318,7 +329,7 @@ fn render_markdown(markdown_input: &str) -> String {
     let mut already_seen: HashSet<&str> = HashSet::new();
     for (&offset, names) in &output.footnote_references {
         for name in names {
-            document_with_footnotes += &output.document[current_offset..offset];
+            document_with_footnotes += &output.document_html[current_offset..offset];
             document_with_footnotes += r#"<span style="white-space: nowrap">"#;
             if current_offset == offset {
                 // If there's more than one footnote at the same point in the text, put a space in
@@ -335,18 +346,18 @@ fn render_markdown(markdown_input: &str) -> String {
             );
             if !already_seen.contains(name.as_str()) {
                 document_with_footnotes += r#"<span class="sidenote" style="white-space: normal">"#;
-                document_with_footnotes += &output.footnotes[name];
+                document_with_footnotes += &output.footnotes[name].contents_html;
                 document_with_footnotes += r#"</span>"#;
                 already_seen.insert(name);
             }
             document_with_footnotes += "</span>";
         }
     }
-    document_with_footnotes += &output.document[current_offset..];
+    document_with_footnotes += &output.document_html[current_offset..];
 
     HEADER
-        .replace("__TITLE__", &output.title)
-        .replace("__SUBTITLE__", &output.subtitle)
+        .replace("__TITLE__", &output.title_html)
+        .replace("__SUBTITLE__", &output.subtitle_html)
         + &document_with_footnotes
         + FOOTER
 }
