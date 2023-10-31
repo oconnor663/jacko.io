@@ -196,7 +196,7 @@ We need something different.
 If you search for "how to mutate a shared object in Rust", you'll find articles
 about `Rc`[^rc] and `RefCell`,[^refcell] but **`Rc<RefCell<T>>` doesn't work
 well for object soup.** To see why, [let's try
-it](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=f47eed8da77a7bf5801679639ff9c6c9):
+it](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=29adfec75376d42e4a2471b918c680be):
 
 [^rc]: [`Rc`](https://doc.rust-lang.org/std/rc/struct.Rc.html) stands for
     ["reference counting"](https://en.wikipedia.org/wiki/Reference_counting),
