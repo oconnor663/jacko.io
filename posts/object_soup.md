@@ -339,7 +339,7 @@ fn main() {
 
 This is how we write object soup in Rust. We still need to avoid `&mut self`
 methods, and each function has an extra `people` argument. But [aliasing
-mistakes](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=359e1a0893f0e661fd29df07b6a99ba1)
+mistakes](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=a5b7bd2a454299c7325007096f501c2c)
 are compiler errors instead of panics, and there's [no risk of memory
 leaks](https://godbolt.org/z/hfK5bMTav). We can also [serialize the `Vec` with
 `serde`](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=4bbd85e5c3cde825f3c2bcb8f3e843f1)[^serialize_rc]
