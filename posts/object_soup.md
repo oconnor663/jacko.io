@@ -288,11 +288,15 @@ src/main.rs:15:18
 ```
 
 The problem is that we "locked" the `RefCell` to get `&mut self`, and that
-conflicts with `other.borrow()` when `other` is aliasing `self`. The fix is to
-[avoid `&mut self`
+conflicts with `other.borrow()` when `other` is aliasing `self`.[^deadlock] The
+fix is to [avoid `&mut self`
 methods](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=fc37e8bfff23667a046aaad994c93af7)
 and keep our borrows short-lived, but this is also error-prone. We might've
 missed this bug without a test case.
+
+[^deadlock]: In multithreaded code using `Arc<Mutex<T>>` or `Arc<RwLock<T>>`,
+    [the same mistake is a
+    deadlock](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=e11718e99878947ff07745b8173ca14a).
 
 `Rc<RefCell<T>>` isn't a good way to write object soup, because it has problems
 with aliasing and cycles.[^unsafe_code] Again we need something different.
