@@ -235,7 +235,7 @@ error-prone.[^asymmetrical]
     A lot of Rust magic works through those traits and ["deref
     coercions"](https://doc.rust-lang.org/book/ch15-02-deref.html). [Spelling
     out all the
-    types](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=d2d483057befb89da871ac7fc009f153)
+    types](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=26aea70c23bced082f7487a1e5c90463)
     is helpful for seeing what's going on. The same pattern comes up with
     `Arc<Mutex<T>>`, which is fundamental for multithreading.
 
@@ -278,7 +278,7 @@ fn add_friend(&mut self, other: &Rc<RefCell<Person>>) {
 ```
 
 The Rust version compiles, but if we [make Alice call `add_friend` on
-herself](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=4d582d82e555531e8c88230a8417457d),
+herself](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=799ec3ecf1a1aec744573cf7750eed66),
 it panics:
 
 
