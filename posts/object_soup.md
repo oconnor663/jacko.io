@@ -235,7 +235,7 @@ error-prone.[^asymmetrical]
     A lot of Rust magic works through those traits and ["deref
     coercions"](https://doc.rust-lang.org/book/ch15-02-deref.html). [Spelling
     out all the
-    types](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=26aea70c23bced082f7487a1e5c90463)
+    types](https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=c2a7e5c006ebfa6846d72fc4f4575285)
     is helpful for seeing what's going on. The same pattern comes up with
     `Arc<Mutex<T>>`, which is fundamental for multithreading.
 
