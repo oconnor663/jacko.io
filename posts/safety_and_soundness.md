@@ -198,7 +198,7 @@ Discussion threads on
   "soundness forks", but these issues are rare in application code.
 
 [^soundness_holes]: The Rust compiler has [known
-  bugs](https://lcnr.de/blog/diving-deep-implied-bounds-and-variance/) where it
+  bugs](https://github.com/rust-lang/rust/issues/25860) where it
   accepts some programs that should've failed to compile, and these bugs make
   it possible for 100% safe programs to commit UB. We call these bugs
   "soundness holes". It's rare for these to affect real-world code, though, and
