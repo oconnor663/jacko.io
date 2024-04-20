@@ -232,6 +232,7 @@ fn render_markdown(markdown_input: &str) -> String {
     let mut output = Output::new();
 
     let mut nested_p_tag = false;
+    let mut seen_link_ids = HashSet::new();
     for (event, _range) in parser.into_offset_iter() {
         match event {
             Event::Text(s) => output.push_text(&s),
@@ -275,7 +276,14 @@ fn render_markdown(markdown_input: &str) -> String {
                 }
                 Tag::Strong => output.push_html("<strong>"),
                 Tag::Emphasis => output.push_html("<em>"),
-                Tag::Link { dest_url, .. } => {
+                Tag::Link { dest_url, id, .. } => {
+                    if !id.is_empty() {
+                        assert!(
+                            !seen_link_ids.contains(&id),
+                            "link ID \"{id}\" used more than once",
+                        );
+                        seen_link_ids.insert(id);
+                    }
                     assert!(!dest_url.is_empty());
                     output.push_html(&format!(
                         r#"<a class="custom-link-color" href="{dest_url}">"#
