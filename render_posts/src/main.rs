@@ -1,4 +1,4 @@
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -114,11 +114,10 @@ impl Output {
         });
     }
 
-    fn finish_footnote(&mut self, name: String) {
+    fn finish_footnote(&mut self) {
         let Some(footnote) = self.current_footnote.take() else {
             panic!("not in a footnote");
         };
-        assert_eq!(name, footnote.name, "name mismatch");
         let trimmed_html = footnote
             .contents_html
             .trim()
@@ -265,7 +264,7 @@ fn render_markdown(markdown_input: &str) -> String {
                     }
                     output.push_html("<p>");
                 }
-                Tag::Heading(level, _fragment, _class) => {
+                Tag::Heading { level, .. } => {
                     if level == HeadingLevel::H1 {
                         output.in_title = true;
                     } else if level == HeadingLevel::H6 {
@@ -276,9 +275,11 @@ fn render_markdown(markdown_input: &str) -> String {
                 }
                 Tag::Strong => output.push_html("<strong>"),
                 Tag::Emphasis => output.push_html("<em>"),
-                Tag::Link(kind, dest, _title) => {
-                    assert!(!dest.is_empty());
-                    output.push_html(&format!(r#"<a class="custom-link-color" href="{dest}">"#));
+                Tag::Link { dest_url, .. } => {
+                    assert!(!dest_url.is_empty());
+                    output.push_html(&format!(
+                        r#"<a class="custom-link-color" href="{dest_url}">"#
+                    ));
                 }
                 Tag::CodeBlock(kind) => {
                     let CodeBlockKind::Fenced(language) = kind else {
@@ -294,9 +295,9 @@ fn render_markdown(markdown_input: &str) -> String {
                 other => unimplemented!("{:?}", other),
             },
             Event::End(tag) => match tag {
-                Tag::BlockQuote => output.push_html("</blockquote>"),
-                Tag::Paragraph => output.push_html("</p>"),
-                Tag::Heading(level, _fragment, _class) => {
+                TagEnd::BlockQuote => output.push_html("</blockquote>"),
+                TagEnd::Paragraph => output.push_html("</p>"),
+                TagEnd::Heading(level) => {
                     if level == HeadingLevel::H1 {
                         output.in_title = false;
                     } else if level == HeadingLevel::H6 {
@@ -305,16 +306,16 @@ fn render_markdown(markdown_input: &str) -> String {
                         output.push_html(&format!("</{}>", level));
                     }
                 }
-                Tag::Strong => output.push_html("</strong>"),
-                Tag::Emphasis => output.push_html("</em>"),
-                Tag::Link(_kind, _dest, _title) => output.push_html("</a>"),
-                Tag::CodeBlock(_kind) => {
+                TagEnd::Strong => output.push_html("</strong>"),
+                TagEnd::Emphasis => output.push_html("</em>"),
+                TagEnd::Link => output.push_html("</a>"),
+                TagEnd::CodeBlock => {
                     output.finish_code_block();
                 }
-                Tag::List(_) => output.push_html("\n</ul>"),
-                Tag::Item => output.push_html("</li>"),
-                Tag::FootnoteDefinition(s) => {
-                    output.finish_footnote(s.to_string());
+                TagEnd::List(_) => output.push_html("\n</ul>"),
+                TagEnd::Item => output.push_html("</li>"),
+                TagEnd::FootnoteDefinition => {
+                    output.finish_footnote();
                 }
                 other => unimplemented!("{:?}", other),
             },
