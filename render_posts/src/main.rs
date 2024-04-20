@@ -1,4 +1,4 @@
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -277,7 +277,7 @@ fn render_markdown(markdown_input: &str) -> String {
                 Tag::Strong => output.push_html("<strong>"),
                 Tag::Emphasis => output.push_html("<em>"),
                 Tag::Link(kind, dest, _title) => {
-                    assert_eq!(kind, LinkType::Inline);
+                    assert!(!dest.is_empty());
                     output.push_html(&format!(r#"<a class="custom-link-color" href="{dest}">"#));
                 }
                 Tag::CodeBlock(kind) => {
