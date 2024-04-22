@@ -1,7 +1,7 @@
 use pulldown_cmark::{
     BrokenLink, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use syntect::easy::HighlightLines;
@@ -383,11 +383,14 @@ fn main() -> anyhow::Result<()> {
     let cargo_toml_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let posts_dir = cargo_toml_dir.join("../posts");
     let render_dir = cargo_toml_dir.join("../www");
-    for post_entry in fs::read_dir(posts_dir)? {
-        let post_entry = post_entry?;
-        let post_name = post_entry.file_name().to_string_lossy().to_string();
+    let mut post_paths = BTreeSet::new(); // sorted
+    for entry in fs::read_dir(posts_dir)? {
+        post_paths.insert(entry?.path());
+    }
+    for path in &post_paths {
+        let post_name = path.file_name().unwrap().to_string_lossy().to_string();
         println!("rendering {post_name}");
-        let post_markdown = fs::read_to_string(post_entry.path())?;
+        let post_markdown = fs::read_to_string(path)?;
         let post_html = render_markdown(&post_markdown);
         fs::write(
             render_dir.join(post_name.replace(".md", ".html")),
