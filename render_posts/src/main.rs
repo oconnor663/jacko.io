@@ -1,4 +1,6 @@
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{
+    BrokenLink, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd,
+};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -227,7 +229,13 @@ fn render_markdown(markdown_input: &str) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_FOOTNOTES);
-    let parser = Parser::new_ext(markdown_input, options);
+    let parser = Parser::new_with_broken_link_callback(
+        markdown_input,
+        options,
+        Some(|link: BrokenLink| {
+            panic!("broken link: \"{}\"", link.reference);
+        }),
+    );
 
     let mut output = Output::new();
 
