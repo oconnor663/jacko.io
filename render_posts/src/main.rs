@@ -177,25 +177,15 @@ impl Output {
             panic!("not in a codeblock");
         };
 
-        // The syntect syntax names have names like "Rust" and "C", not "rust" and "c". Make sure
-        // (only) the first letter is capitalized.
-        let mut first = true;
-        let capitalized_language: String = code_block
-            .language
-            .chars()
-            .map(|c| {
-                if first {
-                    first = false;
-                    c.to_ascii_uppercase()
-                } else {
-                    c.to_ascii_lowercase()
-                }
-            })
-            .collect();
-
         self.document_html += "\n\n<pre><code>";
 
-        if !capitalized_language.is_empty() {
+        if !code_block.language.is_empty() {
+            // The syntect syntax names have names like "Rust" and "C", not "rust" and "c". Make sure
+            // (only) the first letter is capitalized.
+            let mut capitalized_language = code_block.language;
+            capitalized_language[0..1].make_ascii_uppercase();
+            capitalized_language[1..].make_ascii_lowercase();
+
             // syntax highlighting
             // https://github.com/trishume/syntect/blob/c61ce60c72d67ad4e3dd06d60ff3b13ef4d2698c/examples/synhtml.rs
             let syntax_set = SyntaxSet::load_defaults_newlines();
