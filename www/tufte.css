@@ -310,7 +310,7 @@ div.table-wrapper {
     font-family: "Trebuchet MS", "Gill Sans", "Gill Sans MT", sans-serif;
 }
 
-code, pre > code {
+code, pre > code, pre > a {
     font-family: "Ubuntu Mono", monospace;
     font-size: 1.3rem;
     -webkit-text-size-adjust: 100%; /* Prevent adjustments of font size after orientation changes in iOS. See https://github.com/edwardtufte/tufte-css/issues/81#issuecomment-261953409 */
@@ -328,7 +328,7 @@ h3 > code {
     font-size: 1.0rem;
 }
 
-pre > code {
+pre > code, pre > a {
     line-height: 1.2;
     width: 52.5%;
     margin-left: 2.5%;
@@ -337,7 +337,7 @@ pre > code {
     color: #657b83;
 }
 
-pre.fullwidth > code {
+pre.fullwidth > code, pre.fullwidth > a {
     width: 90%;
 }
 
@@ -393,7 +393,7 @@ label.margin-toggle:not(.sidenote-number) {
         width: 100%;
     }
 
-    pre > code {
+    pre > code, pre > a {
         width: 97%;
     }
 

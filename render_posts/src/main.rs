@@ -177,7 +177,33 @@ impl Output {
             panic!("not in a codeblock");
         };
 
-        self.document_html += "\n\n<pre><code>";
+        self.document_html += "\n\n<pre>";
+
+        // Markdown doesn't make it easy to put anchor tags around an entire code block. Use a
+        // hacky "LINK: " tag on the first line of a codeblock as a workaround.
+        let mut has_link_url = false;
+        let mut code_lines = code_block.contents_text.lines().peekable();
+        let link_tag = "LINK: ";
+        if code_lines
+            .peek()
+            .expect("at least one line")
+            .starts_with(link_tag)
+        {
+            // Consume the "LINK: " line so that it doesn't get rendered.
+            let link_line = code_lines.next().unwrap();
+            let link = &link_line[link_tag.len()..];
+            assert_eq!(&link[0..4], "http");
+            assert_eq!(link, link.trim());
+            self.document_html += &format!(
+                r#"<a href="{}">"#,
+                html_escape::encode_double_quoted_attribute(link),
+            );
+            has_link_url = true;
+        }
+
+        // Put the <a> tag inside of <pre> but around <code>, because tufte.css sets the width of
+        // <code> but not of <pre>.
+        self.document_html += "<code>";
 
         if !code_block.language.is_empty() {
             // The syntect syntax names have names like "Rust" and "C", not "rust" and "c". Make sure
@@ -195,7 +221,8 @@ impl Output {
             let theme_set = ThemeSet::load_defaults();
             let mut line_highlighter =
                 HighlightLines::new(syntax, &theme_set.themes["Solarized (light)"]);
-            for line_text in code_block.contents_text.lines() {
+            // Note that `code_lines` skips the "LINK: " tag above.
+            for line_text in code_lines {
                 let ranges: Vec<(Style, &str)> = line_highlighter
                     .highlight_line(line_text, &syntax_set)
                     .unwrap();
@@ -205,13 +232,18 @@ impl Output {
                 self.document_html += "<br>";
             }
         } else {
-            for line_text in code_block.contents_text.lines() {
+            // Note that `code_lines` skips the "LINK: " tag above.
+            for line_text in code_lines {
                 self.document_html += &html_escape::encode_text(line_text);
                 self.document_html += "<br>";
             }
         }
 
-        self.document_html += "</code></pre>";
+        self.document_html += "</code>";
+        if has_link_url {
+            self.document_html += "</a>";
+        }
+        self.document_html += "</pre>";
     }
 }
 
