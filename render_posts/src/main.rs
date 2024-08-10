@@ -21,7 +21,7 @@ const HEADER: &str = r#"<!DOCTYPE html>
 </head>
 <body>
 <article>
-<p><a href="index.html">↫ Home</a></p>
+<p><a href="/">↫ Home</a></p>
 <h1>__TITLE__</h1>
 <p class="subtitle">__SUBTITLE__</p>
 <section>"#;
