@@ -177,11 +177,10 @@ impl Output {
             panic!("not in a codeblock");
         };
 
-        self.document_html += "\n\n<pre>";
+        self.document_html += "\n\n<pre><code>";
 
         // Markdown doesn't make it easy to put anchor tags around an entire code block. Use a
         // hacky "LINK: " tag on the first line of a codeblock as a workaround.
-        let mut has_link_url = false;
         let mut code_lines = code_block.contents_text.lines().peekable();
         let link_tag = "LINK: ";
         if code_lines
@@ -189,21 +188,18 @@ impl Output {
             .expect("at least one line")
             .starts_with(link_tag)
         {
-            // Consume the "LINK: " line so that it doesn't get rendered.
+            // Consume the "LINK: " line so that it doesn't get rendered below.
             let link_line = code_lines.next().unwrap();
-            let link = &link_line[link_tag.len()..];
-            assert_eq!(&link[0..4], "http");
-            assert_eq!(link, link.trim());
+            let after_tag = &link_line[link_tag.len()..];
+            let (text, url) = after_tag.rsplit_once(' ').expect("no link text?");
+            assert_eq!(&url[0..4], "http");
+            assert_eq!(text, text.trim());
             self.document_html += &format!(
-                r#"<a href="{}">"#,
-                html_escape::encode_double_quoted_attribute(link),
+                r#"<div class="code_link"><a href="{}">{}</a></div>"#,
+                html_escape::encode_double_quoted_attribute(url),
+                html_escape::encode_text(text),
             );
-            has_link_url = true;
         }
-
-        // Put the <a> tag inside of <pre> but around <code>, because tufte.css sets the width of
-        // <code> but not of <pre>.
-        self.document_html += "<code>";
 
         if !code_block.language.is_empty() {
             // The syntect syntax names have names like "Rust" and "C", not "rust" and "c". Make sure
@@ -239,11 +235,7 @@ impl Output {
             }
         }
 
-        self.document_html += "</code>";
-        if has_link_url {
-            self.document_html += "</a>";
-        }
-        self.document_html += "</pre>";
+        self.document_html += "</code></pre>";
     }
 }
 

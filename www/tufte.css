@@ -245,6 +245,18 @@ a:link::-moz-selection {
     background: #b4d5fe;
 }
 
+div.code_link a {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background-color: #eee8d5;
+    padding: 5px 10px;
+    border-radius: 10px;
+    font-family: et-book, Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif;
+    font-size: 0.9rem;
+    color: #657b83;
+}
+
 /* Sidenotes, margin notes, figures, captions */
 img {
     max-width: 100%;
@@ -310,7 +322,7 @@ div.table-wrapper {
     font-family: "Trebuchet MS", "Gill Sans", "Gill Sans MT", sans-serif;
 }
 
-code, pre > code, pre > a {
+code, pre > code {
     font-family: "Ubuntu Mono", monospace;
     font-size: 1.3rem;
     -webkit-text-size-adjust: 100%; /* Prevent adjustments of font size after orientation changes in iOS. See https://github.com/edwardtufte/tufte-css/issues/81#issuecomment-261953409 */
@@ -328,16 +340,17 @@ h3 > code {
     font-size: 1.0rem;
 }
 
-pre > code, pre > a {
+pre > code {
     line-height: 1.2;
     width: 52.5%;
     margin-left: 2.5%;
     overflow-x: auto;
     display: block;
+    position: relative; /* for code_link */
     color: #657b83;
 }
 
-pre.fullwidth > code, pre.fullwidth > a {
+pre.fullwidth > code {
     width: 90%;
 }
 
@@ -393,7 +406,7 @@ label.margin-toggle:not(.sidenote-number) {
         width: 100%;
     }
 
-    pre > code, pre > a {
+    pre > code {
         width: 97%;
     }
 
