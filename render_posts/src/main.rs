@@ -177,27 +177,20 @@ impl Output {
             panic!("not in a codeblock");
         };
 
-        self.document_html += "\n\n<pre><code>";
+        let code_lines = CodeLines::parse(&code_block.contents_text);
 
-        // Markdown doesn't make it easy to put anchor tags around an entire code block. Use a
-        // hacky "LINK: " tag on the first line of a codeblock as a workaround.
-        let mut code_lines = code_block.contents_text.lines().peekable();
-        let link_tag = "LINK: ";
-        if code_lines
-            .peek()
-            .expect("at least one line")
-            .starts_with(link_tag)
-        {
-            // Consume the "LINK: " line so that it doesn't get rendered below.
-            let link_line = code_lines.next().unwrap();
-            let after_tag = &link_line[link_tag.len()..];
-            let (text, url) = after_tag.rsplit_once(' ').expect("no link text?");
-            assert_eq!(&url[0..4], "http");
-            assert_eq!(text, text.trim());
+        self.document_html += "\n\n";
+        if code_lines.is_wide() {
+            self.document_html += r#"<pre class="fullwidth"><code>"#;
+        } else {
+            self.document_html += "<pre><code>";
+        }
+
+        if let Some(code_link) = &code_lines.link {
             self.document_html += &format!(
                 r#"<div class="code_link"><a href="{}">{}</a></div>"#,
-                html_escape::encode_double_quoted_attribute(url),
-                html_escape::encode_text(text),
+                html_escape::encode_double_quoted_attribute(&code_link.url),
+                html_escape::encode_text(&code_link.text),
             );
         }
 
@@ -217,8 +210,7 @@ impl Output {
             let theme_set = ThemeSet::load_defaults();
             let mut line_highlighter =
                 HighlightLines::new(syntax, &theme_set.themes["Solarized (light)"]);
-            // Note that `code_lines` skips the "LINK: " tag above.
-            for line_text in code_lines {
+            for line_text in &code_lines.lines {
                 let ranges: Vec<(Style, &str)> = line_highlighter
                     .highlight_line(line_text, &syntax_set)
                     .unwrap();
@@ -228,8 +220,7 @@ impl Output {
                 self.document_html += "<br>";
             }
         } else {
-            // Note that `code_lines` skips the "LINK: " tag above.
-            for line_text in code_lines {
+            for line_text in &code_lines.lines {
                 self.document_html += &html_escape::encode_text(line_text);
                 self.document_html += "<br>";
             }
@@ -391,6 +382,50 @@ fn render_markdown(markdown_input: &str) -> String {
         .replace("__SUBTITLE__", &output.subtitle_html)
         + &document_with_footnotes
         + FOOTER
+}
+
+struct CodeLink {
+    text: String,
+    url: String,
+}
+
+struct CodeLines {
+    link: Option<CodeLink>,
+    lines: Vec<String>,
+}
+
+impl CodeLines {
+    // Markdown doesn't make it easy to put anchor tags around an entire code block. Use a hacky
+    // "LINK: " tag on the first line of a codeblock as a workaround.
+    fn parse(text: &str) -> CodeLines {
+        let mut lines = text.lines().peekable();
+        let mut link = None;
+        let link_tag = "LINK: ";
+        if lines
+            .peek()
+            .expect("at least one line")
+            .starts_with(link_tag)
+        {
+            // Consume the "LINK: " line.
+            let link_line = lines.next().unwrap();
+            let after_tag = &link_line[link_tag.len()..];
+            let (text, url) = after_tag.rsplit_once(' ').expect("no link text?");
+            assert_eq!(&url[0..4], "http");
+            assert_eq!(text, text.trim());
+            link = Some(CodeLink {
+                text: text.into(),
+                url: url.into(),
+            });
+        }
+        CodeLines {
+            link,
+            lines: lines.map(String::from).collect(),
+        }
+    }
+
+    fn is_wide(&self) -> bool {
+        self.lines.iter().any(|line| line.len() > 75)
+    }
 }
 
 fn main() -> anyhow::Result<()> {
