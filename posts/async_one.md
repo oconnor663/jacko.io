@@ -1,8 +1,9 @@
 # Async Rust, Part One: What's in it for us?
 ###### \[date]
 
-- Part Two: How does it work?
-- Part Three: Choose your own adventure
+- Part One: What's in it for us? (you are here)
+- [Part Two: How does it work?](async_two.html)
+- [Part Three: Choose your own adventure](async_three.html)
 
 When we need a program to do many things at the same time, the most direct
 approach is to use threads. This works well for a small-to-medium number of
@@ -50,10 +51,18 @@ fn main() {
 ```
 
 But if we want to run thousands of jobs, we start to run into trouble. Here's
-what I see when I spawn a thousand threads on the Playground:[^thread_limit]
+what I see when I spawn a thousand threads on the
+Playground:[^thread_limit] [^thread_pool]
 
 [^thread_limit]: On my Linux laptop I can spawn almost 19k threads before I hit
     this crash, but the Playground is more resource-constrained.
+
+[^thread_pool]: A thread pool can be a good approach for CPU-intensive work,
+    but when each jobs spends most of its time blocked on IO, the pool quickly
+    runs out of worker threads, and there's [not enough parallelism to go
+    around][rayon].
+
+[rayon]: https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Atime%3A%3ADuration%3B%0A%0Afn+job%28n%3A+u64%29+%7B%0A++++std%3A%3Athread%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B%0A++++println%21%28%22%7Bn%7D%22%29%3B%0A%7D%0A%0Afn+main%28%29+%7B%0A++++rayon%3A%3Ascope%28%7Cscope%7C+%7B%0A++++++++for+n+in+1..%3D1_000+%7B%0A++++++++++++scope.spawn%28move+%7C_%7C+job%28n%29%29%3B%0A++++++++%7D%0A++++%7D%29%3B%0A%7D
 
 ```
 LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Atime%3A%3ADuration%3B%0A%0Afn+job%28n%3A+u64%29+%7B%0A++++std%3A%3Athread%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B%0A++++println%21%28%22%7Bn%7D%22%29%3B%0A%7D%0A%0Afn+main%28%29+%7B%0A++++let+mut+threads+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++threads.push%28std%3A%3Athread%3A%3Aspawn%28move+%7C%7C+job%28n%29%29%29%3B%0A++++%7D%0A++++for+thread+in+threads+%7B%0A++++++++thread.join%28%29.unwrap%28%29%3B%0A++++%7D%0A%7D
