@@ -115,7 +115,7 @@ can run a _million_ jobs at once.
 
 [million]: https://play.rust-lang.org/?version=stable&mode=release&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Atime%3A%3A%7BDuration%2C+Instant%7D%3B%0A%0Aasync+fn+job%28_n%3A+u64%29+%7B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++%2F%2F+Don%27t+print.+A+million+prints+is+too+much+output+for+the+Playground.%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++let+start+%3D+Instant%3A%3Anow%28%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A++++let+time+%3D+Instant%3A%3Anow%28%29+-+start%3B%0A++++println%21%28%22time%3A+%7B%3A.3%7D+seconds%22%2C+time.as_secs_f32%28%29%29%3B%0A%7D
 
-## Sleep
+## Mistake
 
 We can get our first hint at how all of this is working if we make a small
 mistake, using `std::thread::sleep` instead of `tokio::time::sleep` in our
