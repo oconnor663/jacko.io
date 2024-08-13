@@ -250,8 +250,11 @@ div.code_link a {
     top: 0;
     right: 0;
     background-color: #eee8d5;
-    padding: 7px 10px;
-    border-radius: 10px;
+    padding: 5px;
+    border-radius: 5px;
+    border-style: solid;
+    border-width: 1px;
+    border-color: #93a1a1;
     font-family: et-book, Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif;
     font-size: 0.9rem;
     color: #657b83;
