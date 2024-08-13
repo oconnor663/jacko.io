@@ -266,7 +266,7 @@ fn render_markdown(markdown_input: &str) -> String {
                 output.add_footnote_reference(s.to_string());
             }
             Event::Start(tag) => match tag {
-                Tag::BlockQuote => {
+                Tag::BlockQuote(_) => {
                     output.push_html("\n\n<blockquote>");
                     nested_p_tag = true;
                 }
