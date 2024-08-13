@@ -94,11 +94,13 @@ This version always wakes up, so the output is correct, but it burns the CPU:
 
 ```rust
 LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3A%7BDuration%2C+Instant%7D%3B%0A%0Astruct+SleepFuture+%7B%0A++++wake_time%3A+Instant%2C%0A%7D%0A%0Aimpl+Future+for+SleepFuture+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++if+self.wake_time+%3C%3D+Instant%3A%3Anow%28%29+%7B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D+else+%7B%0A++++++++++++context.waker%28%29.wake_by_ref%28%29%3B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+sleep%28duration%3A+Duration%29+-%3E+SleepFuture+%7B%0A++++let+wake_time+%3D+Instant%3A%3Anow%28%29+%2B+duration%3B%0A++++SleepFuture+%7B+wake_time+%7D%0A%7D%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++sleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22%7Bn%7D%22%29%3B%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
-if self.wake_time <= Instant::now() {
-    Poll::Ready(())
-} else {
-    context.waker().wake_by_ref();
-    Poll::Pending
+fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
+    if self.wake_time <= Instant::now() {
+        Poll::Ready(())
+    } else {
+        context.waker().wake_by_ref();
+        Poll::Pending
+    }
 }
 ```
 
@@ -129,4 +131,40 @@ fn main() {
 }
 ```
 
-Now instead of busy looping, we can tell that loop how long to sleep...
+Now instead of busy looping, we can tell that loop how long to sleep. Let's add
+a global:
+
+```rust
+static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
+```
+
+And have `SleepFuture` put wakers in there:
+
+```rust
+fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
+    if self.wake_time <= Instant::now() {
+        Poll::Ready(())
+    } else {
+        context.waker().wake_by_ref();
+        Poll::Pending
+    }
+}
+```
+
+And finally the main polling loop can read from it:
+
+```rust
+LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+futures%3A%3Atask%3A%3Anoop_waker_ref%3B%0Ause+std%3A%3Acollections%3A%3ABTreeMap%3B%0Ause+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Async%3A%3AMutex%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%2C+Waker%7D%3B%0Ause+std%3A%3Atime%3A%3A%7BDuration%2C+Instant%7D%3B%0A%0Astatic+WAKERS%3A+Mutex%3CBTreeMap%3CInstant%2C+Vec%3CWaker%3E%3E%3E+%3D+Mutex%3A%3Anew%28BTreeMap%3A%3Anew%28%29%29%3B%0A%0Astruct+SleepFuture+%7B%0A++++wake_time%3A+Instant%2C%0A%7D%0A%0Aimpl+Future+for+SleepFuture+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++if+self.wake_time+%3C%3D+Instant%3A%3Anow%28%29+%7B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D+else+%7B%0A++++++++++++let+mut+wakers_tree+%3D+WAKERS.lock%28%29.unwrap%28%29%3B%0A++++++++++++let+wakers_vec+%3D+wakers_tree.entry%28self.wake_time%29.or_default%28%29%3B%0A++++++++++++wakers_vec.push%28context.waker%28%29.clone%28%29%29%3B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+sleep%28duration%3A+Duration%29+-%3E+SleepFuture+%7B%0A++++let+wake_time+%3D+Instant%3A%3Anow%28%29+%2B+duration%3B%0A++++SleepFuture+%7B+wake_time+%7D%0A%7D%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++sleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22%7Bn%7D%22%29%3B%0A%7D%0A%0Afn+main%28%29+%7B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++let+mut+main_future+%3D+Box%3A%3Apin%28future%3A%3Ajoin_all%28futures%29%29%3B%0A++++let+mut+context+%3D+Context%3A%3Afrom_waker%28noop_waker_ref%28%29%29%3B%0A++++while+main_future.as_mut%28%29.poll%28%26mut+context%29.is_pending%28%29+%7B%0A++++++++let+mut+wakers_tree+%3D+WAKERS.lock%28%29.unwrap%28%29%3B%0A++++++++let+next_wake+%3D+wakers_tree.keys%28%29.next%28%29.expect%28%22sleep+forever%3F%22%29%3B%0A++++++++std%3A%3Athread%3A%3Asleep%28next_wake.saturating_duration_since%28Instant%3A%3Anow%28%29%29%29%3B%0A++++++++while+let+Some%28entry%29+%3D+wakers_tree.first_entry%28%29+%7B%0A++++++++++++if+*entry.key%28%29+%3C%3D+Instant%3A%3Anow%28%29+%7B%0A++++++++++++++++entry.remove%28%29.into_iter%28%29.for_each%28Waker%3A%3Awake%29%3B%0A++++++++++++%7D+else+%7B%0A++++++++++++++++break%3B%0A++++++++++++%7D%0A++++++++%7D%0A++++%7D%0A%7D
+while main_future.as_mut().poll(&mut context).is_pending() {
+    let mut wakers_tree = WAKERS.lock().unwrap();
+    let next_wake = wakers_tree.keys().next().expect("sleep forever?");
+    std::thread::sleep(next_wake.duration_since(Instant::now()));
+    while let Some(entry) = wakers_tree.first_entry() {
+        if *entry.key() <= Instant::now() {
+            entry.remove().into_iter().for_each(Waker::wake);
+        } else {
+            break;
+        }
+    }
+}
+```
