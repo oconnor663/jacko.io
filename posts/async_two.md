@@ -36,6 +36,11 @@ fn job(n: u64) -> JobFuture {
 }
 ```
 
+Now we can see why `std::thread::sleep` ruined our performance in the previous
+section. The `poll` function _asks_ whether a future is finished, and with a
+thousand futures in our program, we need to ask that question thousands of
+times.
+
 ## Join
 
 ```rust
