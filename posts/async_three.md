@@ -13,6 +13,34 @@
 
 ## Recursion
 
+Regular recursion doesn't work:
+
+```rust
+LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=async+fn+factorial%28n%3A+u64%29+-%3E+u64+%7B%0A++++if+n+%3D%3D+0+%7B%0A++++++++1%0A++++%7D+else+%7B%0A++++++++n+*+factorial%28n+-+1%29.await%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22%7B%7D%22%2C+factorial%2810%29.await%29%3B%0A%7D
+async fn factorial(n: u64) -> u64 {
+    if n == 0 {
+        1
+    } else {
+        n * factorial(n - 1).await
+    }
+}
+```
+
+We need to box the thing:
+
+
+```rust
+LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=async+fn+factorial%28n%3A+u64%29+-%3E+u64+%7B%0A++++if+n+%3D%3D+0+%7B%0A++++++++1%0A++++%7D+else+%7B%0A++++++++let+recurse+%3D+Box%3A%3Apin%28factorial%28n+-+1%29%29%3B%0A++++++++n+*+recurse.await%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22%7B%7D%22%2C+factorial%2810%29.await%29%3B%0A%7D
+async fn factorial(n: u64) -> u64 {
+    if n == 0 {
+        1
+    } else {
+        let recurse = Box::pin(factorial(n - 1));
+        n * recurse.await
+    }
+}
+```
+
 ## Tasks
 
 [Tokio tasks example][tokio_tasks]
