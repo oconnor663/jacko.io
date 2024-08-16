@@ -8,20 +8,25 @@
 ## Job
 
 ```rust
-LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Astruct+JobFuture+%7B%0A++++sleep_future%3A+Pin%3CBox%3Ctokio%3A%3Atime%3A%3ASleep%3E%3E%2C%0A++++n%3A+u64%2C%0A%7D%0A%0Aimpl+Future+for+JobFuture+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++if+self.sleep_future.as_mut%28%29.poll%28context%29.is_pending%28%29+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D+else+%7B%0A++++++++++++println%21%28%22%7B%7D%22%2C+self.n%29%3B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+job%28n%3A+u64%29+-%3E+JobFuture+%7B%0A++++let+sleep_future+%3D+tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B%0A++++JobFuture+%7B%0A++++++++sleep_future%3A+Box%3A%3Apin%28sleep_future%29%2C%0A++++++++n%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
+LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Astruct+JobFuture+%7B%0A++++n%3A+u64%2C%0A++++started%3A+bool%2C%0A++++sleep_future%3A+Pin%3CBox%3Ctokio%3A%3Atime%3A%3ASleep%3E%3E%2C%0A%7D%0A%0Aimpl+Future+for+JobFuture+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++if+%21self.started+%7B%0A++++++++++++println%21%28%22start+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++self.started+%3D+true%3B%0A++++++++%7D%0A++++++++if+self.sleep_future.as_mut%28%29.poll%28context%29.is_pending%28%29+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D+else+%7B%0A++++++++++++println%21%28%22end+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+job%28n%3A+u64%29+-%3E+JobFuture+%7B%0A++++let+sleep_future+%3D+tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B%0A++++JobFuture+%7B%0A++++++++n%2C%0A++++++++started%3A+false%2C%0A++++++++sleep_future%3A+Box%3A%3Apin%28sleep_future%29%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
 struct JobFuture {
-    sleep_future: Pin<Box<tokio::time::Sleep>>,
     n: u64,
+    started: bool,
+    sleep_future: Pin<Box<tokio::time::Sleep>>,
 }
 
 impl Future for JobFuture {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
+        if !self.started {
+            println!("start {}", self.n);
+            self.started = true;
+        }
         if self.sleep_future.as_mut().poll(context).is_pending() {
             Poll::Pending
         } else {
-            println!("{}", self.n);
+            println!("end {}", self.n);
             Poll::Ready(())
         }
     }
@@ -30,8 +35,9 @@ impl Future for JobFuture {
 fn job(n: u64) -> JobFuture {
     let sleep_future = tokio::time::sleep(Duration::from_secs(1));
     JobFuture {
-        sleep_future: Box::pin(sleep_future),
         n,
+        started: false,
+        sleep_future: Box::pin(sleep_future),
     }
 }
 ```
@@ -44,7 +50,7 @@ times.
 ## Join
 
 ```rust
-LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22%7Bn%7D%22%29%3B%0A%7D%0A%0Astruct+JoinFuture%3CF%3E+%7B%0A++++futures%3A+Vec%3CPin%3CBox%3CF%3E%3E%3E%2C%0A%7D%0A%0Aimpl%3CF%3A+Future%3E+Future+for+JoinFuture%3CF%3E+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++let+is_pending+%3D+%7Cfuture%3A+%26mut+Pin%3CBox%3CF%3E%3E%7C+%7B%0A++++++++++++future.as_mut%28%29.poll%28context%29.is_pending%28%29%0A++++++++%7D%3B%0A++++++++self.futures.retain_mut%28is_pending%29%3B%0A++++++++if+self.futures.is_empty%28%29+%7B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D+else+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+join_all%3CF%3A+Future%3E%28futures%3A+Vec%3CF%3E%29+-%3E+JoinFuture%3CF%3E+%7B%0A++++JoinFuture+%7B%0A++++++++futures%3A+futures.into_iter%28%29.map%28Box%3A%3Apin%29.collect%28%29%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++join_all%28futures%29.await%3B%0A%7D
+LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0Astruct+JoinFuture%3CF%3E+%7B%0A++++futures%3A+Vec%3CPin%3CBox%3CF%3E%3E%3E%2C%0A%7D%0A%0Aimpl%3CF%3A+Future%3E+Future+for+JoinFuture%3CF%3E+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++let+is_pending+%3D+%7Cfuture%3A+%26mut+Pin%3CBox%3CF%3E%3E%7C+%7B%0A++++++++++++future.as_mut%28%29.poll%28context%29.is_pending%28%29%0A++++++++%7D%3B%0A++++++++self.futures.retain_mut%28is_pending%29%3B%0A++++++++if+self.futures.is_empty%28%29+%7B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D+else+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+join_all%3CF%3A+Future%3E%28futures%3A+Vec%3CF%3E%29+-%3E+JoinFuture%3CF%3E+%7B%0A++++JoinFuture+%7B%0A++++++++futures%3A+futures.into_iter%28%29.map%28Box%3A%3Apin%29.collect%28%29%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++join_all%28futures%29.await%3B%0A%7D
 struct JoinFuture<F> {
     futures: Vec<Pin<Box<F>>>,
 }
