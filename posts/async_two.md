@@ -151,6 +151,9 @@ fn main() {
 }
 ```
 
+NOTE HERE: Even though our loop is always polling, we still need the wakers. If
+we don't call `wake()` our program never finishes.
+
 Now instead of busy looping, we can tell that loop how long to sleep. Let's add
 a global:[^thread_local]
 
