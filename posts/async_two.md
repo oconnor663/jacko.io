@@ -145,6 +145,10 @@ pretend it's `&mut T`. And when `.as_mut()` converts from `Pin<Box<T>>` to
 un-tell these little lies, but in these examples they're surprisingly close to
 the truth.
 
+The last mystery we haven't discussed is the `Context` argument to `poll`. For
+now all we're doing with it is passing it along when we call `poll` ourselves.
+We'll leave it at that until we get ready to write our own `sleep` below.
+
 Onward!
 
 [^box]: And if you haven't seen [`Box<T>`][box] before, that's just `T` "on the
