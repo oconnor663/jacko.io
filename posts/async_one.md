@@ -78,8 +78,9 @@ want to run thousands of jobs at once, we need something different.
 
 ## Async
 
-We can use `async` and `.await` to do similar things. Our `job` function looks
-like this:[^tokio]
+Let's try the same thing with async/await. Part Two will go into all the
+details, but for now I just want to type it out and run it on the Playground.
+Our async `job` function looks like this:[^tokio]
 
 [^tokio]: Most of these examples will use the [Tokio](https://tokio.rs/)
     runtime and the [`futures`](https://docs.rs/futures/) support library.
@@ -123,9 +124,12 @@ release mode][million_futures], we can run a _million_ jobs at once.
 
 ## Mistake
 
-We can get our first hint of how all of this is working if we make a small
-mistake, using `std::thread::sleep` instead of `tokio::time::sleep` in our
-async function. Try it:
+We can get our first hint of how all of this works if we make a small mistake,
+using [`std::thread::sleep`] instead of [`tokio::time::sleep`] in our async
+function. Try it:
+
+[`std::thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
+[`tokio::time::sleep`]: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
 
 ```rust
 LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++std%3A%3Athread%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B+%2F%2F+Oops%21%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+a+thousand+jobs+at+the+same+time...%22%29%3B%0A++++println%21%28%22%5Cn...but+something%27s+not+right...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
@@ -136,8 +140,9 @@ async fn job(n: u64) {
 }
 ```
 
-Now all of our performance is gone, and our program takes a thousand seconds to
-run! It's an easy mistake to make, unfortunately. But what we can learn from it
-here, is that all our performance was coming from being able to run all those
-jobs on a single thread. That's the magic of async. In the next part, we'll
-dive into all the nitty gritty details of how that works.
+Oh no! Everything is running one-at-a-time again! It's an easy mistake to make,
+unfortunately. But we can learn a lot about how a system works by seeing how it
+fails, and what we're learning here is that all of the jobs running "at the
+same time" in the async examples above were actually running on a single
+thread. That's the magic of async. In the next part of this series, we'll dive
+into all the nitty gritty details of how exactly this works.
