@@ -161,7 +161,10 @@ Onward!
 
 ## Join
 
-We can make `join_all` into a non-async function too:[^always_was]
+It might seem like `join_all` is doing something much more magical than `job`,
+but now that we've seen the moving parts of a future, it turns out we already
+have everything we need. Let's make `join_all` into a non-async function
+too:[^always_was]
 
 [^always_was]: In fact it's [defined this way upstream][upstream].
 
@@ -204,7 +207,7 @@ impl<F: Future> Future for JoinFuture<F> {
 }
 ```
 
-[`Vec::retain_mut`] does most of the heavy lifting here. It takes a closure
+[`Vec::retain_mut`] does most of the heavy lifting. It takes a closure
 argument, calls that closure on each element of the `Vec`, and deletes the
 elements that returned `false`.[^algorithm] Here that means that we drop each
 child future the first time it returns `Ready`, following the rule that we're
@@ -221,15 +224,17 @@ not supposed to `poll` them again after that.
 
 Having seen `JobFuture` above, there's really nothing else new here. From the
 outside, it feels magical that we can run all these child futures at once, but
-on the inside, all we're doing is looping over a `Vec` and calling `poll` on
-each element. What makes this work is the guarantee that each call to `poll`
-will return quickly, and the guarantee that if we return `Pending` we'll get
-called again later.
+on the inside, all we're doing is calling `poll` on the elements of a `Vec`.
+What makes this work is that each call to `poll` returns quickly, and that when
+we return `Pending` we get called again later.
 
-Note that we're taking a shortcut by ignoring the outputs of the child futures.
-We're getting away with that because we only use our version of `join_all` with
-`job`, which has no return value, but the real `join_all` returns a
-`Vec<F::Output>`, and it does need to do some extra bookkeeping.
+Note that we're taking a shortcut by ignoring the outputs of child
+futures.[^payload] We can get away with that because we only use our version of
+`join_all` with `job`, which has no return value. The real `join_all` returns a
+`Vec<F::Output>`, and it need to do some more bookkeeping.
+
+[^payload]: Specifically, when we call `.is_pending()` on the result of `poll`,
+    we ignore any value that `Poll::Ready` might be carrying.
 
 Onward!
 
