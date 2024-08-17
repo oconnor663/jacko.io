@@ -250,6 +250,7 @@ fn render_markdown(markdown_input: &str) -> String {
         match event {
             Event::Text(s) => output.push_text(&s),
             Event::Html(s) => output.push_html(&s),
+            Event::InlineHtml(s) => output.push_html(&s),
             Event::SoftBreak => output.push_html("\n"),
             Event::Code(s) => {
                 for (i, word) in s.split_whitespace().enumerate() {

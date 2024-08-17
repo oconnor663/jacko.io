@@ -157,6 +157,26 @@ Onward!
 
 ## Join
 
+We can make `join_all` into a non-async function too:[^always_was]
+
+[^always_was]: In fact it's [defined this way upstream][upstream].
+
+[upstream]: https://docs.rs/futures-util/0.3.30/src/futures_util/future/join_all.rs.html#102-105
+
+```rust
+LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0Astruct+JoinFuture%3CF%3E+%7B%0A++++futures%3A+Vec%3CPin%3CBox%3CF%3E%3E%3E%2C%0A%7D%0A%0Aimpl%3CF%3A+Future%3E+Future+for+JoinFuture%3CF%3E+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++let+is_pending+%3D+%7Cfuture%3A+%26mut+Pin%3CBox%3CF%3E%3E%7C+%7B%0A++++++++++++future.as_mut%28%29.poll%28context%29.is_pending%28%29%0A++++++++%7D%3B%0A++++++++self.futures.retain_mut%28is_pending%29%3B%0A++++++++if+self.futures.is_empty%28%29+%7B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D+else+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+join_all%3CF%3A+Future%3E%28futures%3A+Vec%3CF%3E%29+-%3E+JoinFuture%3CF%3E+%7B%0A++++JoinFuture+%7B%0A++++++++futures%3A+futures.into_iter%28%29.map%28Box%3A%3Apin%29.collect%28%29%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs%2C+one+at+a+time...%5Cn%22%29%3B%0A++++job%281%29.await%3B%0A++++job%282%29.await%3B%0A++++job%283%29.await%3B%0A%0A++++println%21%28%22%5CnRun+three+jobs+at+the+same+time...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D3+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++join_all%28futures%29.await%3B%0A%7D
+fn join_all<F: Future>(futures: Vec<F>) -> JoinFuture<F> {
+    JoinFuture {
+        futures: futures.into_iter().map(Box::pin).collect(),
+    }
+}
+```
+
+Once again, the function doesn't do much,[^agreement] and all the interesting
+work happens in the struct:
+
+[^agreement]: Especially since we've agreed not to think too hard about `Box::pin`.
+
 ```rust
 LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0Astruct+JoinFuture%3CF%3E+%7B%0A++++futures%3A+Vec%3CPin%3CBox%3CF%3E%3E%3E%2C%0A%7D%0A%0Aimpl%3CF%3A+Future%3E+Future+for+JoinFuture%3CF%3E+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++let+is_pending+%3D+%7Cfuture%3A+%26mut+Pin%3CBox%3CF%3E%3E%7C+%7B%0A++++++++++++future.as_mut%28%29.poll%28context%29.is_pending%28%29%0A++++++++%7D%3B%0A++++++++self.futures.retain_mut%28is_pending%29%3B%0A++++++++if+self.futures.is_empty%28%29+%7B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D+else+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+join_all%3CF%3A+Future%3E%28futures%3A+Vec%3CF%3E%29+-%3E+JoinFuture%3CF%3E+%7B%0A++++JoinFuture+%7B%0A++++++++futures%3A+futures.into_iter%28%29.map%28Box%3A%3Apin%29.collect%28%29%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs%2C+one+at+a+time...%5Cn%22%29%3B%0A++++job%281%29.await%3B%0A++++job%282%29.await%3B%0A++++job%283%29.await%3B%0A%0A++++println%21%28%22%5CnRun+three+jobs+at+the+same+time...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D3+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++join_all%28futures%29.await%3B%0A%7D
 struct JoinFuture<F> {
@@ -178,13 +198,36 @@ impl<F: Future> Future for JoinFuture<F> {
         }
     }
 }
-
-fn join_all<F: Future>(futures: Vec<F>) -> JoinFuture<F> {
-    JoinFuture {
-        futures: futures.into_iter().map(Box::pin).collect(),
-    }
-}
 ```
+
+[`Vec::retain_mut`] does most of the heavy lifting here. It takes a closure
+argument, calls that closure on each element of the `Vec`, and deletes the
+elements that returned `false`.[^algorithm] Here that means that we drop each
+child future the first time it returns `Ready`, following the rule that we're
+not supposed to `poll` them again after that.
+
+[`Vec::retain_mut`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.retain_mut
+
+[^algorithm]: If we did this with a simple `for` loop, it would take
+    O(n<sup>2</sup>) time, because `Vec::remove` is O(n). But `retain_mut` uses
+    a clever algorithm that walks two pointers through the `Vec` and moves each
+    element at most once.
+
+[`Vec::remove`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.remove
+
+Having seen `JobFuture` above, there's really nothing else new here. From the
+outside, it feels magical that we can run all these child futures at once, but
+on the inside, all we're doing is looping over a `Vec` and calling `poll` on
+each element. What makes this work is the guarantee that each call to `poll`
+will return quickly, and the guarantee that if we return `Pending` we'll get
+called again later.
+
+Note that we're taking a shortcut by ignoring the outputs of the child futures.
+We're getting away with that because we only use our version of `join_all` with
+`job`, which has no return value, but the real `join_all` returns a
+`Vec<F::Output>`, and it does need to do some extra bookkeeping.
+
+Onward!
 
 ## Sleep
 

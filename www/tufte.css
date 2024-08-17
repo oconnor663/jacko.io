@@ -147,6 +147,10 @@ p {
     vertical-align: baseline;
 }
 
+sup {
+    font-size: 0.6em;
+}
+
 /* Chapter Epigraphs */
 div.epigraph {
     margin: 5em 0;
