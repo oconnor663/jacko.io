@@ -7,25 +7,37 @@
 
 In Part One we looked at [some async Rust code][part_one] without explaining
 anything about how it worked. That left us with several mysteries: What's an
-`async fn`? How does [`join_all`] work? How is [`tokio::time::sleep`] different
-from [`std::thread::sleep`]? And what does `#[tokio::main]` do? I think the
-best way to answer these questions is to translate each of these pieces into
-normal, non-async Rust code. We'll find that we can replicate `job` and
-`join_all` without too much trouble, but `sleep` is going to pull the whole
-world along with it.[^universe] Here goes.
+`async fn`, and what are the "futures" that they return? What is [`join_all`]
+doing? How is [`tokio::time::sleep`] different from [`std::thread::sleep`]?
+What does `#[tokio::main]` actually do?
 
 [part_one]: https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs%2C+one+at+a+time...%5Cn%22%29%3B%0A++++job%281%29.await%3B%0A++++job%282%29.await%3B%0A++++job%283%29.await%3B%0A%0A++++println%21%28%22%5CnRun+three+jobs+at+the+same+time...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D3+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
 [`join_all`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
 [`tokio::time::sleep`]: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
 [`std::thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
 
+I think the best way to answer these questions is to translate each piece into
+normal, non-async Rust code and stare at it for a while. We'll find that we can
+replicate `job` and `join_all` without too much trouble, but writing our own
+`sleep` is going to be a whole different story.[^universe] Here we go.
+
 [^universe]: [If you wish to make an apple pie from scratch, you must first
     invent the universe.](https://youtu.be/BkHCO8f2TWs?si=gIfadwLGsvawJ3qn)
 
 ## Job
 
-We can translate `job` from an `async fn` back to a regular function by making
-it return a "future". Here's the function itself, which doesn't do much:
+As a reminder, here's what `job` looked like when it was an `async fn`:
+
+```rust
+LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs%2C+one+at+a+time...%5Cn%22%29%3B%0A++++job%281%29.await%3B%0A++++job%282%29.await%3B%0A++++job%283%29.await%3B%0A%0A++++println%21%28%22%5CnRun+three+jobs+at+the+same+time...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D3+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
+async fn job(n: u64) {
+    println!("start {n}");
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    println!("end {n}");
+}
+```
+
+We can rewrite it as a regular, non-async function that returns a future:
 
 ```rust
 LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Astruct+JobFuture+%7B%0A++++n%3A+u64%2C%0A++++started%3A+bool%2C%0A++++sleep_future%3A+Pin%3CBox%3Ctokio%3A%3Atime%3A%3ASleep%3E%3E%2C%0A%7D%0A%0Aimpl+Future+for+JobFuture+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++if+%21self.started+%7B%0A++++++++++++println%21%28%22start+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++self.started+%3D+true%3B%0A++++++++%7D%0A++++++++if+self.sleep_future.as_mut%28%29.poll%28context%29.is_pending%28%29+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D+else+%7B%0A++++++++++++println%21%28%22end+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+job%28n%3A+u64%29+-%3E+JobFuture+%7B%0A++++let+sleep_future+%3D+tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B%0A++++JobFuture+%7B%0A++++++++n%2C%0A++++++++started%3A+false%2C%0A++++++++sleep_future%3A+Box%3A%3Apin%28sleep_future%29%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs%2C+one+at+a+time...%5Cn%22%29%3B%0A++++job%281%29.await%3B%0A++++job%282%29.await%3B%0A++++job%283%29.await%3B%0A%0A++++println%21%28%22%5CnRun+three+jobs+at+the+same+time...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D3+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
@@ -39,15 +51,28 @@ fn job(n: u64) -> JobFuture {
 }
 ```
 
-Notice that it calls `tokio::time::sleep`, but it doesn't `.await` the future
-that `sleep` returns.[^compiler_error] Instead it stores that future in a
-struct.[^box_pin] Here's the struct definition:
+You might want to open both versions on the Playground and look at them side by
+side. Notice that the non-async version calls `tokio::time::sleep` but doesn't
+`.await`[^compiler_error] the [`Sleep`] future that `sleep`
+returns.[^uppercase] Instead it stores the `Sleep` future in a new
+struct.[^box_pin] Here's the struct:
 
-[^compiler_error]: It would be a [compiler error] to `.await` in a non-async function.
+[^compiler_error]: It's a [compiler error] to use `.await` in a non-async
+    function.
 
-[compiler error]: https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Astruct+JobFuture+%7B%0A++++n%3A+u64%2C%0A++++started%3A+bool%2C%0A++++sleep_future%3A+Pin%3CBox%3Ctokio%3A%3Atime%3A%3ASleep%3E%3E%2C%0A%7D%0A%0Aimpl+Future+for+JobFuture+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++if+%21self.started+%7B%0A++++++++++++println%21%28%22start+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++self.started+%3D+true%3B%0A++++++++%7D%0A++++++++if+self.sleep_future.as_mut%28%29.poll%28context%29.is_pending%28%29+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D+else+%7B%0A++++++++++++println%21%28%22end+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+job%28n%3A+u64%29+-%3E+JobFuture+%7B%0A++++let+sleep_future+%3D+tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B+%2F%2F+Oops%21%0A++++JobFuture+%7B%0A++++++++n%2C%0A++++++++started%3A+false%2C%0A++++++++sleep_future%3A+Box%3A%3Apin%28sleep_future%29%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
+[compiler error]: https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Atime%3A%3ADuration%3B%0A%0Afn+main%28%29+%7B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A%7D
 
-[^box_pin]: Wait a minute, what is `Box::pin`? Hold that thought for just a moment.
+[`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
+
+[^uppercase]: To repeat, `sleep` (lowercase) is an async function and `Sleep`
+    (uppercase) is the future that it returns. It's confusing, but it's similar
+    to how the [`map`] method on iterators returns an iterator called [`Map`].
+    Futures and iterators have a lot in common, as we'll see.
+
+[`map`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map
+[`Map`]: https://doc.rust-lang.org/std/iter/struct.Map.html
+
+[^box_pin]: Wait a minute, what's `Box::pin`? Hold that thought for just a moment.
 
 ```rust
 LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Astruct+JobFuture+%7B%0A++++n%3A+u64%2C%0A++++started%3A+bool%2C%0A++++sleep_future%3A+Pin%3CBox%3Ctokio%3A%3Atime%3A%3ASleep%3E%3E%2C%0A%7D%0A%0Aimpl+Future+for+JobFuture+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++if+%21self.started+%7B%0A++++++++++++println%21%28%22start+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++self.started+%3D+true%3B%0A++++++++%7D%0A++++++++if+self.sleep_future.as_mut%28%29.poll%28context%29.is_pending%28%29+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D+else+%7B%0A++++++++++++println%21%28%22end+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+job%28n%3A+u64%29+-%3E+JobFuture+%7B%0A++++let+sleep_future+%3D+tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B%0A++++JobFuture+%7B%0A++++++++n%2C%0A++++++++started%3A+false%2C%0A++++++++sleep_future%3A+Box%3A%3Apin%28sleep_future%29%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs%2C+one+at+a+time...%5Cn%22%29%3B%0A++++job%281%29.await%3B%0A++++job%282%29.await%3B%0A++++job%283%29.await%3B%0A%0A++++println%21%28%22%5CnRun+three+jobs+at+the+same+time...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D3+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
@@ -75,11 +100,31 @@ impl Future for JobFuture {
 }
 ```
 
-`JobFuture` implements the [`Future`] trait and has a `poll` method. The `poll`
-method asks a question: Is this future finished? If so, `poll` returns
-[`Poll::Ready`] with its `Output`.[^no_output] If not, `poll` returns
-[`Poll::Pending`]. We can see that `JobFuture::poll` won't return `Ready` until
-[`Sleep::poll`][Sleep][^uppercase] has returned `Ready`.
+This is a lot to take in all at once. Before we even get started, I want to set
+aside a couple things that we're not going to explain until later. The first is
+the `Context` argument. We'll look at that below when we implement `sleep`. The
+second is `Pin`. We'll come back to `Pin` in Part Three, but for now if you'll
+forgive me, I'm going to bend the truth a little bit: `Pin` doesn't do
+anything.[^lies] Think of `Pin<Box<T>>` as `Box<T>`,[^box] think of `Pin<&mut
+T>` as a `&mut T`, and try not to think about `as_mut` at all.
+
+[^lies]: As far as lies go, this one is surprisingly close to the truth.
+
+[^box]: And if you haven't seen [`Box<T>`][box] before, that's just `T` "on the
+    heap". The difference between the "stack" and the "heap" is an important
+    part of systems programming, but for now we're skipping over all the
+    details that aren't absolutely necessary. They'll be easier to remember
+    once you know how the story ends.
+
+[box]: https://doc.rust-lang.org/std/boxed/struct.Box.html
+
+Ok, with those caveats out of the way, let's get into some details. We finally
+have something more to say about what a "future" is. It's something that
+implements the [`Future`] trait. Our `JobFuture` implements `Future`, so has a
+`poll` method. The `poll` method asks a question: Is the future finished with
+its work? If so, `poll` returns [`Poll::Ready`] with its `Output`.[^no_output]
+If not, `poll` returns [`Poll::Pending`]. We can see that `JobFuture::poll`
+won't return `Ready` until [`Sleep::poll`][Sleep] has returned `Ready`.
 
 [`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
 [`Poll::Ready`]: https://doc.rust-lang.org/std/task/enum.Poll.html
@@ -91,30 +136,28 @@ method asks a question: Is this future finished? If so, `poll` returns
     known as the "unit" type. Functions and futures with no return value are
     used for their side effects, like printing.
 
-[^uppercase]: Note that `sleep` (lowercase) is the async function and `Sleep`
-    (uppercase) is the future that that function returns.
-
 But `poll` isn't just a question. It's also where the work of the future
 happens. When it's time for `job` to print, it's `JobFuture::poll` that does
 the printing. So there's a compromise: `poll` does as much work as it can get
 done quickly, but whenever it would need to wait or block, it returns `Pending`
-instead.[^timing] The next time it's called, it'll pick up where it left off.
+instead.[^timing] That way the caller that's asking "Are you finished?" never
+needs to wait for an answer. In return, the caller promises to call `poll`
+again later to let it finish its work.
 
 [^timing]: We can [add some timing and logging][timing] around the call to
     `Sleep::poll` to see that it always returns quickly too.
 
 [timing]: https://play.rust-lang.org/?version=stable&mode=release&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3A%7BDuration%2C+Instant%7D%3B%0A%0Astruct+JobFuture+%7B%0A++++n%3A+u64%2C%0A++++started%3A+bool%2C%0A++++sleep_future%3A+Pin%3CBox%3Ctokio%3A%3Atime%3A%3ASleep%3E%3E%2C%0A%7D%0A%0Aimpl+Future+for+JobFuture+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28mut+self%3A+Pin%3C%26mut+Self%3E%2C+context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++if+%21self.started+%7B%0A++++++++++++println%21%28%22start+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++self.started+%3D+true%3B%0A++++++++%7D%0A++++++++let+before+%3D+Instant%3A%3Anow%28%29%3B%0A++++++++let+poll_result+%3D+self.sleep_future.as_mut%28%29.poll%28context%29%3B%0A++++++++let+duration+%3D+Instant%3A%3Anow%28%29+-+before%3B%0A++++++++println%21%28%22Sleep%3A%3Apoll+returned+%7Bpoll_result%3A%3F%7D+in+%7Bduration%3A%3F%7D.%22%29%3B%0A++++++++if+poll_result.is_pending%28%29+%7B%0A++++++++++++Poll%3A%3APending%0A++++++++%7D+else+%7B%0A++++++++++++println%21%28%22end+%7B%7D%22%2C+self.n%29%3B%0A++++++++++++Poll%3A%3AReady%28%28%29%29%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+job%28n%3A+u64%29+-%3E+JobFuture+%7B%0A++++let+sleep_future+%3D+tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B%0A++++JobFuture+%7B%0A++++++++n%2C%0A++++++++started%3A+false%2C%0A++++++++sleep_future%3A+Box%3A%3Apin%28sleep_future%29%2C%0A++++%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs%2C+one+at+a+time...%5Cn%22%29%3B%0A++++job%281%29.await%3B%0A++++job%282%29.await%3B%0A++++job%283%29.await%3B%0A%0A++++println%21%28%22%5CnRun+three+jobs+at+the+same+time...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D3+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
 
-
 `JobFuture::poll` doesn't know how many times it's going to be called, and it
-doesn't want to print the "start" message more than once, so it keeps track
-using its `started` flag.[^state_machine] It doesn't need to track whether it's
-printed the "end" message, because after it returns `Ready` it won't be called
+shouldn't print the "start" message more than once, so sets its `started` flag
+to keep track.[^state_machine] It doesn't need to track whether it's printed
+the "end" message, though, because after it returns `Ready` it won't be called
 again.[^iterator]
 
 [^state_machine]: In other words, `JobFuture` is a "state machine" with two
     states. In general, the number of states you need to track where you are in
-    an `async fn` is the number of `.await` points plus one. But this gets
+    an `async fn` is the number of `.await` points plus one, but this gets
     complicated when there are branches or loops. The magic of async is that
     the compiler figures all this out for us, and we don't usually need to
     write our own `poll` functions like we're doing here.
@@ -127,37 +170,13 @@ again.[^iterator]
 
 [`Iterator::next`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
 
-So we're starting to see how `std::thread::sleep` ruined our performance at the
+We're starting to see how `std::thread::sleep` ruined our performance at the
 end of Part One. If we put a blocking sleep in `JobFuture::poll` instead of
 returning `Pending`, we get [exactly the same result][same_result].
 
 [same_result]: https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Afuture%3A%3AFuture%3B%0Ause+std%3A%3Apin%3A%3APin%3B%0Ause+std%3A%3Atask%3A%3A%7BContext%2C+Poll%7D%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Astruct+JobFuture+%7B%0A++++n%3A+u64%2C%0A%7D%0A%0Aimpl+Future+for+JobFuture+%7B%0A++++type+Output+%3D+%28%29%3B%0A%0A++++fn+poll%28self%3A+Pin%3C%26mut+Self%3E%2C+_context%3A+%26mut+Context%29+-%3E+Poll%3C%28%29%3E+%7B%0A++++++++println%21%28%22start+%7B%7D%22%2C+self.n%29%3B%0A++++++++std%3A%3Athread%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B+%2F%2F+Oops%21%0A++++++++println%21%28%22end+%7B%7D%22%2C+self.n%29%3B%0A++++++++Poll%3A%3AReady%28%28%29%29%0A++++%7D%0A%7D%0A%0Afn+job%28n%3A+u64%29+-%3E+JobFuture+%7B%0A++++JobFuture+%7B+n+%7D%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+a+thousand+jobs+at+the+same+time...%22%29%3B%0A++++println%21%28%22%5Cn...but+something%27s+not+right...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
 
-But now we have to discuss the elephant in the playground. What is `Pin`? Well,
-it's part of the definition of `Future::poll`, so we have to include it when we
-`impl Future`. But beyond that, if you'll forgive me, I'm going to bend the
-truth slightly...
-
-`Pin` does nothing. For the rest of Part Two, when we see `Pin<Box<T>>`, we're
-gonna pretend it's just `Box<T>`.[^box] When we see `Pin<&mut T>`, we're gonna
-pretend it's `&mut T`. And when `.as_mut()` converts from `Pin<Box<T>>` to
-`Pin<&mut T>`, we're just gonna ignore it. In Part Three we'll come back and
-un-tell these little lies, but in these examples they're surprisingly close to
-the truth.
-
-The last mystery we haven't discussed is the `Context` argument to `poll`. For
-now all we're doing with it is passing it along when we call `poll` ourselves.
-We'll leave it at that until we get ready to write our own `sleep` below.
-
 Onward!
-
-[^box]: And if you haven't seen [`Box<T>`][box] before, that's just `T` "on the
-    heap". The difference between the "stack" and the "heap" is an important
-    part of systems programming, but for now we're skipping over all the
-    details that aren't absolutely necessary. They'll be easier to remember
-    once you know how the story ends.
-
-[box]: https://doc.rust-lang.org/std/boxed/struct.Box.html
 
 ## Join
 

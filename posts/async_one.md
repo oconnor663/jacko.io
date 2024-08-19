@@ -122,6 +122,9 @@ release mode][million_futures], we can run a _million_ jobs at once.
 [thousand_futures]: https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+a+thousand+jobs+at+the+same+time...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
 [million_futures]: https://play.rust-lang.org/?version=stable&mode=release&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Atime%3A%3A%7BDuration%2C+Instant%7D%3B%0A%0Aasync+fn+job%28_n%3A+u64%29+%7B%0A++++%2F%2F+Don%27t+print.+A+million+prints+is+too+much+output+for+the+Playground.%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+a+million+jobs+at+the+same+time...%5Cn%22%29%3B%0A++++let+start+%3D+Instant%3A%3Anow%28%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A++++let+time+%3D+Instant%3A%3Anow%28%29+-+start%3B%0A++++println%21%28%22time%3A+%7B%3A.3%7D+seconds%22%2C+time.as_secs_f32%28%29%29%3B%0A%7D
 
+What is a "future"? Well, that's what Part Two is all about. For now, a future
+is the thing that an async function returns.
+
 ## Mistake
 
 We can get our first hint of how all of this works if we make a small mistake,
@@ -132,7 +135,7 @@ function. Try it:
 [`tokio::time::sleep`]: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
 
 ```rust
-LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++std%3A%3Athread%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B+%2F%2F+Oops%21%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+a+thousand+jobs+at+the+same+time...%22%29%3B%0A++++println%21%28%22%5Cn...but+something%27s+not+right...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D1_000+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
+LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+futures%3A%3Afuture%3B%0Ause+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++std%3A%3Athread%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B+%2F%2F+Oops%21%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs+at+the+same+time...%22%29%3B%0A++++println%21%28%22%5Cn...but+something%27s+not+right...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D3+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++future%3A%3Ajoin_all%28futures%29.await%3B%0A%7D
 async fn job(n: u64) {
     println!("start {n}");
     std::thread::sleep(Duration::from_secs(1)); // Oops!
@@ -146,3 +149,12 @@ fails, and what we're learning here is that all of the jobs running "at the
 same time" in the async examples above were actually running on a single
 thread. That's the magic of async. In the next part of this series, we'll dive
 into all the nitty gritty details of how exactly this works.
+
+TODO: This also doesn't work:
+
+```rust
+LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Atime%3A%3ADuration%3B%0A%0Aasync+fn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++tokio%3A%3Atime%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29.await%3B%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0A%23%5Btokio%3A%3Amain%5D%0Aasync+fn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs+at+the+same+time...%22%29%3B%0A++++println%21%28%22%5Cn...but+something%27s+not+right...%5Cn%22%29%3B%0A++++let+mut+futures+%3D+Vec%3A%3Anew%28%29%3B%0A++++for+n+in+1..%3D3+%7B%0A++++++++futures.push%28job%28n%29%29%3B%0A++++%7D%0A++++for+future+in+futures+%7B%0A++++++++future.await%3B+%2F%2F+Oops%21%0A++++%7D%0A%7D
+for future in futures {
+    future.await; // Oops!
+}
+```
