@@ -3,8 +3,14 @@ name = "render_posts"
 version = "0.0.0"
 edition = "2021"
 
+[profile.release]
+debug = true
+
 [dependencies]
 anyhow = "1.0.69"
 html-escape = "0.2.13"
 pulldown-cmark = "0.11.0"
+serde = { version = "1.0.208", features = ["derive"] }
 syntect = "5.0.0"
+toml = "0.8.19"
+url = "2.5.2"

@@ -1,13 +1,15 @@
+use anyhow::Context;
 use pulldown_cmark::{
     BrokenLink, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, ThemeSet};
 use syntect::html::{styled_line_to_highlighted_html, IncludeBackground};
 use syntect::parsing::SyntaxSet;
+use url::Url;
 
 const HEADER: &str = r#"<!DOCTYPE html>
 <!-- rendered by https://github.com/oconnor663/jacko.io/blob/master/render_posts/src/main.rs -->
@@ -34,6 +36,54 @@ const FOOTER: &str = r#"
 </html>
 "#;
 
+#[derive(Debug, serde::Deserialize)]
+struct CargoTomlPackage {
+    edition: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct CargoToml {
+    package: CargoTomlPackage,
+}
+
+fn playground_url(url: Url, markdown_filepath: &Path) -> anyhow::Result<String> {
+    let rust_file = markdown_filepath
+        .parent()
+        .unwrap()
+        .join(url.domain().expect("expected a domain (really a dirname)"))
+        .join(url.path().trim_start_matches('/'));
+    let code = fs::read_to_string(&rust_file)?;
+    // Use the "edition" field in Cargo.toml to set the edition query parameter.
+    let cargo_toml_string = fs::read_to_string(rust_file.parent().unwrap().join("Cargo.toml"))?;
+    let cargo_toml: CargoToml = toml::from_str(&cargo_toml_string)?;
+    let edition = cargo_toml.package.edition;
+    let mut ret = Url::parse("https://play.rust-lang.org")?;
+    // Preserve supplied query parameters, for example mode=release.
+    ret.set_query(url.query());
+    ret.query_pairs_mut().append_pair("edition", &edition);
+    ret.query_pairs_mut().append_pair("code", code.trim());
+    Ok(ret.into())
+}
+
+fn link_url_to_escaped_href(
+    url_str: impl Into<String>,
+    markdown_filepath: &Path,
+) -> anyhow::Result<String> {
+    let url_string = url_str.into();
+    let unescaped = match Url::parse(&url_string) {
+        Ok(parsed) => {
+            if parsed.scheme() == "playground" {
+                playground_url(parsed, markdown_filepath)?
+            } else {
+                url_string
+            }
+        }
+        Err(url::ParseError::RelativeUrlWithoutBase) => url_string,
+        Err(e) => panic!("bad URL: {e}"),
+    };
+    Ok(html_escape::encode_double_quoted_attribute(&unescaped).to_string())
+}
+
 struct Footnote {
     name: String,
     contents_html: String,
@@ -58,10 +108,11 @@ struct Output {
     footnotes: HashMap<String, Footnote>,
     // sorted map of offset to name
     footnote_references: BTreeMap<usize, Vec<String>>,
+    markdown_filepath: PathBuf,
 }
 
 impl Output {
-    fn new() -> Self {
+    fn new(markdown_filepath: impl Into<PathBuf>) -> Self {
         Self {
             document_html: String::new(),
             title_html: String::new(),
@@ -72,6 +123,7 @@ impl Output {
             current_code_block: None,
             footnotes: HashMap::new(),
             footnote_references: BTreeMap::new(),
+            markdown_filepath: markdown_filepath.into(),
         }
     }
 
@@ -172,7 +224,7 @@ impl Output {
         });
     }
 
-    fn finish_code_block(&mut self) {
+    fn finish_code_block(&mut self) -> anyhow::Result<()> {
         let Some(code_block) = self.current_code_block.take() else {
             panic!("not in a codeblock");
         };
@@ -189,7 +241,7 @@ impl Output {
         if let Some(code_link) = &code_lines.link {
             self.document_html += &format!(
                 r#"<div class="code_link"><a href="{}">{}</a></div>"#,
-                html_escape::encode_double_quoted_attribute(&code_link.url),
+                link_url_to_escaped_href(&code_link.url, &self.markdown_filepath)?,
                 html_escape::encode_text(&code_link.text),
             );
         }
@@ -227,22 +279,27 @@ impl Output {
         }
 
         self.document_html += "</code></pre>";
+        Ok(())
     }
 }
 
-fn render_markdown(markdown_input: &str) -> String {
+fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String> {
+    let markdown_input = fs::read_to_string(markdown_filepath.as_ref()).context(format!(
+        "reading markdown file: {}",
+        markdown_filepath.as_ref().to_string_lossy(),
+    ))?;
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_FOOTNOTES);
     let parser = Parser::new_with_broken_link_callback(
-        markdown_input,
+        &markdown_input,
         options,
         Some(|link: BrokenLink| {
             panic!("broken link: \"{}\"", link.reference);
         }),
     );
 
-    let mut output = Output::new();
+    let mut output = Output::new(markdown_filepath.as_ref());
 
     let mut nested_p_tag = false;
     let mut seen_link_ids = HashSet::new();
@@ -300,7 +357,8 @@ fn render_markdown(markdown_input: &str) -> String {
                     }
                     assert!(!dest_url.is_empty());
                     output.push_html(&format!(
-                        r#"<a class="custom-link-color" href="{dest_url}">"#
+                        r#"<a class="custom-link-color" href="{}">"#,
+                        link_url_to_escaped_href(dest_url.as_ref(), markdown_filepath.as_ref())?,
                     ));
                 }
                 Tag::CodeBlock(kind) => {
@@ -332,7 +390,7 @@ fn render_markdown(markdown_input: &str) -> String {
                 TagEnd::Emphasis => output.push_html("</em>"),
                 TagEnd::Link => output.push_html("</a>"),
                 TagEnd::CodeBlock => {
-                    output.finish_code_block();
+                    output.finish_code_block()?;
                 }
                 TagEnd::List(_) => output.push_html("\n</ul>"),
                 TagEnd::Item => output.push_html("</li>"),
@@ -378,11 +436,11 @@ fn render_markdown(markdown_input: &str) -> String {
     }
     document_with_footnotes += &output.document_html[current_offset..];
 
-    HEADER
+    Ok(HEADER
         .replace("__TITLE__", &output.title_html)
         .replace("__SUBTITLE__", &output.subtitle_html)
         + &document_with_footnotes
-        + FOOTER
+        + FOOTER)
 }
 
 struct CodeLink {
@@ -411,7 +469,6 @@ impl CodeLines {
             let link_line = lines.next().unwrap();
             let after_tag = &link_line[link_tag.len()..];
             let (text, url) = after_tag.rsplit_once(' ').expect("no link text?");
-            assert_eq!(&url[0..4], "http");
             assert_eq!(text, text.trim());
             link = Some(CodeLink {
                 text: text.into(),
@@ -438,10 +495,12 @@ fn main() -> anyhow::Result<()> {
         post_paths.insert(entry?.path());
     }
     for path in &post_paths {
+        if path.extension() != Some("md".as_ref()) {
+            continue;
+        }
         let post_name = path.file_name().unwrap().to_string_lossy().to_string();
         println!("rendering {post_name}");
-        let post_markdown = fs::read_to_string(path)?;
-        let post_html = render_markdown(&post_markdown);
+        let post_html = render_markdown(path)?;
         fs::write(
             render_dir.join(post_name.replace(".md", ".html")),
             &post_html,

@@ -15,7 +15,7 @@ Here's an example program that runs three jobs, one at a time. Click the
 Playground link on the right to watch it run:
 
 ```rust
-LINK: Playground https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Atime%3A%3ADuration%3B%0A%0Afn+job%28n%3A+u64%29+%7B%0A++++println%21%28%22start+%7Bn%7D%22%29%3B%0A++++std%3A%3Athread%3A%3Asleep%28Duration%3A%3Afrom_secs%281%29%29%3B%0A++++println%21%28%22end+%7Bn%7D%22%29%3B%0A%7D%0A%0Afn+main%28%29+%7B%0A++++println%21%28%22Run+three+jobs%2C+one+at+a+time...%5Cn%22%29%3B%0A++++job%281%29%3B%0A++++job%282%29%3B%0A++++job%283%29%3B%0A%7D
+LINK: Playground playground://async_playground/intro.rs
 use std::time::Duration;
 
 fn job(n: u64) {
