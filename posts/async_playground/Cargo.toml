@@ -4,7 +4,46 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
+futures = "0.3.30"
+rayon = "1.10.0"
+tokio = { version = "1.39.3", features = ["full"] }
 
 [[bin]]
 name = "intro"
 path = "intro.rs"
+
+[[bin]]
+name = "threads"
+path = "threads.rs"
+
+[[bin]]
+name = "threads_100"
+path = "threads_100.rs"
+
+[[bin]]
+name = "threads_1k"
+path = "threads_1k.rs"
+
+[[bin]]
+name = "rayon"
+path = "rayon.rs"
+
+[[bin]]
+name = "tokio"
+path = "tokio.rs"
+
+[[bin]]
+name = "tokio_1k"
+path = "tokio_1k.rs"
+
+[[bin]]
+name = "tokio_1m"
+path = "tokio_1m.rs"
+
+[[bin]]
+name = "tokio_blocking"
+path = "tokio_blocking.rs"
+
+[[bin]]
+name = "tokio_serial"
+path = "tokio_serial.rs"

@@ -52,10 +52,13 @@ fn playground_url(url: Url, markdown_filepath: &Path) -> anyhow::Result<String> 
         .unwrap()
         .join(url.domain().expect("expected a domain (really a dirname)"))
         .join(url.path().trim_start_matches('/'));
-    let code = fs::read_to_string(&rust_file)?;
+    let code = fs::read_to_string(&rust_file)
+        .context(format!("reading {}", rust_file.to_string_lossy()))?;
     // Use the "edition" field in Cargo.toml to set the edition query parameter.
-    let cargo_toml_string = fs::read_to_string(rust_file.parent().unwrap().join("Cargo.toml"))?;
-    let cargo_toml: CargoToml = toml::from_str(&cargo_toml_string)?;
+    let cargo_toml_file = rust_file.parent().unwrap().join("Cargo.toml");
+    let cargo_toml: CargoToml = toml::from_str(&fs::read_to_string(&cargo_toml_file).context(
+        format!("reading file {}", cargo_toml_file.to_string_lossy()),
+    )?)?;
     let edition = cargo_toml.package.edition;
     let mut ret = Url::parse("https://play.rust-lang.org")?;
     // Preserve supplied query parameters, for example mode=release.
