@@ -1,9 +1,9 @@
-# Async Rust, Part One: What's in it for us?
+# Async Rust, Part One: Why?
 ###### \[date]
 
-- Part One: What's in it for us? (you are here)
-- [Part Two: How does it work?](async_two.html)
-- [Part Three: Choose your own adventure](async_three.html)
+- Part One: Why? (you are here)
+- [Part Two: How?](async_two.html)
+- [Part Three: More!](async_three.html)
 
 When we need a program to do many things at the same time, the most direct
 approach is to use threads. This works well for a small-to-medium number of

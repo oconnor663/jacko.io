@@ -1,9 +1,9 @@
-# Async Rust, Part Two: How does it work?
+# Async Rust, Part Two: How?
 ###### \[date]
 
-- [Part One: What's in it for us?](async_one.html)
-- Part Two: How does it work? (you are here)
-- [Part Three: Choose your own adventure](async_three.html)
+- [Part One: Why?](async_one.html)
+- Part Two: How? (you are here)
+- [Part Three: More!](async_three.html)
 
 In Part One we looked at [some async Rust code][part_one] without explaining
 anything about how it worked. That left us with several mysteries: What's an
