@@ -7,5 +7,9 @@ edition = "2021"
 tokio = { version = "1.39.3", features = ["full"] }
 
 [[bin]]
-name = "error"
-path = "error.rs"
+name = "await"
+path = "await.rs"
+
+[[bin]]
+name = "recursion"
+path = "recursion.rs"

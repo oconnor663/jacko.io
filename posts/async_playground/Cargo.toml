@@ -95,3 +95,23 @@ path = "thread_local.rs"
 [[bin]]
 name = "skip_wakers"
 path = "skip_wakers.rs"
+
+[[bin]]
+name = "timeout"
+path = "timeout.rs"
+
+[[bin]]
+name = "boxed_recursion"
+path = "boxed_recursion.rs"
+
+[[bin]]
+name = "tokio_tasks"
+path = "tokio_tasks.rs"
+
+[[bin]]
+name = "tasks"
+path = "tasks.rs"
+
+[[bin]]
+name = "no_pin"
+path = "no_pin.rs"

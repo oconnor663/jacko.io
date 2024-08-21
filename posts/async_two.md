@@ -60,7 +60,7 @@ struct.[^box_pin] Here's the struct:
 [^compiler_error]: It's a [compiler error] to use `.await` in a non-async
     function.
 
-[compiler error]: playground://async_playground/compiler_errors/error.rs
+[compiler error]: playground://async_playground/compiler_errors/await.rs
 
 [`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
 
