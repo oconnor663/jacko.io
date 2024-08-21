@@ -1,0 +1,11 @@
+[package]
+name = "async_playground_compiler_errors"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.39.3", features = ["full"] }
+
+[[bin]]
+name = "error"
+path = "error.rs"

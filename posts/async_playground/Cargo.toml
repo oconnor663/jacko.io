@@ -47,3 +47,51 @@ path = "tokio_blocking.rs"
 [[bin]]
 name = "tokio_serial"
 path = "tokio_serial.rs"
+
+[[bin]]
+name = "job"
+path = "job.rs"
+
+[[bin]]
+name = "job_timing"
+path = "job_timing.rs"
+
+[[bin]]
+name = "job_blocking"
+path = "job_blocking.rs"
+
+[[bin]]
+name = "join"
+path = "join.rs"
+
+[[bin]]
+name = "sleep_forever"
+path = "sleep_forever.rs"
+
+[[bin]]
+name = "sleep_busy"
+path = "sleep_busy.rs"
+
+[[bin]]
+name = "sleep_many_threads"
+path = "sleep_many_threads.rs"
+
+[[bin]]
+name = "sleep_one_thread"
+path = "sleep_one_thread.rs"
+
+[[bin]]
+name = "loop"
+path = "loop.rs"
+
+[[bin]]
+name = "wakers"
+path = "wakers.rs"
+
+[[bin]]
+name = "thread_local"
+path = "thread_local.rs"
+
+[[bin]]
+name = "skip_wakers"
+path = "skip_wakers.rs"
