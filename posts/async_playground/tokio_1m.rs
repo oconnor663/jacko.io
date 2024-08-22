@@ -8,7 +8,6 @@ async fn foo(_n: u64) {
 
 #[tokio::main]
 async fn main() {
-    println!("Run a million jobs at the same time...\n");
     let start = Instant::now();
     let mut futures = Vec::new();
     for n in 1..=1_000_000 {

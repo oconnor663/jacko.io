@@ -7,10 +7,11 @@ fn foo(n: u64) {
 }
 
 fn main() {
-    println!("Run a thousand threads on a thread pool...");
+    println!("Run a thousand jobs on a thread pool...");
     rayon::scope(|scope| {
         for n in 1..=1_000 {
             scope.spawn(move |_| foo(n));
         }
+        println!("All the jobs have been spawned...");
     });
 }

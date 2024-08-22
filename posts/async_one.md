@@ -11,37 +11,30 @@ jobs, but it runs into problems as the number of threads gets large.
 Async/await can solve those problems. Here in Part 1 we'll demo those problems,
 to get a sense of why we might want to learn async Rust.
 
-Here's an example program with a function `foo` that does some work. It makes
-three calls to `foo`, one at a time. Click the Playground link on the right to
-watch it run:
+## Threads
+
+Here's an example function `foo` that takes a second to run:
 
 ```rust
-LINK: Playground playground://async_playground/intro.rs
-use std::time::Duration;
-
 fn foo(n: u64) {
     println!("start {n}");
     std::thread::sleep(Duration::from_secs(1));
     println!("end {n}");
 }
-
-fn main() {
-    println!("Run three jobs, one at a time...\n");
-    foo(1);
-    foo(2);
-    foo(3);
-}
 ```
 
-## Threads
+If we want to make several calls to `foo` at the same time, we can spawn a
+thread for each one. Click on the Playground button to see that this takes one
+second instead of ten:[^order]
 
-If we put each job on its own thread, the program runs in one second instead of
-three:
+[^order]: You'll probably also see the "start" and "end" prints appear out of
+    order. One of the tricky things about threads is that we don't which one
+    will finish first.
 
 ```rust
 LINK: Playground playground://async_playground/threads.rs
 let mut threads = Vec::new();
-for n in 1..=3 {
+for n in 1..=10 {
     threads.push(std::thread::spawn(move || foo(n)));
 }
 for thread in threads {
@@ -57,7 +50,7 @@ threads][thousand_threads],[^thread_limit] it doesn't work anymore:
 [thousand_threads]: playground://async_playground/threads_1k.rs
 
 [^thread_limit]: On my Linux laptop I can spawn almost 19k threads before I hit
-    this crash, but the Playground is more resource-constrained.
+    this crash, but the Playground has tighter resource limits.
 
 ```
 LINK: Playground playground://async_playground/threads_1k.rs
@@ -88,7 +81,6 @@ Our async `foo` function looks like this:[^tokio]
     There are other options, but this is the most common way to do things.
 
 ```rust
-LINK: Playground playground://async_playground/tokio.rs
 async fn foo(n: u64) {
     println!("start {n}");
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -96,7 +88,7 @@ async fn foo(n: u64) {
 }
 ```
 
-Running three jobs, one at a time looks like this:
+Making a few calls to `foo` one at a time looks like this:
 
 ```rust
 LINK: Playground playground://async_playground/tokio.rs
@@ -105,10 +97,10 @@ foo(2).await;
 foo(3).await;
 ```
 
-And running three jobs at the same time looks like this:
+Making several calls at the same time looks like this:
 
 ```rust
-LINK: Playground playground://async_playground/tokio.rs
+LINK: Playground playground://async_playground/tokio_10.rs
 let mut futures = Vec::new();
 for n in 1..=3 {
     futures.push(foo(n));
@@ -116,12 +108,17 @@ for n in 1..=3 {
 future::join_all(futures).await;
 ```
 
-This approach works even if we bump it up to [a thousand
-jobs][thousand_futures]. In fact, if we [comment out the `println` and build in
-release mode][million_futures], we can run a _million_ jobs at once.
+So far this might look like just another way of doing the same thing we were
+doing with threads. But this works even if we bump it up to [a thousand
+jobs][thousand_futures]. In fact, if we [comment out the prints and build in
+release mode][million_futures], we can run _a million jobs_ at once.[^remember]
 
 [thousand_futures]: playground://async_playground/tokio_1k.rs
 [million_futures]: playground://async_playground/tokio_1m.rs?mode=release
+
+[^remember]: For me this takes about two seconds, so it's spending about as
+    much time working as it is sleeping. And remember this is on the
+    Playground, with tight resource limits.
 
 What exactly is a "future" though? Well, that's what Part Two is all about. For
 now we'll just say that a future is what an async function returns. Let's

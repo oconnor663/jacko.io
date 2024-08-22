@@ -1,3 +1,4 @@
+use futures::future;
 use std::time::Duration;
 
 async fn foo(n: u64) {
@@ -8,12 +9,9 @@ async fn foo(n: u64) {
 
 #[tokio::main]
 async fn main() {
-    println!("These jobs don't run at the same time...");
     let mut futures = Vec::new();
     for n in 1..=10 {
         futures.push(foo(n));
     }
-    for future in futures {
-        future.await; // Oops!
-    }
+    future::join_all(futures).await;
 }

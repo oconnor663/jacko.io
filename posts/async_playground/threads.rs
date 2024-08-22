@@ -7,9 +7,8 @@ fn foo(n: u64) {
 }
 
 fn main() {
-    println!("Run three jobs at the same time...\n");
     let mut threads = Vec::new();
-    for n in 1..=3 {
+    for n in 1..=10 {
         threads.push(std::thread::spawn(move || foo(n)));
     }
     for thread in threads {

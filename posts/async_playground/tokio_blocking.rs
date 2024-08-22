@@ -9,10 +9,9 @@ async fn foo(n: u64) {
 
 #[tokio::main]
 async fn main() {
-    println!("Run three jobs at the same time...");
-    println!("...but something's not right...\n");
+    println!("These jobs don't run at the same time...");
     let mut futures = Vec::new();
-    for n in 1..=3 {
+    for n in 1..=10 {
         futures.push(foo(n));
     }
     future::join_all(futures).await;

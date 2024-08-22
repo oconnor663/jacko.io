@@ -7,7 +7,6 @@ fn foo(n: u64) {
 }
 
 fn main() {
-    println!("Run a thousand jobs at the same time...\n");
     let mut threads = Vec::new();
     for n in 1..=1_000 {
         threads.push(std::thread::spawn(move || foo(n)));
