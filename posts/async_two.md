@@ -41,9 +41,9 @@ We can rewrite it as a regular, non-async function that returns a future:
 
 ```rust
 LINK: Playground playground://async_playground/foo.rs
-fn foo(n: u64) -> FooFuture {
+fn foo(n: u64) -> Foo {
     let sleep_future = tokio::time::sleep(Duration::from_secs(1));
-    FooFuture {
+    Foo {
         n,
         started: false,
         sleep_future: Box::pin(sleep_future),
@@ -76,13 +76,13 @@ struct.[^box_pin] Here's the struct:
 
 ```rust
 LINK: Playground playground://async_playground/foo.rs
-struct FooFuture {
+struct Foo {
     n: u64,
     started: bool,
     sleep_future: Pin<Box<tokio::time::Sleep>>,
 }
 
-impl Future for FooFuture {
+impl Future for Foo {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
@@ -120,26 +120,26 @@ T>` as a `&mut T`, and try not to think about `as_mut` at all.
 
 Ok, with those caveats out of the way, let's get into some details. We finally
 have something more to say about what a "future" is. It's something that
-implements the [`Future`] trait. Our `FooFuture` implements `Future`, so has a
+implements the [`Future`] trait. Our `struct Foo` implements `Future`, so has a
 `poll` method. The `poll` method asks a question: Is the future finished with
 its work? If so, `poll` returns [`Poll::Ready`] with its `Output`.[^no_output]
-If not, `poll` returns [`Poll::Pending`]. We can see that `FooFuture::poll`
-won't return `Ready` until [`Sleep::poll`][Sleep] has returned `Ready`.
+If not, `poll` returns [`Poll::Pending`]. We can see that `Foo::poll` won't
+return `Ready` until [`Sleep::poll`][Sleep] has returned `Ready`.
 
 [`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
 [`Poll::Ready`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 [`Poll::Pending`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 [Sleep]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
 
-[^no_output]: Our original `foo` function had no return value, so `FooFuture`
-    has no `Output`. Rust represents no value with `()`, the empty tuple, also
-    known as the "unit" type. Functions and futures with no return value are
-    used for their side effects, like printing.
+[^no_output]: Our original `foo` function had no return value, so the `Foo`
+    future has no `Output`. Rust represents no value with `()`, the empty
+    tuple, also known as the "unit" type. Functions and futures with no return
+    value are used for their side effects, like printing.
 
 But `poll` isn't just a question. It's also where the work of the future
-happens. When it's time for `foo` to print, it's `FooFuture::poll` that does
-the printing. So there's a compromise: `poll` does as much work as it can get
-done quickly, but whenever it would need to wait or block, it returns `Pending`
+happens. When it's time for `foo` to print, it's `Foo::poll` that does the
+printing. So there's a compromise: `poll` does as much work as it can get done
+quickly, but whenever it would need to wait or block, it returns `Pending`
 instead.[^timing] That way the caller that's asking "Are you finished?" never
 needs to wait for an answer. In return, the caller promises to call `poll`
 again later to let it finish its work.
@@ -149,15 +149,15 @@ again later to let it finish its work.
 
 [timing]: playground://async_playground/foo_timing.rs?mode=release
 
-`FooFuture::poll` doesn't know how many times it's going to be called, and it
+`Foo::poll` doesn't know how many times it's going to be called, and it
 shouldn't print the "start" message more than once, so sets its `started` flag
 to keep track.[^state_machine] It doesn't need to track whether it's printed
 the "end" message, though, because after it returns `Ready` it won't be called
 again.[^iterator]
 
-[^state_machine]: In other words, `FooFuture` is a "state machine" with two
-    states. In general, the number of states you need to track where you are in
-    an `async fn` is the number of `.await` points plus one, but this gets
+[^state_machine]: In other words, `Foo` is a "state machine" with two states.
+    In general, the number of states you need to track where you are in an
+    `async fn` is the number of `.await` points plus one, but this gets
     complicated when there are branches or loops. The magic of async is that
     the compiler figures all this out for us, and we don't usually need to
     write our own `poll` functions like we're doing here.
@@ -171,8 +171,8 @@ again.[^iterator]
 [`Iterator::next`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
 
 We're starting to see how `std::thread::sleep` ruined our performance at the
-end of Part One. If we put a blocking sleep in `FooFuture::poll` instead of
-returning `Pending`, we get [exactly the same result][same_result].
+end of Part One. If we put a blocking sleep in `Foo::poll` instead of returning
+`Pending`, we get [exactly the same result][same_result].
 
 [same_result]: playground://async_playground/foo_blocking.rs
 
@@ -191,8 +191,8 @@ too:[^always_was]
 
 ```rust
 LINK: Playground playground://async_playground/join.rs
-fn join_all<F: Future>(futures: Vec<F>) -> JoinFuture<F> {
-    JoinFuture {
+fn join_all<F: Future>(futures: Vec<F>) -> JoinAll<F> {
+    JoinAll {
         futures: futures.into_iter().map(Box::pin).collect(),
     }
 }
@@ -205,11 +205,11 @@ work happens in the struct:
 
 ```rust
 LINK: Playground playground://async_playground/join.rs
-struct JoinFuture<F> {
+struct JoinAll<F> {
     futures: Vec<Pin<Box<F>>>,
 }
 
-impl<F: Future> Future for JoinFuture<F> {
+impl<F: Future> Future for JoinAll<F> {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
@@ -241,7 +241,7 @@ not supposed to `poll` them again after that.
 
 [`Vec::remove`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.remove
 
-Having seen `FooFuture` above, there's really nothing else new here. From the
+Having seen `Foo` above, there's really nothing else new here. From the
 outside, it feels magical that we can run all these child futures at once, but
 on the inside, all we're doing is calling `poll` on the elements of a `Vec`.
 What makes this work is that each call to `poll` returns quickly, and that when
@@ -311,8 +311,8 @@ a channel][background_thread] will work, but that's a bit complicated...
 [background_thread]: playground://async_playground/sleep_one_thread.rs
 
 What we're seeing here is an important architectural fact about how async Rust
-works. Futures "in the middle", like `FooFuture` and `JoinFuture`, don't really
-need to "know" anything about how the event loop works. But "leaf" futures like
+works. Futures "in the middle", like `Foo` and `JoinAll`, don't really need to
+"know" anything about how the event loop works. But "leaf" futures like
 `SleepFuture` need to coordinate closely with the event loop to schedule
 wakeups. This is why writing runtime-agnostic async libraries is hard.
 

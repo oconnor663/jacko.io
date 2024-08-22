@@ -4,11 +4,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-struct FooFuture {
+struct Foo {
     n: u64,
 }
 
-impl Future for FooFuture {
+impl Future for Foo {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, _context: &mut Context) -> Poll<()> {
@@ -20,8 +20,8 @@ impl Future for FooFuture {
     }
 }
 
-fn foo(n: u64) -> FooFuture {
-    FooFuture { n }
+fn foo(n: u64) -> Foo {
+    Foo { n }
 }
 
 #[tokio::main]

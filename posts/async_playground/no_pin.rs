@@ -60,12 +60,12 @@ fn sleep(duration: Duration) -> SleepFuture {
     SleepFuture { wake_time }
 }
 
-struct FooFuture {
+struct Foo {
     sleep_future: SleepFuture,
     n: u64,
 }
 
-impl Future for FooFuture {
+impl Future for Foo {
     type Output = ();
 
     fn poll(&mut self, context: &mut Context) -> Poll<()> {
@@ -78,9 +78,9 @@ impl Future for FooFuture {
     }
 }
 
-fn foo(n: u64) -> FooFuture {
+fn foo(n: u64) -> Foo {
     let sleep_future = sleep(Duration::from_secs(1));
-    FooFuture { sleep_future, n }
+    Foo { sleep_future, n }
 }
 
 struct JoinFuture<F> {
