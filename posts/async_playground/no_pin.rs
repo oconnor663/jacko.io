@@ -60,12 +60,12 @@ fn sleep(duration: Duration) -> SleepFuture {
     SleepFuture { wake_time }
 }
 
-struct JobFuture {
+struct FooFuture {
     sleep_future: SleepFuture,
     n: u64,
 }
 
-impl Future for JobFuture {
+impl Future for FooFuture {
     type Output = ();
 
     fn poll(&mut self, context: &mut Context) -> Poll<()> {
@@ -78,9 +78,9 @@ impl Future for JobFuture {
     }
 }
 
-fn job(n: u64) -> JobFuture {
+fn foo(n: u64) -> FooFuture {
     let sleep_future = sleep(Duration::from_secs(1));
-    JobFuture { sleep_future, n }
+    FooFuture { sleep_future, n }
 }
 
 struct JoinFuture<F> {
@@ -108,7 +108,7 @@ fn join_all<F: Future>(futures: Vec<F>) -> JoinFuture<F> {
 fn main() {
     let mut futures = Vec::new();
     for n in 1..=1_000 {
-        futures.push(job(n));
+        futures.push(foo(n));
     }
     let mut main_future = join_all(futures);
     while main_future.poll(&mut Context {}).is_pending() {

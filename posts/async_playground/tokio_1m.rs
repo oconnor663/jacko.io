@@ -1,7 +1,7 @@
 use futures::future;
 use std::time::{Duration, Instant};
 
-async fn job(_n: u64) {
+async fn foo(_n: u64) {
     // Don't print. A million prints is too much output for the Playground.
     tokio::time::sleep(Duration::from_secs(1)).await;
 }
@@ -12,7 +12,7 @@ async fn main() {
     let start = Instant::now();
     let mut futures = Vec::new();
     for n in 1..=1_000_000 {
-        futures.push(job(n));
+        futures.push(foo(n));
     }
     future::join_all(futures).await;
     let time = Instant::now() - start;

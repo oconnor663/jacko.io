@@ -4,11 +4,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-struct JobFuture {
+struct FooFuture {
     n: u64,
 }
 
-impl Future for JobFuture {
+impl Future for FooFuture {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, _context: &mut Context) -> Poll<()> {
@@ -20,8 +20,8 @@ impl Future for JobFuture {
     }
 }
 
-fn job(n: u64) -> JobFuture {
-    JobFuture { n }
+fn foo(n: u64) -> FooFuture {
+    FooFuture { n }
 }
 
 #[tokio::main]
@@ -30,7 +30,7 @@ async fn main() {
     println!("\n...but something's not right...\n");
     let mut futures = Vec::new();
     for n in 1..=1_000 {
-        futures.push(job(n));
+        futures.push(foo(n));
     }
     future::join_all(futures).await;
 }

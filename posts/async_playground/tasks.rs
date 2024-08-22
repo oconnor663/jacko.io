@@ -40,16 +40,16 @@ fn spawn_task<F: Future<Output = ()> + Send + 'static>(future: F) {
     TASK_SENDER.get().unwrap().send(Box::pin(future)).unwrap();
 }
 
-async fn job(n: u64) {
+async fn foo(n: u64) {
     sleep(Duration::from_secs(1)).await;
-    println!("finished job {n}");
+    println!("finished foo {n}");
 }
 
 async fn async_main() {
     println!("Spawn 10 tasks in 2 seconds and wait for all of them to finish.\n");
     for n in 1..=10 {
-        spawn_task(job(n));
-        println!("started job {n}");
+        spawn_task(foo(n));
+        println!("started foo {n}");
         sleep(Duration::from_millis(200)).await;
     }
     // NOTE: Tokio exits when the main task is finished, so we need to collect task
@@ -61,8 +61,8 @@ fn main() {
     let (task_sender, task_receiver) = channel();
     TASK_SENDER.set(task_sender).unwrap();
     let mut context = Context::from_waker(noop_waker_ref());
-    println!("Start with one task (many_jobs), which spawns");
-    println!("ten other tasks (job) in two seconds.\n");
+    println!("Start with one task (async_main), which spawns");
+    println!("ten other tasks (foo) in two seconds.\n");
     let mut tasks: Vec<BoxedFuture> = vec![Box::pin(async_main())];
     loop {
         // Poll all existing tasks, removing any that are finished.

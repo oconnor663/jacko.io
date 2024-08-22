@@ -18,7 +18,7 @@ What does `#[tokio::main]` actually do?
 
 I think the best way to answer these questions is to translate each piece into
 normal, non-async Rust code and stare at it for a while. We'll find that we can
-replicate `job` and `join_all` without too much trouble, but writing our own
+replicate `foo` and `join_all` without too much trouble, but writing our own
 `sleep` is going to be a whole different story.[^universe] Here we go.
 
 [^universe]: [If you wish to make an apple pie from scratch, you must first
@@ -26,11 +26,11 @@ replicate `job` and `join_all` without too much trouble, but writing our own
 
 ## Job
 
-As a reminder, here's what `job` looked like when it was an `async fn`:
+As a reminder, here's what `foo` looked like when it was an `async fn`:
 
 ```rust
 LINK: Playground playground://async_playground/tokio.rs
-async fn job(n: u64) {
+async fn foo(n: u64) {
     println!("start {n}");
     tokio::time::sleep(Duration::from_secs(1)).await;
     println!("end {n}");
@@ -40,10 +40,10 @@ async fn job(n: u64) {
 We can rewrite it as a regular, non-async function that returns a future:
 
 ```rust
-LINK: Playground playground://async_playground/job.rs
-fn job(n: u64) -> JobFuture {
+LINK: Playground playground://async_playground/foo.rs
+fn foo(n: u64) -> FooFuture {
     let sleep_future = tokio::time::sleep(Duration::from_secs(1));
-    JobFuture {
+    FooFuture {
         n,
         started: false,
         sleep_future: Box::pin(sleep_future),
@@ -75,14 +75,14 @@ struct.[^box_pin] Here's the struct:
 [^box_pin]: Wait a minute, what's `Box::pin`? Hold that thought for just a moment.
 
 ```rust
-LINK: Playground playground://async_playground/job.rs
-struct JobFuture {
+LINK: Playground playground://async_playground/foo.rs
+struct FooFuture {
     n: u64,
     started: bool,
     sleep_future: Pin<Box<tokio::time::Sleep>>,
 }
 
-impl Future for JobFuture {
+impl Future for FooFuture {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
@@ -120,10 +120,10 @@ T>` as a `&mut T`, and try not to think about `as_mut` at all.
 
 Ok, with those caveats out of the way, let's get into some details. We finally
 have something more to say about what a "future" is. It's something that
-implements the [`Future`] trait. Our `JobFuture` implements `Future`, so has a
+implements the [`Future`] trait. Our `FooFuture` implements `Future`, so has a
 `poll` method. The `poll` method asks a question: Is the future finished with
 its work? If so, `poll` returns [`Poll::Ready`] with its `Output`.[^no_output]
-If not, `poll` returns [`Poll::Pending`]. We can see that `JobFuture::poll`
+If not, `poll` returns [`Poll::Pending`]. We can see that `FooFuture::poll`
 won't return `Ready` until [`Sleep::poll`][Sleep] has returned `Ready`.
 
 [`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
@@ -131,13 +131,13 @@ won't return `Ready` until [`Sleep::poll`][Sleep] has returned `Ready`.
 [`Poll::Pending`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 [Sleep]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
 
-[^no_output]: Our original `job` function had no return value, so `JobFuture`
+[^no_output]: Our original `foo` function had no return value, so `FooFuture`
     has no `Output`. Rust represents no value with `()`, the empty tuple, also
     known as the "unit" type. Functions and futures with no return value are
     used for their side effects, like printing.
 
 But `poll` isn't just a question. It's also where the work of the future
-happens. When it's time for `job` to print, it's `JobFuture::poll` that does
+happens. When it's time for `foo` to print, it's `FooFuture::poll` that does
 the printing. So there's a compromise: `poll` does as much work as it can get
 done quickly, but whenever it would need to wait or block, it returns `Pending`
 instead.[^timing] That way the caller that's asking "Are you finished?" never
@@ -147,15 +147,15 @@ again later to let it finish its work.
 [^timing]: We can [add some timing and logging][timing] around the call to
     `Sleep::poll` to see that it always returns quickly too.
 
-[timing]: playground://async_playground/job_timing.rs?mode=release
+[timing]: playground://async_playground/foo_timing.rs?mode=release
 
-`JobFuture::poll` doesn't know how many times it's going to be called, and it
+`FooFuture::poll` doesn't know how many times it's going to be called, and it
 shouldn't print the "start" message more than once, so sets its `started` flag
 to keep track.[^state_machine] It doesn't need to track whether it's printed
 the "end" message, though, because after it returns `Ready` it won't be called
 again.[^iterator]
 
-[^state_machine]: In other words, `JobFuture` is a "state machine" with two
+[^state_machine]: In other words, `FooFuture` is a "state machine" with two
     states. In general, the number of states you need to track where you are in
     an `async fn` is the number of `.await` points plus one, but this gets
     complicated when there are branches or loops. The magic of async is that
@@ -171,16 +171,16 @@ again.[^iterator]
 [`Iterator::next`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
 
 We're starting to see how `std::thread::sleep` ruined our performance at the
-end of Part One. If we put a blocking sleep in `JobFuture::poll` instead of
+end of Part One. If we put a blocking sleep in `FooFuture::poll` instead of
 returning `Pending`, we get [exactly the same result][same_result].
 
-[same_result]: playground://async_playground/job_blocking.rs
+[same_result]: playground://async_playground/foo_blocking.rs
 
 Onward!
 
 ## Join
 
-It might seem like `join_all` is doing something much more magical than `job`,
+It might seem like `join_all` is doing something much more magical than `foo`,
 but now that we've seen the moving parts of a future, it turns out we already
 have everything we need. Let's make `join_all` into a non-async function
 too:[^always_was]
@@ -241,7 +241,7 @@ not supposed to `poll` them again after that.
 
 [`Vec::remove`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.remove
 
-Having seen `JobFuture` above, there's really nothing else new here. From the
+Having seen `FooFuture` above, there's really nothing else new here. From the
 outside, it feels magical that we can run all these child futures at once, but
 on the inside, all we're doing is calling `poll` on the elements of a `Vec`.
 What makes this work is that each call to `poll` returns quickly, and that when
@@ -249,7 +249,7 @@ we return `Pending` we get called again later.
 
 Note that we're taking a shortcut by ignoring the outputs of child
 futures.[^payload] We can get away with that because we only use our version of
-`join_all` with `job`, which has no return value. The real `join_all` returns a
+`join_all` with `foo`, which has no return value. The real `join_all` returns a
 `Vec<F::Output>`, and it need to do some more bookkeeping.
 
 [^payload]: Specifically, when we call `.is_pending()` on the result of `poll`,
@@ -311,7 +311,7 @@ a channel][background_thread] will work, but that's a bit complicated...
 [background_thread]: playground://async_playground/sleep_one_thread.rs
 
 What we're seeing here is an important architectural fact about how async Rust
-works. Futures "in the middle", like `JobFuture` and `JoinFuture`, don't really
+works. Futures "in the middle", like `FooFuture` and `JoinFuture`, don't really
 need to "know" anything about how the event loop works. But "leaf" futures like
 `SleepFuture` need to coordinate closely with the event loop to schedule
 wakeups. This is why writing runtime-agnostic async libraries is hard.
@@ -326,7 +326,7 @@ LINK: Playground playground://async_playground/loop.rs
 fn main() {
     let mut futures = Vec::new();
     for n in 1..=1_000 {
-        futures.push(job(n));
+        futures.push(foo(n));
     }
     let mut main_future = Box::pin(future::join_all(futures));
     let mut context = Context::from_waker(noop_waker_ref());

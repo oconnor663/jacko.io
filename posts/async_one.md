@@ -11,14 +11,15 @@ jobs, but it runs into problems as the number of threads gets large.
 Async/await can solve those problems. Here in Part 1 we'll demo those problems,
 to get a sense of why we might want to learn async Rust.
 
-Here's an example program that runs three jobs, one at a time. Click the
-Playground link on the right to watch it run:
+Here's an example program with a function `foo` that does some work. It makes
+three calls to `foo`, one at a time. Click the Playground link on the right to
+watch it run:
 
 ```rust
 LINK: Playground playground://async_playground/intro.rs
 use std::time::Duration;
 
-fn job(n: u64) {
+fn foo(n: u64) {
     println!("start {n}");
     std::thread::sleep(Duration::from_secs(1));
     println!("end {n}");
@@ -26,9 +27,9 @@ fn job(n: u64) {
 
 fn main() {
     println!("Run three jobs, one at a time...\n");
-    job(1);
-    job(2);
-    job(3);
+    foo(1);
+    foo(2);
+    foo(3);
 }
 ```
 
@@ -41,7 +42,7 @@ three:
 LINK: Playground playground://async_playground/threads.rs
 let mut threads = Vec::new();
 for n in 1..=3 {
-    threads.push(std::thread::spawn(move || job(n)));
+    threads.push(std::thread::spawn(move || foo(n)));
 }
 for thread in threads {
     thread.join().unwrap();
@@ -80,7 +81,7 @@ want to run thousands of jobs at once, we need something different.
 
 Let's try the same thing with async/await. Part Two will go into all the
 details, but for now I just want to type it out and run it on the Playground.
-Our async `job` function looks like this:[^tokio]
+Our async `foo` function looks like this:[^tokio]
 
 [^tokio]: Most of these examples will use the [Tokio](https://tokio.rs/)
     runtime and the [`futures`](https://docs.rs/futures/) support library.
@@ -88,7 +89,7 @@ Our async `job` function looks like this:[^tokio]
 
 ```rust
 LINK: Playground playground://async_playground/tokio.rs
-async fn job(n: u64) {
+async fn foo(n: u64) {
     println!("start {n}");
     tokio::time::sleep(Duration::from_secs(1)).await;
     println!("end {n}");
@@ -99,9 +100,9 @@ Running three jobs, one at a time looks like this:
 
 ```rust
 LINK: Playground playground://async_playground/tokio.rs
-job(1).await;
-job(2).await;
-job(3).await;
+foo(1).await;
+foo(2).await;
+foo(3).await;
 ```
 
 And running three jobs at the same time looks like this:
@@ -110,7 +111,7 @@ And running three jobs at the same time looks like this:
 LINK: Playground playground://async_playground/tokio.rs
 let mut futures = Vec::new();
 for n in 1..=3 {
-    futures.push(job(n));
+    futures.push(foo(n));
 }
 future::join_all(futures).await;
 ```
@@ -138,7 +139,7 @@ function. Try it:
 
 ```rust
 LINK: Playground playground://async_playground/tokio_blocking.rs
-async fn job(n: u64) {
+async fn foo(n: u64) {
     println!("start {n}");
     std::thread::sleep(Duration::from_secs(1)); // Oops!
     println!("end {n}");

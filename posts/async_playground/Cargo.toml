@@ -4,7 +4,9 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
+crossbeam-channel = "0.5.13"
 futures = "0.3.30"
+rand = "0.8.5"
 rayon = "1.10.0"
 tokio = { version = "1.39.3", features = ["full"] }
 
@@ -49,16 +51,16 @@ name = "tokio_serial"
 path = "tokio_serial.rs"
 
 [[bin]]
-name = "job"
-path = "job.rs"
+name = "foo"
+path = "foo.rs"
 
 [[bin]]
-name = "job_timing"
-path = "job_timing.rs"
+name = "foo_timing"
+path = "foo_timing.rs"
 
 [[bin]]
-name = "job_blocking"
-path = "job_blocking.rs"
+name = "foo_blocking"
+path = "foo_blocking.rs"
 
 [[bin]]
 name = "join"

@@ -5,11 +5,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-async fn job(_n: u64) {
+async fn foo(_n: u64) {
     let mut rng = rand::thread_rng();
     let sleep_seconds = rng.gen_range(0.0..100.0);
     tokio::time::sleep(Duration::from_secs_f32(sleep_seconds)).await;
-    println!("job finished in {sleep_seconds:.3} seconds");
+    println!("foo finished in {sleep_seconds:.3} seconds");
 }
 
 struct Timeout<F> {
@@ -46,7 +46,7 @@ async fn main() {
     println!("average only 10 jobs will finish.\n");
     let mut futures = Vec::new();
     for n in 1..=1_000 {
-        futures.push(job(n));
+        futures.push(foo(n));
     }
     let all = future::join_all(futures);
     timeout(all, Duration::from_secs(1)).await;

@@ -72,7 +72,7 @@ fn sleep(duration: Duration) -> SleepFuture {
     SleepFuture { wake_time }
 }
 
-async fn job(n: u64) {
+async fn foo(n: u64) {
     sleep(Duration::from_secs(1)).await;
     println!("{n}");
 }
@@ -81,7 +81,7 @@ async fn job(n: u64) {
 async fn main() {
     let mut futures = Vec::new();
     for n in 1..=1_000 {
-        futures.push(job(n));
+        futures.push(foo(n));
     }
     future::join_all(futures).await;
 }

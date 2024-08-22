@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-async fn job(n: u64) {
+async fn foo(n: u64) {
     println!("start {n}");
     tokio::time::sleep(Duration::from_secs(1)).await;
     println!("end {n}");
@@ -12,7 +12,7 @@ async fn main() {
     println!("...but something's not right...\n");
     let mut futures = Vec::new();
     for n in 1..=3 {
-        futures.push(job(n));
+        futures.push(foo(n));
     }
     for future in futures {
         future.await; // Oops!
