@@ -122,10 +122,12 @@ release mode][million_futures], we can run a _million_ jobs at once.
 [thousand_futures]: playground://async_playground/tokio_1k.rs
 [million_futures]: playground://async_playground/tokio_1m.rs?mode=release
 
-What is a "future"? Well, that's what Part Two is all about. For now, a future
-is the thing that an async function returns.
+What exactly is a "future" though? Well, that's what Part Two is all about. For
+now we'll just say that a future is what an async function returns. Let's
+finish up by making a couple small mistakes with futures and seeing what
+happens.
 
-## Mistake
+## Mistakes
 
 We can get our first hint of how all of this works if we make a small mistake,
 using [`std::thread::sleep`] instead of [`tokio::time::sleep`] in our async
