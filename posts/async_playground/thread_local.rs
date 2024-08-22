@@ -37,13 +37,14 @@ fn sleep(duration: Duration) -> SleepFuture {
 }
 
 async fn foo(n: u64) {
+    println!("start {n}");
     sleep(Duration::from_secs(1)).await;
-    println!("{n}");
+    println!("end {n}");
 }
 
 fn main() {
     let mut futures = Vec::new();
-    for n in 1..=1_000 {
+    for n in 1..=10 {
         futures.push(foo(n));
     }
     let mut main_future = Box::pin(future::join_all(futures));

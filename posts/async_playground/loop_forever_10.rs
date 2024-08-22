@@ -1,4 +1,5 @@
 use futures::future;
+use futures::task::noop_waker_ref;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -11,11 +12,10 @@ struct SleepFuture {
 impl Future for SleepFuture {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
+    fn poll(self: Pin<&mut Self>, _: &mut Context) -> Poll<()> {
         if self.wake_time <= Instant::now() {
             Poll::Ready(())
         } else {
-            context.waker().wake_by_ref();
             Poll::Pending
         }
     }
@@ -32,11 +32,14 @@ async fn foo(n: u64) {
     println!("end {n}");
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let mut futures = Vec::new();
     for n in 1..=10 {
         futures.push(foo(n));
     }
-    future::join_all(futures).await;
+    let mut main_future = Box::pin(future::join_all(futures));
+    let mut context = Context::from_waker(noop_waker_ref());
+    while main_future.as_mut().poll(&mut context).is_pending() {
+        // Busy loop!
+    }
 }

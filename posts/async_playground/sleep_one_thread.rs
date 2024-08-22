@@ -73,8 +73,9 @@ fn sleep(duration: Duration) -> SleepFuture {
 }
 
 async fn foo(n: u64) {
+    println!("start {n}");
     sleep(Duration::from_secs(1)).await;
-    println!("{n}");
+    println!("end {n}");
 }
 
 #[tokio::main]

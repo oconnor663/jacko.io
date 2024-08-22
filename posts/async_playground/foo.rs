@@ -38,14 +38,8 @@ fn foo(n: u64) -> Foo {
 
 #[tokio::main]
 async fn main() {
-    println!("Run three jobs, one at a time...\n");
-    foo(1).await;
-    foo(2).await;
-    foo(3).await;
-
-    println!("\nRun three jobs at the same time...\n");
     let mut futures = Vec::new();
-    for n in 1..=3 {
+    for n in 1..=10 {
         futures.push(foo(n));
     }
     future::join_all(futures).await;

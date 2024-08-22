@@ -87,16 +87,20 @@ name = "loop"
 path = "loop.rs"
 
 [[bin]]
+name = "loop_forever_10"
+path = "loop_forever_10.rs"
+
+[[bin]]
+name = "loop_forever_100"
+path = "loop_forever_100.rs"
+
+[[bin]]
 name = "wakers"
 path = "wakers.rs"
 
 [[bin]]
 name = "thread_local"
 path = "thread_local.rs"
-
-[[bin]]
-name = "skip_wakers"
-path = "skip_wakers.rs"
 
 [[bin]]
 name = "timeout"

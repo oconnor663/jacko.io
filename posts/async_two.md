@@ -24,12 +24,12 @@ replicate `foo` and `join_all` without too much trouble, but writing our own
 [^universe]: [If you wish to make an apple pie from scratch, you must first
     invent the universe.](https://youtu.be/BkHCO8f2TWs?si=gIfadwLGsvawJ3qn)
 
-## Job
+## Foo
 
 As a reminder, here's what `foo` looked like when it was an `async fn`:
 
 ```rust
-LINK: Playground playground://async_playground/tokio.rs
+LINK: Playground playground://async_playground/tokio_10.rs
 async fn foo(n: u64) {
     println!("start {n}");
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -37,7 +37,19 @@ async fn foo(n: u64) {
 }
 ```
 
-We can rewrite it as a regular, non-async function that returns a future:
+We can rewrite it as a regular, non-async function that returns a `Foo`
+struct:[^convention]
+
+[^convention]: It's conventional to use the same name for an async function
+    (lowercase) and for the future it returns (uppercase). This is similar to
+    how we name iterators. For example [`zip`][zip_fn] returns
+    [`Zip`][zip_iter], and [`map`][map_fn] returns [`Map`][map_iter]. Futures
+    and iterators have a lot in common.
+
+[zip_fn]: https://doc.rust-lang.org/std/iter/fn.zip.html
+[zip_iter]: https://doc.rust-lang.org/std/iter/struct.Zip.html
+[map_fn]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map
+[map_iter]: https://doc.rust-lang.org/std/iter/struct.Map.html
 
 ```rust
 LINK: Playground playground://async_playground/foo.rs
@@ -51,11 +63,9 @@ fn foo(n: u64) -> Foo {
 }
 ```
 
-You might want to open both versions on the Playground and look at them side by
-side. Notice that the non-async version calls `tokio::time::sleep` but doesn't
-`.await`[^compiler_error] the [`Sleep`] future that `sleep`
-returns.[^uppercase] Instead it stores the `Sleep` future in a new
-struct.[^box_pin] Here's the struct:
+The non-async version calls `tokio::time::sleep`, but it doesn't `.await` the
+[`Sleep`] future.[^compiler_error] Instead it stores it in the `Foo`
+struct:[^box_pin]
 
 [^compiler_error]: It's a [compiler error] to use `.await` in a non-async
     function.
@@ -63,14 +73,6 @@ struct.[^box_pin] Here's the struct:
 [compiler error]: playground://async_playground/compiler_errors/await.rs
 
 [`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
-
-[^uppercase]: To repeat, `sleep` (lowercase) is an async function and `Sleep`
-    (uppercase) is the future that it returns. It's confusing, but it's similar
-    to how the [`map`] method on iterators returns an iterator called [`Map`].
-    Futures and iterators have a lot in common, as we'll see.
-
-[`map`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map
-[`Map`]: https://doc.rust-lang.org/std/iter/struct.Map.html
 
 [^box_pin]: Wait a minute, what's `Box::pin`? Hold that thought for just a moment.
 
@@ -100,36 +102,33 @@ impl Future for Foo {
 }
 ```
 
-This is a lot to take in all at once. Before we even get started, I want to set
+This is a lot to take in all at once. Before we even get started, let's set
 aside a couple things that we're not going to explain until later. The first is
 the `Context` argument. We'll look at that below when we implement `sleep`. The
-second is `Pin`. We'll come back to `Pin` in Part Three, but for now if you'll
-forgive me, I'm going to bend the truth a little bit: `Pin` doesn't do
-anything.[^lies] Think of `Pin<Box<T>>` as `Box<T>`,[^box] think of `Pin<&mut
-T>` as a `&mut T`, and try not to think about `as_mut` at all.
+second is `Pin`. We'll come back to `Pin` in Part Three, but for now, if you'll
+forgive me, I'm going to bend the truth a little: `Pin` doesn't do anything.
+Think of `Pin<Box<T>>` as `Box<T>`,[^box] think of `Pin<&mut T>` as a `&mut T`,
+and try not to think about `as_mut` at all.
 
-[^lies]: As far as lies go, this one is surprisingly close to the truth.
-
-[^box]: And if you haven't seen [`Box<T>`][box] before, that's just `T` "on the
-    heap". The difference between the "stack" and the "heap" is an important
-    part of systems programming, but for now we're skipping over all the
-    details that aren't absolutely necessary. They'll be easier to remember
-    once you know how the story ends.
+[^box]: If you haven't seen [`Box<T>`][box] before, it's `T` "on the heap",
+    which you can think of it as just `T`.
 
 [box]: https://doc.rust-lang.org/std/boxed/struct.Box.html
 
 Ok, with those caveats out of the way, let's get into some details. We finally
 have something more to say about what a "future" is. It's something that
-implements the [`Future`] trait. Our `struct Foo` implements `Future`, so has a
-`poll` method. The `poll` method asks a question: Is the future finished with
-its work? If so, `poll` returns [`Poll::Ready`] with its `Output`.[^no_output]
-If not, `poll` returns [`Poll::Pending`]. We can see that `Foo::poll` won't
-return `Ready` until [`Sleep::poll`][Sleep] has returned `Ready`.
+implements the [`Future`] trait. `Foo` implements `Future`[^footure] and has a
+`poll` method. The `poll` method asks a question: Is this future finished? If
+so, it returns [`Poll::Ready`] with its `Output`.[^no_output] If not, it
+returns [`Poll::Pending`]. We can see that `Foo::poll` won't return `Ready`
+until [`Sleep::poll`][Sleep] has returned `Ready`.
 
 [`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
 [`Poll::Ready`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 [`Poll::Pending`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 [Sleep]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
+
+[^footure]: *Foo*ture :)
 
 [^no_output]: Our original `foo` function had no return value, so the `Foo`
     future has no `Output`. Rust represents no value with `()`, the empty
@@ -302,8 +301,8 @@ fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
 ```
 
 The simplest way to avoid a busy wait is to spawn a thread to wake us up later.
-If [each future spawned its own thread][same_crash], we'd run into the same
-crash as in Part One. [A single background thread that collects wakers through
+But if each future spawns a thread, we might run into [the same crash as in
+Part One][same_crash]. [A single background thread that collects wakers through
 a channel][background_thread] will work, but that's a bit complicated...
 
 [same_crash]: playground://async_playground/sleep_many_threads.rs
@@ -337,7 +336,15 @@ fn main() {
 ```
 
 NOTE HERE: Even though our loop is always polling, we still need the wakers. If
-we don't call `wake()` our program never finishes.
+we don't call `wake()`, our program will [appear to work at
+first][loop_forever_10]. But then when we bump the number of jobs up to a
+hundred, [it stops working][loop_forever_100].[^cutoff]
+
+[loop_forever_10]: playground://async_playground/loop_forever_10.rs
+[loop_forever_100]: playground://async_playground/loop_forever_100.rs
+
+[^cutoff]: As of `futures` v0.3.30, the exact cutoff is
+    [thirty-one](https://github.com/rust-lang/futures-rs/blob/0.3.30/futures-util/src/future/join_all.rs#L35).
 
 Now instead of busy looping, we can tell that loop how long to sleep. Let's add
 a global:[^thread_local]
@@ -368,22 +375,7 @@ fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
 }
 ```
 
-And finally the main polling loop can read from it:[^instant_only] [^hold_lock]
-
-[^instant_only]: You might wonder why we bother calling `wake` here. Our
-    top-level `Waker` is a no-op, we've already finished sleeping, and we're
-    about to poll again, so what's the point? Well, it turns out that fancy
-    combinators like [`JoinAll`] (not our simple version above, but the real
-    one from [`futures`]) create a unique `Waker` internally for each of their
-    children, and [they only poll children that have been awakened][skip_wake].
-    This sort of thing is why [the docs for `Poll::Pending`][contract] say we
-    must eventually wake the "current task".
-
-[`JoinAll`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
-[`futures`]: https://docs.rs/futures
-[contract]: https://doc.rust-lang.org/std/task/enum.Poll.html#variant.Pending
-
-[skip_wake]: playground://async_playground/skip_wakers.rs
+And finally the main polling loop can read from it: [^hold_lock]
 
 [^hold_lock]: We're holding the `WAKERS` lock while we sleep here, which is a
     little sketchy, but it doesn't matter in this single-threaded example. A
