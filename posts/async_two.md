@@ -88,42 +88,55 @@ struct Foo {
 Ok so apparently [`Box::pin`] returns a [`Pin::<Box<T>>`][struct_pin]. We're
 about to see a lot of this `Pin` business, so I need to say something about it.
 The whole story is big and fascinating and actually kind of
-beautiful,[^beautiful] and we'll come back to it in Part Three, but for now I'm
-going to take an unorthodox teaching strategy. I'm going to [just go on the
-internet and tell lies][lies].
-
-[lies]: https://www.youtube.com/watch?v=iHrZRJR4igQ&t=10s
-
-(Lies.) `Pin` does nothing.[^truth] `Pin<Box<T>>` is the same as `Box<T>`,
-which is the same as `T`. We're about to see `.as_mut()`, which returns
-`Pin<&mut T>`, which is the same as `&mut T`. (/Lies.) For the rest of Part
-Two, please ignore these details.
+beautiful.[^beautiful] We'll come back to it in Part Three.[^whole_story] But
+for now, I'm going to take an…unorthodox teaching strategy. I'm going to [just
+go on the internet and tell lies][lies].
 
 [struct_pin]: https://doc.rust-lang.org/std/pin/struct.Pin.html
 
-[^beautiful]: "Most importantly, \[futures\] are not meant to be _always
+[^beautiful]: “Most importantly, these objects are not meant to be _always
     immovable_. Instead, they are meant to be freely moved for a certain period
     of their lifecycle, and at a certain point they should stop being moved
     from then on. That way, you can move a self-referential future around as
     you compose it with other futures until eventually you put it into the
     place it will live for as long as you poll it. So we needed a way to
     express that an object is no longer allowed to be moved; in other words,
-    that it is _pinned in place_." If you want the whole story right now, read
-    [that whole post from the inventor of Pin][pin_post], and then read [the
-    `std::pin` module docs][pin_docs].
+    that it is ‘pinned in place.’” - [without.boats/blog/pin][pin_post]
 
-[^truth]: As far as lies go, this one is pretty close to the truth. `Pin`'s job
-    is to _prevent_ certain things in safe code, namely, moving certain futures
-    after they've been polled. It's sort of like how a shared reference can
-    prevent mutation, but the reference itself doesn't really _do_ anything.
-    It's more like permission.
+[^whole_story]: If you want the whole story right now, read [the post I just
+    quoted][pin_post] from the inventor of `Pin`, and then read [the `std::pin`
+    module docs][pin_docs].
 
 [pin_docs]: https://doc.rust-lang.org/std/pin
 [pin_post]: https://without.boats/blog/pin
 
-...
+[lies]: https://www.youtube.com/watch?v=iHrZRJR4igQ&t=10s
 
-Seriously? Why even put all these details on the page if we're just supposed to
+`Pin` does nothing.[^truth] `Pin<Box<T>>` is the same as [`Box<T>`], which is
+the same as `T`.[^box] We're about to see `.as_mut()`, which returns `Pin<&mut
+T>`, which is the same as `&mut T`. For the rest of Part Two, please try to
+ignore `Pin`.
+
+[^truth]: As far as lies go, this one is pretty close to the truth. `Pin`'s job
+    is to _prevent_ certain things in safe code, namely, moving certain futures
+    after they've been polled. It's like how a shared reference prevents
+    mutation. The reference itself doesn't really _do_ anything; it just
+    represents not having permission.
+
+[`Box<T>`]: https://doc.rust-lang.org/std/boxed/struct.Box.html
+
+[^box]: This is arguably a bigger lie, because unlike `Pin`, `Box<T>` actually
+    _does_ something: it puts `T` "on the heap". I'm using `Box::pin` as
+    shortcut to avoid talking about ["pin projection"][projection]. However,
+    it's important to note that most futures in Rust are _not_ heap allocated,
+    at least not individually. This is different from coroutines in C++20,
+    which are automatically heap allocated.
+
+[projection]: https://doc.rust-lang.org/std/pin/index.html#projections-and-structural-pinning
+
+…
+
+Seriously? Why put all these details on the page if we're just supposed to
 ignore them? The reason is that they're an unavoidable part of the [`Future`]
 trait, and `Foo`'s whole purpose in life is to implement that trait. So with
 all that in mind, here's where the magic happens:
