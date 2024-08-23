@@ -9,7 +9,13 @@ When we need a program to do many things at the same time, the most direct
 approach is to use threads. This works well for a small-to-medium number of
 jobs, but it runs into problems as the number of threads gets large.
 Async/await can solve those problems. Here in Part 1 we'll demo those problems,
-to get a sense of why we might want to learn async Rust.
+to get a sense of why we might want to learn async Rust.[^traits]
+
+[^traits]: I'm going to assume you've read [The Book] or similar, particularly
+    [the part about generics and traits][traits].
+
+[The Book]: https://doc.rust-lang.org/book/
+[traits]: https://doc.rust-lang.org/book/ch10-00-generics.html
 
 ## Threads
 

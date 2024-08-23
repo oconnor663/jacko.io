@@ -352,10 +352,6 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
                 Tag::Emphasis => output.push_html("<em>"),
                 Tag::Link { dest_url, id, .. } => {
                     if !id.is_empty() {
-                        assert!(
-                            !seen_link_ids.contains(&id),
-                            "link ID \"{id}\" used more than once",
-                        );
                         seen_link_ids.insert(id);
                     }
                     assert!(!dest_url.is_empty());

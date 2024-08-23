@@ -37,19 +37,7 @@ async fn foo(n: u64) {
 }
 ```
 
-We can rewrite it as a regular, non-async function that returns a `Foo`
-struct:[^convention]
-
-[^convention]: It's conventional to use the same name for an async function
-    (lowercase) and for the future it returns (uppercase). This is similar to
-    how we name iterators. For example [`zip`][zip_fn] returns
-    [`Zip`][zip_iter], and [`map`][map_fn] returns [`Map`][map_iter]. Futures
-    and iterators have a lot in common.
-
-[zip_fn]: https://doc.rust-lang.org/std/iter/fn.zip.html
-[zip_iter]: https://doc.rust-lang.org/std/iter/struct.Zip.html
-[map_fn]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map
-[map_iter]: https://doc.rust-lang.org/std/iter/struct.Map.html
+We can rewrite it as a regular, non-async function that returns a struct:
 
 ```rust
 LINK: Playground playground://async_playground/foo.rs
@@ -63,18 +51,29 @@ fn foo(n: u64) -> Foo {
 }
 ```
 
-The non-async version calls `tokio::time::sleep`, but it doesn't `.await` the
-[`Sleep`] future.[^compiler_error] Instead it stores it in the `Foo`
-struct:[^box_pin]
+This function calls [`tokio::time::sleep`], but it doesn't `.await` the future
+that `sleep` returns.[^compiler_error] Instead, it stores it in a `Foo`
+struct.[^convention] What's [`Box::pin`]? Let's see the struct first:
 
 [^compiler_error]: It's a [compiler error] to use `.await` in a non-async
     function.
 
 [compiler error]: playground://async_playground/compiler_errors/await.rs
 
-[`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
+[^convention]: It's conventional to use the same name lowercase for an async
+    function and uppercase for the future it returns. So `foo` returns a `Foo`
+    future, and `sleep` returns a [`Sleep`] future. This is similar to how
+    [`zip`][zip_fn] returns a [`Zip`][zip_iter] iterator, and [`map`][map_fn]
+    returns a [`Map`][map_iter] iterator. Futures and iterators have a lot in
+    common.
 
-[^box_pin]: Wait a minute, what's `Box::pin`? Hold that thought for just a moment.
+[`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
+[zip_fn]: https://doc.rust-lang.org/std/iter/fn.zip.html
+[zip_iter]: https://doc.rust-lang.org/std/iter/struct.Zip.html
+[map_fn]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map
+[map_iter]: https://doc.rust-lang.org/std/iter/struct.Map.html
+
+[`Box::pin`]: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.pin
 
 ```rust
 LINK: Playground playground://async_playground/foo.rs
@@ -83,7 +82,30 @@ struct Foo {
     started: bool,
     sleep_future: Pin<Box<tokio::time::Sleep>>,
 }
+```
 
+Ok so [`Box::pin`] returns a [`Pin::<Box<T>>`][struct_pin], but what's that?
+We're going to come back to it in Part Three. For now, I'm going to tell some
+lies:[^cant_wait] `Pin` does nothing. `Pin<Box<T>>` is the same as `Box<T>`,
+which is the same as `T`. We're about to see its `as_mut` method, which returns
+a `Pin<&mut T>`, which is the same as `&mut T`. For the rest of the examples in
+this part, please try to ignore it.
+
+[struct_pin]: https://doc.rust-lang.org/std/pin/struct.Pin.html
+
+[^cant_wait]: If you want the whole truth right now, read [the docs for the
+    `std::pin` module](https://doc.rust-lang.org/std/pin) and then read [this
+    post by the inventor of `Pin`](https://without.boats/blog/pin).
+
+But why even put these details on the page if we're just going to ignore them?
+I'm afraid we have to, because they're part of the [`Future`] trait, and
+`Foo`'s whole purpose in life is to implement that trait. So with all that in
+mind, here's where the magic happens:
+
+[`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
+
+```rust
+LINK: Playground playground://async_playground/foo.rs
 impl Future for Foo {
     type Output = ();
 
@@ -102,33 +124,16 @@ impl Future for Foo {
 }
 ```
 
-This is a lot to take in all at once. Before we even get started, let's set
-aside a couple things that we're not going to explain until later. The first is
-the `Context` argument. We'll look at that below when we implement `sleep`. The
-second is `Pin`. We'll come back to `Pin` in Part Three, but for now, if you'll
-forgive me, I'm going to bend the truth a little: `Pin` doesn't do anything.
-Think of `Pin<Box<T>>` as `Box<T>`,[^box] think of `Pin<&mut T>` as a `&mut T`,
-and try not to think about `as_mut` at all.
+Ok, we finally have something more to say about what a "future" is. A future
+implements the [`Future`] trait, which means it has a `poll` method. The `poll`
+method asks a question: Is this future finished? If so, it returns
+[`Poll::Ready`] with its `Output`.[^no_output] If not, it returns
+[`Poll::Pending`]. We can see that `Foo::poll` won't return `Ready` until
+[`Sleep::poll`][Sleep] has returned `Ready`.
 
-[^box]: If you haven't seen [`Box<T>`][box] before, it's `T` "on the heap",
-    which you can think of it as just `T`.
-
-[box]: https://doc.rust-lang.org/std/boxed/struct.Box.html
-
-Ok, with those caveats out of the way, let's get into some details. We finally
-have something more to say about what a "future" is. It's something that
-implements the [`Future`] trait. `Foo` implements `Future`[^footure] and has a
-`poll` method. The `poll` method asks a question: Is this future finished? If
-so, it returns [`Poll::Ready`] with its `Output`.[^no_output] If not, it
-returns [`Poll::Pending`]. We can see that `Foo::poll` won't return `Ready`
-until [`Sleep::poll`][Sleep] has returned `Ready`.
-
-[`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
 [`Poll::Ready`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 [`Poll::Pending`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 [Sleep]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
-
-[^footure]: *Foo*ture :)
 
 [^no_output]: Our original `foo` function had no return value, so the `Foo`
     future has no `Output`. Rust represents no value with `()`, the empty
@@ -136,12 +141,11 @@ until [`Sleep::poll`][Sleep] has returned `Ready`.
     value are used for their side effects, like printing.
 
 But `poll` isn't just a question. It's also where the work of the future
-happens. When it's time for `foo` to print, it's `Foo::poll` that does the
-printing. So there's a compromise: `poll` does as much work as it can get done
-quickly, but whenever it would need to wait or block, it returns `Pending`
-instead.[^timing] That way the caller that's asking "Are you finished?" never
-needs to wait for an answer. In return, the caller promises to call `poll`
-again later to let it finish its work.
+happens, in our case all the printing. There's a compromise: `poll` does as
+much work as it can get done quickly, but whenever it would need to wait or
+block, it returns `Pending` instead.[^timing] That way the caller that's asking
+"Are you finished?" doesn't have to wait for an answer. In return, the caller
+promises to call `poll` again later to let it finish its work.
 
 [^timing]: We can [add some timing and logging][timing] around the call to
     `Sleep::poll` to see that it always returns quickly too.
@@ -152,28 +156,30 @@ again later to let it finish its work.
 shouldn't print the "start" message more than once, so sets its `started` flag
 to keep track.[^state_machine] It doesn't need to track whether it's printed
 the "end" message, though, because after it returns `Ready` it won't be called
-again.[^iterator]
+again.[^iterator] This sort of bookkeeping can get quite complicated when our
+`async fn` has branches or loops, so it's nice that we don't usually need to
+write our own `Future` structs and `poll` functions.
 
-[^state_machine]: In other words, `Foo` is a "state machine" with two states.
-    In general, the number of states you need to track where you are in an
-    `async fn` is the number of `.await` points plus one, but this gets
-    complicated when there are branches or loops. The magic of async is that
-    the compiler figures all this out for us, and we don't usually need to
-    write our own `poll` functions like we're doing here.
+[^state_machine]: In other words `Foo` is a "state machine" with two states.
 
 [^iterator]: Technically it's a "logic error" to call `poll` again after it's
     returned `Ready`. It could do anything, including blocking or panicking.
     But because `poll` is not `unsafe`, it's not allowed to corrupt memory or
-    commit other undefined behavior. It's exactly the same story as calling
+    commit other undefined behavior. This is similar to calling
     [`Iterator::next`] again after it's returned `None`.
 
 [`Iterator::next`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
 
-We're starting to see how `std::thread::sleep` ruined our performance at the
-end of Part One. If we put a blocking sleep in `Foo::poll` instead of returning
-`Pending`, we get [exactly the same result][same_result].
+We're starting to see what happened with `std::thread::sleep` mistake at the
+end of Part One. If we put a that blocking sleep in `Foo::poll` instead of
+returning `Pending`, we get [exactly the same result][same_result]. That breaks
+the rule about making the caller wait for an answer.
 
 [same_result]: playground://async_playground/foo_blocking.rs
+
+The last thing we have't talked about is the `Context` argument. We can see
+that `poll` receives it from above and passes it along when it polls other
+futures. We'll look at it more closely when we implement our own `sleep` below.
 
 Onward!
 
