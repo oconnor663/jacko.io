@@ -12,7 +12,7 @@ impl Future for Sleep {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, _: &mut Context) -> Poll<()> {
-        if self.wake_time <= Instant::now() {
+        if Instant::now() >= self.wake_time {
             Poll::Ready(())
         } else {
             Poll::Pending

@@ -20,7 +20,7 @@ impl Future for Sleep {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
-        if self.wake_time <= Instant::now() {
+        if Instant::now() >= self.wake_time {
             Poll::Ready(())
         } else {
             let mut wakers_tree = WAKERS.lock().unwrap();

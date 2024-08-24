@@ -88,20 +88,20 @@ struct Foo {
 Ok so apparently [`Box::pin`] returns a [`Pin::<Box<T>>`][struct_pin]. We're
 about to see a lot of this `Pin` business, so I need to say something about it.
 The whole story is big and fascinating and actually kind of
-beautiful.[^beautiful] We'll come back to it in Part Three.[^whole_story] But
-for now, I'm going to take an…unorthodox teaching strategy. I'm going to [just
-go on the internet and tell lies][lies].
+beautiful.[^beautiful] We'll come back to it in Part Three.[^whole_story] For
+now I'm going to take an…unorthodox approach. I'm just going to [go on the
+internet and tell lies][lies].
 
 [struct_pin]: https://doc.rust-lang.org/std/pin/struct.Pin.html
 
-[^beautiful]: “Most importantly, these objects are not meant to be _always
+[^beautiful]: "Most importantly, these objects are not meant to be _always
     immovable_. Instead, they are meant to be freely moved for a certain period
     of their lifecycle, and at a certain point they should stop being moved
     from then on. That way, you can move a self-referential future around as
     you compose it with other futures until eventually you put it into the
     place it will live for as long as you poll it. So we needed a way to
     express that an object is no longer allowed to be moved; in other words,
-    that it is ‘pinned in place.’” - [without.boats/blog/pin][pin_post]
+    that it is ‘pinned in place.'" - [without.boats/blog/pin][pin_post]
 
 [^whole_story]: If you want the whole story right now, read [the post I just
     quoted][pin_post] from the inventor of `Pin`, and then read [the `std::pin`
@@ -127,10 +127,10 @@ ignore `Pin`.
 
 [^box]: This is arguably a bigger lie, because unlike `Pin`, `Box<T>` actually
     _does_ something: it puts `T` "on the heap". I'm using `Box::pin` as
-    shortcut to avoid talking about ["pin projection"][projection]. However,
-    it's important to note that most futures in Rust are _not_ heap allocated,
-    at least not individually. This is different from coroutines in C++20,
-    which are automatically heap allocated.
+    shortcut to avoid talking about ["pin projection"][projection]. But it's
+    important to note that most futures in Rust are _not_ heap allocated, at
+    least not individually. This is different from coroutines in C++20, which
+    are automatically heap allocated.
 
 [projection]: https://doc.rust-lang.org/std/pin/index.html#projections-and-structural-pinning
 
@@ -138,8 +138,8 @@ ignore `Pin`.
 
 Seriously? Why put all these details on the page if we're just supposed to
 ignore them? The reason is that they're an unavoidable part of the [`Future`]
-trait, and `Foo`'s whole purpose in life is to implement that trait. So with
-all that in mind, here's where the magic happens:
+trait, and `Foo`'s whole purpose in life is to implement that trait. With all
+that in mind, here's where the magic happens:
 
 [`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
 
@@ -163,11 +163,11 @@ impl Future for Foo {
 }
 ```
 
-Ok, we finally have something more to say about what a "future" is. A future
-implements the `Future` trait and has a `poll` method. The `poll` method asks a
-question: Is this future finished? If so, it returns [`Poll::Ready`] with the
-future's `Output`.[^no_output] If not, it returns [`Poll::Pending`]. We can see
-that `Foo::poll` won't return `Ready` until `Sleep::poll` has returned `Ready`.
+We finally have something more to say about what a "future" is. Futures
+implement the `Future` trait and have a `poll` method. The `poll` method asks,
+"Is this future finished?" If so, it returns [`Poll::Ready`] with the future's
+`Output`.[^no_output] If not, it returns [`Poll::Pending`]. We can see that
+`Foo::poll` won't return `Ready` until `Sleep::poll` has returned `Ready`.
 
 [`Poll::Ready`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 [`Poll::Pending`]: https://doc.rust-lang.org/std/task/enum.Poll.html
@@ -178,28 +178,32 @@ that `Foo::poll` won't return `Ready` until `Sleep::poll` has returned `Ready`.
     their side effects, like printing.
 
 But `poll` isn't just a question; it's also where the work of the future
-happens. In our case, it's where the printing happens. This forces a
+happens. In `Foo`'s case, it's where the printing happens. This forces a
 compromise: `poll` does all the work that it can do right away, but as soon as
-it needs to wait or block, it returns `Pending` instead.[^timing] That way the
-caller asking "Are you finished?" doesn't need to wait for an answer. In
-return, the caller promises to call `poll` again later to let it finish its
-work.
+it needs to wait or block, it returns `Pending` instead.[^timing] The caller
+gets its answer immediately, and in return it promises to call `poll` again
+later. This compromise is the key to running thousands or millions of futures
+at the same time, like we did in Part One.
 
-[^timing]: We can [add some timing and logging][timing] around the call to
-    `Sleep::poll` to see that it always returns quickly too.
+[^timing]: If you're skeptical, you can [add some timing and logging][timing]
+    around `Sleep::poll` to see that it does in fact return quickly.
 
 [timing]: playground://async_playground/foo_timing.rs?mode=release
 
-`Foo::poll` doesn't know how many times it's going to be called, and it isn't
-supposed to print the "start" message more than once, so uses its `started`
-flag to keep track.[^state_machine] It doesn't need to track whether it's
-printed the "end" message, though, because after it returns `Ready` it won't be
-called again.[^iterator] This sort of bookkeeping can get quite complicated
-when an `async fn` has branches or loops, so it's nice that the compiler
-usually does all this for us.
+`Foo` doesn't know how many times it's going to be polled, and it shouldn't
+print the "start" message more than once, so uses its `started` flag to keep
+track.[^state_machine] This bookkeeping gets complicated when an `async fn` has
+branches or loops, so it's nice that the compiler usually does it for
+us.[^compiler] `Foo` doesn't need to track the "end" message, though, because
+after it returns `Ready` it won't be polled again.[^iterator]
 
 [^state_machine]: In other words `Foo` is a "state machine" with two states,
     plus whatever's inside of `Sleep`.
+
+[^compiler]: Translating a loopy, branchy `async fn` into a state machine is
+    kind of like translating a recursive algorithm into an iterative one. It's
+    tricky and annoying for us humans but "easy" for a compiler. This is why
+    async IO is usually a language feature and not just a library.
 
 [^iterator]: Technically it's a "logic error" to call `poll` again after it's
     returned `Ready`. It could do anything, including blocking or panicking.
@@ -209,17 +213,17 @@ usually does all this for us.
 
 [`Iterator::next`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
 
-We're starting to see what happened with `std::thread::sleep` mistake at the
-end of Part One. If we use that blocking sleep in `Foo::poll` instead of
+We're starting to see what happened with the `std::thread::sleep` mistake at
+the end of Part One. If we use that blocking sleep in `Foo::poll` instead of
 returning `Pending`, we get [exactly the same result][same_result]. We're
-breaking the rule about making the caller wait for an answer.
+breaking the rule about `poll` returning quickly.
 
 [same_result]: playground://async_playground/foo_blocking.rs
 
 The last thing we have't talked about is the `Context` argument. For now, we
-can see that `poll` receives it from above and passes it along whenever it
-polls other futures. We'll look at it more closely when we implement our own
-`sleep` below.
+can see that `poll` receives it from above and passes it down when it polls
+other futures. We'll have more to say shortly, when we implement our own
+`sleep`.
 
 Onward!
 
@@ -264,10 +268,10 @@ fn join_all<F: Future>(futures: Vec<F>) -> JoinAll<F> {
 ```
 
 [`Vec::retain_mut`] does all the heavy lifting here. It takes a closure
-argument, calls that closure on each element of the `Vec`, and deletes the
-elements that returned `false`.[^algorithm] That means we drop each child
-future the first time it returns `Ready`, following the rule that we're not
-supposed to `poll` again after that.
+argument, calls that closure on each element, and removes the elements that
+returned `false`.[^algorithm] That means we drop each child future the first
+time it returns `Ready`, following the rule that we're not supposed to `poll`
+again after that.
 
 [`Vec::retain_mut`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.retain_mut
 
@@ -278,11 +282,11 @@ supposed to `poll` again after that.
 
 [`Vec::remove`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.remove
 
-Having seen `Foo` above, there's really nothing new here. From the outside, it
-seemed like magic that we could run all these child futures at the same time,
-but on the inside, all we're doing is calling `poll` on the elements of a
-`Vec`. What makes this work is that each call to `poll` returns quickly, and
-that when we return `Pending` ourselves, we get polled again later.
+Having seen `Foo` above, there's nothing new here. From the outside, running
+all these futures at the same time seemed like magic, but on the inside, all
+we're doing is calling `poll` on the elements of a `Vec`. This is the other
+side of the compromise: It works because `poll` returns quickly, and `poll`
+knows that if it returns `Pending` we'll call it again later.
 
 Note that we're taking a shortcut by ignoring the outputs of child
 futures.[^payload] We're getting away with this because we only use our version
@@ -297,9 +301,9 @@ Onward!
 ## Sleep
 
 We're on a roll here! It feels like we already have everything we need to
-implement our own `sleep`.[^narrator] Let's give it a try:
+implement our own `sleep`:[^narrator]
 
-[^narrator]: Narrator: You do not.
+[^narrator]: Narrator: They did not have everything they needed.
 
 ```rust
 LINK: Playground playground://async_playground/sleep_forever.rs
@@ -311,7 +315,7 @@ impl Future for Sleep {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, _: &mut Context) -> Poll<()> {
-        if self.wake_time <= Instant::now() {
+        if Instant::now() >= self.wake_time {
             Poll::Ready(())
         } else {
             Poll::Pending
@@ -325,26 +329,32 @@ fn sleep(duration: Duration) -> Sleep {
 }
 ```
 
-Make sure you look at the output of this one on the Playground. The code
-compiles just fine, and the logic in `poll` is correct, but something's still
-not right. The program prints the "start" messages and then hangs forever. If
-we [add some prints][sleep_forever_dbg], we can see that each `Sleep` gets
-polled once right at the start and then never again. What are we missing?
+(Playgroud running…)
+
+Darn. It compiles cleanly, and the logic in `poll` looks right, but running it
+prints the "start" messages and then hangs forever. If we [add more
+prints][sleep_forever_dbg], we can see that each `Sleep` gets polled once at
+the start and then never again. What are we missing?
 
 [sleep_forever_dbg]: playground://async_playground/sleep_forever_dbg.rs
 
-It turns out that `poll` has three jobs, and so far we've only seen two. First,
-`poll` does as much work as it can without blocking. Second, `poll` returns
-`Ready` or `Pending`, depending on whether there's more work to do. But third,
-whenever `poll` returns `Pending`, it also needs to _schedule a wakeup_.
+It turns out that `poll` has [three jobs][poll_docs]. First, `poll` does as
+much work as it can without blocking. Check. Second, `poll` returns `Ready` or
+`Pending`, depending on whether there's more work to do. Check. But third,
+whenever `poll` returns `Pending`, it also _schedules a wakeup_. Ah.
 
-The reason we didn't notice this before is that `Foo` and `JoinAll` only return
-`Pending` when other futures return `Pending` to them, in which case a wakeup
-is already scheduled. But `Sleep` is what we call a "leaf" future; there are no
-other futures below it.[^upside_down] We're finally at the point where waking
-up our job.
+[poll_docs]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
 
-[^upside_down]: Trees in computer science are always upside down for some reason.
+The reason we didn't run into this before is that `Foo` and `JoinAll` only
+return `Pending` when other futures return `Pending` to them, which means a
+wakeup is already scheduled. But `Sleep` is what we call a "leaf" future. There
+are no other futures below it[^upside_down] that can wake it. It needs to wake
+itself.
+
+[^upside_down]: Trees in computer science are upside down for some reason.
+
+TODO: Link to https://github.com/rust-lang/rust/pull/59119 and footnote the
+history of Context.
 
 ## Wake
 
@@ -353,7 +363,7 @@ This version always wakes up, so the output is correct, but it burns the CPU:
 ```rust
 LINK: Playground playground://async_playground/sleep_busy.rs
 fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
-    if self.wake_time <= Instant::now() {
+    if Instant::now() >= self.wake_time {
         Poll::Ready(())
     } else {
         context.waker().wake_by_ref();
@@ -426,7 +436,7 @@ And have `Sleep` put wakers in there:
 
 ```rust
 fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
-    if self.wake_time <= Instant::now() {
+    if Instant::now() >= self.wake_time {
         Poll::Ready(())
     } else {
         let mut wakers_tree = WAKERS.lock().unwrap();
