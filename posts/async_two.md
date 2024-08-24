@@ -236,20 +236,6 @@ too:[^always_was]
 
 ```rust
 LINK: Playground playground://async_playground/join.rs
-fn join_all<F: Future>(futures: Vec<F>) -> JoinAll<F> {
-    JoinAll {
-        futures: futures.into_iter().map(Box::pin).collect(),
-    }
-}
-```
-
-Once again, the function doesn't do much,[^agreement] and all the interesting
-work happens in the struct:
-
-[^agreement]: Especially since we've agreed not to think too hard about `Box::pin`.
-
-```rust
-LINK: Playground playground://async_playground/join.rs
 struct JoinAll<F> {
     futures: Vec<Pin<Box<F>>>,
 }
@@ -269,33 +255,39 @@ impl<F: Future> Future for JoinAll<F> {
         }
     }
 }
+
+fn join_all<F: Future>(futures: Vec<F>) -> JoinAll<F> {
+    JoinAll {
+        futures: futures.into_iter().map(Box::pin).collect(),
+    }
+}
 ```
 
-[`Vec::retain_mut`] does most of the heavy lifting. It takes a closure
+[`Vec::retain_mut`] does all the heavy lifting here. It takes a closure
 argument, calls that closure on each element of the `Vec`, and deletes the
-elements that returned `false`.[^algorithm] Here that means that we drop each
-child future the first time it returns `Ready`, following the rule that we're
-not supposed to `poll` them again after that.
+elements that returned `false`.[^algorithm] That means we drop each child
+future the first time it returns `Ready`, following the rule that we're not
+supposed to `poll` again after that.
 
 [`Vec::retain_mut`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.retain_mut
 
-[^algorithm]: If we did this with a simple `for` loop, it would take
-    O(n<sup>2</sup>) time, because `Vec::remove` is O(n). But `retain_mut` uses
+[^algorithm]: If we did this by calling `remove` in a loop, it would take
+    O(n<sup>2</sup>) time, because `remove` is O(n). But `retain_mut` uses
     a clever algorithm that walks two pointers through the `Vec` and moves each
     element at most once.
 
 [`Vec::remove`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.remove
 
-Having seen `Foo` above, there's really nothing else new here. From the
-outside, it feels magical that we can run all these child futures at once, but
-on the inside, all we're doing is calling `poll` on the elements of a `Vec`.
-What makes this work is that each call to `poll` returns quickly, and that when
-we return `Pending` we get called again later.
+Having seen `Foo` above, there's really nothing new here. From the outside, it
+seemed like magic that we could run all these child futures at the same time,
+but on the inside, all we're doing is calling `poll` on the elements of a
+`Vec`. What makes this work is that each call to `poll` returns quickly, and
+that when we return `Pending` ourselves, we get polled again later.
 
 Note that we're taking a shortcut by ignoring the outputs of child
-futures.[^payload] We can get away with that because we only use our version of
-`join_all` with `foo`, which has no return value. The real `join_all` returns a
-`Vec<F::Output>`, and it need to do some more bookkeeping.
+futures.[^payload] We're getting away with this because we only use our version
+of `join_all` with `foo`, which has no output. The real `join_all` returns
+`Vec<F::Output>`, which requires some more bookkeeping.
 
 [^payload]: Specifically, when we call `.is_pending()` on the result of `poll`,
     we ignore any value that `Poll::Ready` might be carrying.
