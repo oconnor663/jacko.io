@@ -296,15 +296,18 @@ Onward!
 
 ## Sleep
 
-This version never wakes up:
+We're on a roll here! It feels like we already have everything we need to
+implement our own `sleep`.[^narrator] Let's give it a try:
+
+[^narrator]: Narrator: You do not.
 
 ```rust
 LINK: Playground playground://async_playground/sleep_forever.rs
-struct SleepFuture {
+struct Sleep {
     wake_time: Instant,
 }
 
-impl Future for SleepFuture {
+impl Future for Sleep {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, _: &mut Context) -> Poll<()> {
@@ -316,11 +319,32 @@ impl Future for SleepFuture {
     }
 }
 
-fn sleep(duration: Duration) -> SleepFuture {
+fn sleep(duration: Duration) -> Sleep {
     let wake_time = Instant::now() + duration;
-    SleepFuture { wake_time }
+    Sleep { wake_time }
 }
 ```
+
+Make sure you look at the output of this one on the Playground. The code
+compiles just fine, and the logic in `poll` is correct, but something's still
+not right. The program prints the "start" messages and then hangs forever. If
+we [add some prints][sleep_forever_dbg], we can see that each `Sleep` gets
+polled once right at the start and then never again. What are we missing?
+
+[sleep_forever_dbg]: playground://async_playground/sleep_forever_dbg.rs
+
+It turns out that `poll` has three jobs, and so far we've only seen two. First,
+`poll` does as much work as it can without blocking. Second, `poll` returns
+`Ready` or `Pending`, depending on whether there's more work to do. But third,
+whenever `poll` returns `Pending`, it also needs to _schedule a wakeup_.
+
+The reason we didn't notice this before is that `Foo` and `JoinAll` only return
+`Pending` when other futures return `Pending` to them, in which case a wakeup
+is already scheduled. But `Sleep` is what we call a "leaf" future; there are no
+other futures below it.[^upside_down] We're finally at the point where waking
+up our job.
+
+[^upside_down]: Trees in computer science are always upside down for some reason.
 
 ## Wake
 
@@ -350,7 +374,7 @@ a channel][background_thread] will work, but that's a bit complicated...
 What we're seeing here is an important architectural fact about how async Rust
 works. Futures "in the middle", like `Foo` and `JoinAll`, don't really need to
 "know" anything about how the event loop works. But "leaf" futures like
-`SleepFuture` need to coordinate closely with the event loop to schedule
+`Sleep` need to coordinate closely with the event loop to schedule
 wakeups. This is why writing runtime-agnostic async libraries is hard.
 
 ## Loop
@@ -398,7 +422,7 @@ static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> =
     Mutex::new(BTreeMap::new());
 ```
 
-And have `SleepFuture` put wakers in there:
+And have `Sleep` put wakers in there:
 
 ```rust
 fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {

@@ -11,16 +11,12 @@ struct Sleep {
 impl Future for Sleep {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
+    fn poll(self: Pin<&mut Self>, _: &mut Context) -> Poll<()> {
         if self.wake_time <= Instant::now() {
+            println!("Sleep ready");
             Poll::Ready(())
         } else {
-            let wake_time = self.wake_time;
-            let waker = context.waker().clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(wake_time.saturating_duration_since(Instant::now()));
-                waker.wake();
-            });
+            println!("Sleep pending");
             Poll::Pending
         }
     }
@@ -39,9 +35,11 @@ async fn foo(n: u64) {
 
 #[tokio::main]
 async fn main() {
+    println!("These jobs never finish...");
     let mut futures = Vec::new();
-    for n in 1..=1_000 {
+    for n in 1..=10 {
         futures.push(foo(n));
     }
     future::join_all(futures).await;
 }
+

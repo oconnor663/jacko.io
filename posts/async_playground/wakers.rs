@@ -9,11 +9,11 @@ use std::time::{Duration, Instant};
 
 static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
 
-struct SleepFuture {
+struct Sleep {
     wake_time: Instant,
 }
 
-impl Future for SleepFuture {
+impl Future for Sleep {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
@@ -28,9 +28,9 @@ impl Future for SleepFuture {
     }
 }
 
-fn sleep(duration: Duration) -> SleepFuture {
+fn sleep(duration: Duration) -> Sleep {
     let wake_time = Instant::now() + duration;
-    SleepFuture { wake_time }
+    Sleep { wake_time }
 }
 
 async fn foo(n: u64) {

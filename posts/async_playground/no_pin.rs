@@ -36,11 +36,11 @@ impl Waker {
 
 static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
 
-struct SleepFuture {
+struct Sleep {
     wake_time: Instant,
 }
 
-impl Future for SleepFuture {
+impl Future for Sleep {
     type Output = ();
 
     fn poll(&mut self, context: &mut Context) -> Poll<()> {
@@ -55,13 +55,13 @@ impl Future for SleepFuture {
     }
 }
 
-fn sleep(duration: Duration) -> SleepFuture {
+fn sleep(duration: Duration) -> Sleep {
     let wake_time = Instant::now() + duration;
-    SleepFuture { wake_time }
+    Sleep { wake_time }
 }
 
 struct Foo {
-    sleep_future: SleepFuture,
+    sleep_future: Sleep,
     n: u64,
 }
 
