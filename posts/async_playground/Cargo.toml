@@ -78,6 +78,10 @@ name = "sleep_busy"
 path = "sleep_busy.rs"
 
 [[bin]]
+name = "sleep_busy_dbg"
+path = "sleep_busy_dbg.rs"
+
+[[bin]]
 name = "sleep_many_threads"
 path = "sleep_many_threads.rs"
 
