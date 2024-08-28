@@ -1,15 +1,14 @@
-use crossbeam_channel::RecvTimeoutError;
-use crossbeam_channel::Sender;
 use futures::future;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::LazyLock;
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 static WAKER_SENDER: LazyLock<Sender<(Instant, Waker)>> = LazyLock::new(|| {
-    let (sender, receiver) = crossbeam_channel::unbounded::<(Instant, Waker)>();
+    let (sender, receiver) = channel::<(Instant, Waker)>();
     // Kick off the waker thread the first time this sender is used.
     std::thread::spawn(move || {
         // A sorted multimap of wake times and wakers. The soonest wake time will be first.

@@ -331,18 +331,18 @@ fn sleep(duration: Duration) -> Sleep {
 
 (Playgroud running…)
 
-Darn. This example compiles cleanly, and the logic in `poll` looks right, but
-running it prints the "start" messages and then hangs forever. If we [add more
+Hmm. This compiles cleanly, and the logic in `poll` looks right, but running it
+prints the "start" messages and then hangs forever. If we [add more
 prints][sleep_forever_dbg], we can see that each `Sleep` gets polled once at
 the start and then never again. What are we missing?
 
 [sleep_forever_dbg]: playground://async_playground/sleep_forever_dbg.rs
 
-It turns out that `poll` has [three jobs][poll_docs]. First, `poll` does as
-much work as it can without blocking. Check. Second, `poll` returns `Ready` or
-`Pending`, depending on whether there's more work to do. Check. But third,
-whenever `poll` returns `Pending`, it needs to make sure a wakeup is scheduled.
-Ah.
+It turns out that `poll` has [three jobs][poll_docs], and so far we've only
+seen two. First, `poll` does as much work as it can without blocking. Check.
+Second, `poll` returns `Ready` if its work is finished or `Pending` if there's
+more work to do. Check. But third, whenever `poll` returns `Pending`, it needs
+to "schedule a wakeup". Ah.
 
 [poll_docs]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
 
@@ -351,7 +351,7 @@ return `Pending` when other futures return `Pending` to them, which means a
 wakeup is already scheduled. But `Sleep` is what we call a "leaf" future. There
 are no other futures below it,[^upside_down] and it needs to wake itself.
 
-[^upside_down]: Trees in computer science are upside down for some reason.
+[^upside_down]: Trees in computing are upside down for some reason.
 
 ## Wake
 
@@ -375,8 +375,8 @@ future to be polled again.[^task]
 [^task]: Technically this wakes the current "task". We'll talk about tasks in
     Part Three.
 
-If we don't mind being wildly inefficient, we can ask to be polled again
-immediately every time we return `Pending`:
+The simplest thing we can try is immediately asking to be polled again every
+time we return `Pending`:
 
 ```rust
 LINK: Playground playground://async_playground/sleep_busy.rs
@@ -392,34 +392,37 @@ fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
 
 This prints the right output and quits at the right time, so the "sleep
 forever" problem is fixed, but we've replaced it with a "busy loop" problem.
-This program calls `poll` again and again as fast as it can, burning 100% of
-the CPU until the wake time. We can see this indirectly by [counting the number
-of times `poll` gets called][sleep_busy_dbg],[^poll_count] or we can measure it
+This program calls `poll` over and over as fast as it can, burning 100% of the
+CPU until the wake time. We can see this indirectly by [counting the number of
+times `poll` gets called][sleep_busy_dbg],[^poll_count] or we can measure it
 directly [using tools like `perf` on Linux][perf].
 
 [sleep_busy_dbg]: playground://async_playground/sleep_busy_dbg.rs?mode=release
 
-[^poll_count]: When I run this on the Playground, I see 10-20 _million_ calls
-    in total.
+[^poll_count]: When I run this on the Playground, I see about 20&nbsp;_million_
+    calls in total.
 
 [perf]: https://github.com/oconnor663/jacko.io/blob/master/posts/async_playground/perf_stat.sh
 
-The simplest way to avoid a busy wait is to spawn a thread to wake us up later.
-But if each future spawns a thread, we might run into [the same crash as in
-Part One][same_crash]. [A single background thread that collects wakers through
-a channel][background_thread] will work, but that's a bit complicated...
+We want to call `wake` later, when it's actually time to wake up. One way to do
+that is to spawn a thread to call `std::thread::sleep` and `wake` for us. If we
+do that in every call to `poll`, we'll run into the [too-many-threads crash
+from Part One][same_crash]. We can work around that by spawning just one thread
+and and [using a channel to send `Waker`s to it][shared_thread]. This is a
+correct and viable implementation, but there's something unsatisfying about
+it&hellip;
+
+We already have a shared thread that spends most of its time sleeping: the main
+thread of our program! It's going to sleeping forever until someone calls
+`wake`. Does Tokio give us a way to tell it wake up at a specific time instead?
+Well, yes, `tokio::time::sleep`. But that means if we really want to write our
+own `sleep`, and we don't want to spawn an extra thread to make it work, then
+we also need to write our own `main`.
 
 [same_crash]: playground://async_playground/sleep_many_threads.rs
+[shared_thread]: playground://async_playground/sleep_one_thread.rs
 
-[background_thread]: playground://async_playground/sleep_one_thread.rs
-
-What we're seeing here is an important architectural fact about how async Rust
-works. Futures "in the middle", like `Foo` and `JoinAll`, don't really need to
-"know" anything about how the event loop works. But "leaf" futures like
-`Sleep` need to coordinate closely with the event loop to schedule
-wakeups. This is why writing runtime-agnostic async libraries is hard.
-
-## Loop
+## Main
 
 It's more interesting to get the event loop to wake up at the right time. To do
 that we need to rewrite it. Here's the minimal custom event loop:
