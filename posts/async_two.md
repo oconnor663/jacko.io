@@ -431,12 +431,12 @@ that we need to rewrite it. Here's the minimal custom event loop:
 LINK: Playground playground://async_playground/loop.rs
 fn main() {
     let mut futures = Vec::new();
-    for n in 1..=1_000 {
+    for n in 1..=10 {
         futures.push(foo(n));
     }
-    let mut main_future = Box::pin(future::join_all(futures));
+    let mut joined_future = Box::pin(future::join_all(futures));
     let mut context = Context::from_waker(noop_waker_ref());
-    while main_future.as_mut().poll(&mut context).is_pending() {
+    while joined_future.as_mut().poll(&mut context).is_pending() {
         // Busy loop!
     }
 }

@@ -108,10 +108,11 @@ Making several calls at the same time looks like this:
 ```rust
 LINK: Playground playground://async_playground/tokio_10.rs
 let mut futures = Vec::new();
-for n in 1..=3 {
+for n in 1..=10 {
     futures.push(foo(n));
 }
-future::join_all(futures).await;
+let joined_future = future::join_all(futures);
+joined_future.await;
 ```
 
 So far this might look like just another way of doing the same thing we were

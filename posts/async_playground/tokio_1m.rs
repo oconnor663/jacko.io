@@ -13,7 +13,8 @@ async fn main() {
     for n in 1..=1_000_000 {
         futures.push(foo(n));
     }
-    future::join_all(futures).await;
+    let joined_future = future::join_all(futures);
+    joined_future.await;
     let time = Instant::now() - start;
     println!("time: {:.3} seconds", time.as_secs_f32());
 }

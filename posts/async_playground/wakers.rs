@@ -44,9 +44,9 @@ fn main() {
     for n in 1..=10 {
         futures.push(foo(n));
     }
-    let mut main_future = Box::pin(future::join_all(futures));
+    let mut joined_future = Box::pin(future::join_all(futures));
     let mut context = Context::from_waker(noop_waker_ref());
-    while main_future.as_mut().poll(&mut context).is_pending() {
+    while joined_future.as_mut().poll(&mut context).is_pending() {
         let mut wakers_tree = WAKERS.lock().unwrap();
         let next_wake = wakers_tree.keys().next().expect("sleep forever?");
         std::thread::sleep(next_wake.saturating_duration_since(Instant::now()));

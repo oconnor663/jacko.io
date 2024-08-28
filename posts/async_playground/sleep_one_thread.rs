@@ -83,5 +83,6 @@ async fn main() {
     for n in 1..=1_000 {
         futures.push(foo(n));
     }
-    future::join_all(futures).await;
+    let joined_future = future::join_all(futures);
+    joined_future.await;
 }
