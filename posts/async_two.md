@@ -424,8 +424,26 @@ we also need to write our own `main`.
 
 ## Main
 
-It's more interesting to get the event loop to wake up at the right time. To do
-that we need to rewrite it. Here's the minimal custom event loop:
+Our `main` function wants to call `poll`, so it needs a `Context` to pass in.
+`Context` has a [`from_waker`] constructor, so we need a `Waker`. There are a
+few different ways to make one,[^make_a_waker] but our busy loop doesn't
+actually need it to do anything, so we'll use a helper function called
+[`noop_waker`].[^noop] With our `Context` in hand, we can call `poll` in a
+loop:
+
+[`from_waker`]: https://doc.rust-lang.org/std/task/struct.Context.html#method.from_waker
+[`noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
+
+[^make_a_waker]: The safe way is to implement the [`Wake`] trait and use
+    [`Waker::from`][from_arc]. The unsafe way is to build a [`RawWaker`].
+
+[`Wake`]: https://doc.rust-lang.org/alloc/task/trait.Wake.html
+[from_arc]: https://doc.rust-lang.org/std/task/struct.Waker.html#impl-From%3CArc%3CW%3E%3E-for-Waker
+[`RawWaker`]: https://doc.rust-lang.org/std/task/struct.RawWaker.html
+
+[^noop]: "Noop", "no-op", and "nop" are all short for "no&nbsp;operation". Most
+    assembly languages have an instruction named something like this, which
+    does nothing.
 
 ```rust
 LINK: Playground playground://async_playground/loop.rs
@@ -443,19 +461,15 @@ fn main() {
 }
 ```
 
-NOTE HERE: Even though our loop is always polling, we still need the wakers. If
-we don't call `wake()`, our program will [appear to work at
-first][loop_forever_10]. But then when we bump the number of jobs up to a
-hundred, [it stops working][loop_forever_100].[^cutoff]
-
 [loop_forever_10]: playground://async_playground/loop_forever_10.rs
 [loop_forever_100]: playground://async_playground/loop_forever_100.rs
 
-[^cutoff]: As of `futures` v0.3.30, the exact cutoff is
-    [thirty-one](https://github.com/rust-lang/futures-rs/blob/0.3.30/futures-util/src/future/join_all.rs#L35).
+[^cutoff]: As of `futures` v0.3.30, [the exact cutoff is
+    31](https://github.com/rust-lang/futures-rs/blob/0.3.30/futures-util/src/future/join_all.rs#L35).
 
-Now instead of busy looping, we can tell that loop how long to sleep. Let's add
-a global:[^thread_local]
+It's working! But we still have the "busy loop" problem from above. We want to
+`std::thread::sleep` in that loop, which means we need to know when to wake up.
+Let's use a global variable for this:[^thread_local]
 
 [^thread_local]: It would be slightly more efficient to [use `thread_local!`
     and `RefCell` instead of `Mutex`][thread_local], but `Mutex` is the
@@ -467,6 +481,16 @@ a global:[^thread_local]
 static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> =
     Mutex::new(BTreeMap::new());
 ```
+
+This is a map from wake times to `Waker`s, and it's sorted, so we can use
+[`first_entry`] to get the earliest wake time. Note that the value type is
+`Vec<Waker>` instead of just `Waker`, because there might be more than one
+`Waker` for a given `Instant`.[^windows]
+
+[`first_entry`]: https://doc.rust-lang.org/std/collections/struct.BTreeMap.html#method.first_entry
+
+[^windows]: This is very unlikely on Linux and macOS, where the resolution of
+    `Instant::now()` is measured in nanoseconds, but on Windows it's 15.6 ms.
 
 And have `Sleep` put wakers in there:
 
@@ -507,3 +531,18 @@ while main_future.as_mut().poll(&mut context).is_pending() {
     }
 }
 ```
+
+TODO: ADJUST THESE EXAMPLES TO USE THE WAKERS MAP
+
+Since our main loop never stops polling and our `Waker` does nothing, we might
+wonder whether calling `wake_by_ref` in `Sleep::poll` is really necessary.
+Surprisingly, yes, it is necessary. If we delete it, [things appear to work at
+first][loop_forever_10]. But when we bump the number of jobs from ten to a
+hundred, [our futures never wake up][loop_forever_100]. What we're seeing is
+that, even though _our_ `Waker` does nothing, there are _other_ `Waker`s in our
+program. It turns out that when `futures::future::JoinAll` has many child
+futures,[^cutoff] it creates its own `Waker`s internally, and it uses them to
+tell which children have asked for a wakeup. This is more efficient than
+polling each of them every time, but it also means that children that never
+call `wake` will never be polled again. It's not enough for a leaf future to
+know that the main loop is going to wake up; it still needs to call `wake`.

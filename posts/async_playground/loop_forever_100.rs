@@ -32,6 +32,7 @@ async fn foo(n: u64) {
 }
 
 fn main() {
+    println!("These jobs never finish...");
     let mut futures = Vec::new();
     for n in 1..=100 {
         futures.push(foo(n));
