@@ -229,10 +229,10 @@ Onward!
 
 ## Join
 
-It might seem like `join_all` is doing something much more magical than `foo`,
-but now that we've seen the moving parts of a future, it turns out we already
-have everything we need. Let's make `join_all` into a non-async function
-too:[^always_was]
+It might seem like [`join_all`] is doing something much more magical than
+`foo`, but now that we've seen the moving parts of a future, it turns out we
+already have everything we need. Let's make `join_all` into a non-async
+function too:[^always_was]
 
 [^always_was]: In fact it's [defined this way upstream][upstream].
 
@@ -425,13 +425,13 @@ we also need to write our own `main`.
 ## Main
 
 Our `main` function wants to call `poll`, so it needs a `Context` to pass in.
-`Context` has a [`from_waker`] constructor, so we need a `Waker`. There are a
-few different ways to make one,[^make_a_waker] but our busy loop doesn't
-actually need it to do anything, so we'll use a helper function called
-[`noop_waker`].[^noop] With our `Context` in hand, we can call `poll` in a
+We can make one with [`Context::from_waker`], which means we need a `Waker`.
+There are a few different ways to make a `Waker`,[^make_a_waker] but since a
+busy loop doesn't need it to do anything, we can use a helper function called
+[`noop_waker`].[^noop] With a new `Context` in hand, we can call `poll` in a
 loop:
 
-[`from_waker`]: https://doc.rust-lang.org/std/task/struct.Context.html#method.from_waker
+[`Context::from_waker`]: https://doc.rust-lang.org/std/task/struct.Context.html#method.from_waker
 [`noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
 
 [^make_a_waker]: The safe way is to implement the [`Wake`] trait and use
@@ -461,15 +461,31 @@ fn main() {
 }
 ```
 
+This works, but we still have the "busy loop" problem from above. Before we fix
+that, though, we need to make an important mistake:
+
+Since this version of our main loop never stops polling, and since our `Waker`
+does nothing, we might wonder whether calling `wake` in `Sleep::poll` actually
+matters. Surprisingly, it does. If we delete it, [things appear to work at
+first][loop_forever_10]. But when we bump the number of jobs from ten to a
+hundred, [our futures never wake up][loop_forever_100]. What we're seeing is
+that, even though _our_ `Waker` does nothing, there are _other_ `Waker`s in our
+program. When the real [`JoinAll`] has many child futures,[^cutoff] it creates
+its own `Waker`s internally, so it can tell which child asks for a wakeup. This
+is more efficient than polling all of them every time, but it also means that
+children who never call `wake` will never be polled again. Thus the rule is
+that leaf futures must always call `wake`, even if the main loop is waking up
+anyway.
+
 [loop_forever_10]: playground://async_playground/loop_forever_10.rs
 [loop_forever_100]: playground://async_playground/loop_forever_100.rs
+[`JoinAll`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
 
 [^cutoff]: As of `futures` v0.3.30, [the exact cutoff is
     31](https://github.com/rust-lang/futures-rs/blob/0.3.30/futures-util/src/future/join_all.rs#L35).
 
-It's working! But we still have the "busy loop" problem from above. We want to
-`std::thread::sleep` in that loop, which means we need to know when to wake up.
-Let's use a global variable for this:[^thread_local]
+Ok, back to `main`. Somehow our loop needs to get ahold of each `Waker` and its
+wake time. Let's use a global variable for this:[^thread_local]
 
 [^thread_local]: It would be slightly more efficient to [use `thread_local!`
     and `RefCell` instead of `Mutex`][thread_local], but `Mutex` is the
@@ -478,23 +494,26 @@ Let's use a global variable for this:[^thread_local]
 [thread_local]: playground://async_playground/thread_local.rs
 
 ```rust
+LINK: Playground playground://async_playground/wakers.rs
 static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> =
     Mutex::new(BTreeMap::new());
 ```
 
-This is a map from wake times to `Waker`s, and it's sorted, so we can use
-[`first_entry`] to get the earliest wake time. Note that the value type is
-`Vec<Waker>` instead of just `Waker`, because there might be more than one
-`Waker` for a given `Instant`.[^windows]
+This is a sorted map from wake times to `Waker`s.[^vec] We'll insert into this
+map in `Sleep::poll`:[^or_default]
 
-[`first_entry`]: https://doc.rust-lang.org/std/collections/struct.BTreeMap.html#method.first_entry
+[^vec]: Note that the value type is `Vec<Waker>` instead of just `Waker`,
+    because we might have more than one `Waker` for a given `Instant`. This is
+    very unlikely on Linux and macOS, where the resolution of `Instant::now()`
+    is measured in nanoseconds, but on Windows it's 15.6 ms.
 
-[^windows]: This is very unlikely on Linux and macOS, where the resolution of
-    `Instant::now()` is measured in nanoseconds, but on Windows it's 15.6 ms.
+[^or_default]: [`or_default`] creates an empty `Vec` if no value was there
+    before.
 
-And have `Sleep` put wakers in there:
+[`or_default`]: https://doc.rust-lang.org/std/collections/btree_map/enum.Entry.html#method.or_default
 
 ```rust
+LINK: Playground playground://async_playground/wakers.rs
 fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
     if Instant::now() >= self.wake_time {
         Poll::Ready(())
@@ -507,7 +526,10 @@ fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
 }
 ```
 
-And finally the main polling loop can read from it: [^hold_lock]
+After polling, our main loop reads the first key from this sorted map to get
+the earliest wake time. It `std::time::sleep`s until that time, which fixes the
+busy loop problem.[^hold_lock] Then it invokes all the `Waker`s whose wake time
+has passed, before polling again:
 
 [^hold_lock]: We're holding the `WAKERS` lock while we sleep here, which is a
     little sketchy, but it doesn't matter in this single-threaded example. A
@@ -532,17 +554,4 @@ while main_future.as_mut().poll(&mut context).is_pending() {
 }
 ```
 
-TODO: ADJUST THESE EXAMPLES TO USE THE WAKERS MAP
-
-Since our main loop never stops polling and our `Waker` does nothing, we might
-wonder whether calling `wake_by_ref` in `Sleep::poll` is really necessary.
-Surprisingly, yes, it is necessary. If we delete it, [things appear to work at
-first][loop_forever_10]. But when we bump the number of jobs from ten to a
-hundred, [our futures never wake up][loop_forever_100]. What we're seeing is
-that, even though _our_ `Waker` does nothing, there are _other_ `Waker`s in our
-program. It turns out that when `futures::future::JoinAll` has many child
-futures,[^cutoff] it creates its own `Waker`s internally, and it uses them to
-tell which children have asked for a wakeup. This is more efficient than
-polling each of them every time, but it also means that children that never
-call `wake` will never be polled again. It's not enough for a leaf future to
-know that the main loop is going to wake up; it still needs to call `wake`.
+This works, and it does everything on one thread.
