@@ -1,4 +1,3 @@
-use futures::task::noop_waker_ref;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -60,7 +59,8 @@ async fn async_main() {
 fn main() {
     let (task_sender, task_receiver) = channel();
     TASK_SENDER.set(task_sender).unwrap();
-    let mut context = Context::from_waker(noop_waker_ref());
+    let waker = futures::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
     println!("Start with one task (async_main), which spawns");
     println!("ten other tasks (foo) in two seconds.\n");
     let mut tasks: Vec<BoxedFuture> = vec![Box::pin(async_main())];
