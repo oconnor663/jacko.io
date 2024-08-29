@@ -5,17 +5,56 @@
 - [Part Two: How?](async_two.html)
 - [Part Three: More!](async_three.html)
 
-When we need a program to do many things at the same time, the most direct
-approach is to use threads. This works well for a small-to-medium number of
-jobs, but it runs into problems as the number of threads gets large.
-Async/await can solve those problems. Here in Part 1 we'll demo those problems,
-to get a sense of why we might want to learn async Rust.[^traits]
+Async/await, or async IO, is a new-ish language feature that lets us do more
+than one thing at a time. Rust has had async/await since 2019. It's especially
+popular with websites and network services that handle many connections at
+once, because running lots of async "futures" or "tasks" is more efficient than
+running lots of threads.[^lots]
 
-[^traits]: I'm going to assume you've read [The Book] or similar, particularly
-    [the part about generics and traits][traits].
+[^lots]: "Lots" here usually means 10k or more.
 
-[The Book]: https://doc.rust-lang.org/book/
-[traits]: https://doc.rust-lang.org/book/ch10-00-generics.html
+At a very high level, using threads means asking your OS and your hardware to
+run different jobs in parallel for you, but using async/await means
+reorganizing your own code to run those jobs yourself.[^concurrency] That's
+partly why it's more efficient, but for the same reason the details of async
+tend to "leak" into your code, and that makes it harder to learn. This series
+is a details-first introduction to async Rust, focused on translating async
+examples into ordinary Rust code that we can read and play with.
+
+[^concurrency]: The famously confusing technical terms for this distinction are
+    "parallelism" vs "concurrency". I don't think they're helpful for teaching.
+
+The examples in this series will use lots of traits, generics, closures, and
+threads. I'll assume that you've written some Rust before and that you've read
+[The Rust Programming Language] or similar.[^ch_20] If not, this will be a bit
+of a firehose, and you might need to refer back to something like [Rust By
+Example] as you go.[^books]
+
+[The Rust Programming Language]: https://doc.rust-lang.org/book/
+[Rust By Example]: https://doc.rust-lang.org/rust-by-example/
+
+[^ch_20]: The multithreaded web server project in [Chapter 20] is particularly
+    relevant.
+
+[Chapter 20]: https://doc.rust-lang.org/book/ch20-00-final-project-a-web-server.html
+
+[^books]: If you're the sort of programmer who doesn't like learning new
+    languages from books, consider [this advice from Bryan Cantrill][advice],
+    who's just like you: "With Rust, you need to _learn_ it&hellip;buy the
+    book, sit down, read the book in a quiet place&hellip;Rust rewards that."
+
+[advice]: https://youtu.be/HgtRAbE1nBM?t=3913
+
+Most of our async examples will use the [Tokio async
+"runtime"][Tokio].[^more_than_one] You could say that the goal of this series
+is to give us lots of practical intuition about what an async runtime is and
+what it does.
+
+[Tokio]: https://tokio.rs/
+
+[^more_than_one]: There are several async runtimes available in Rust, but the
+    differences between them aren't important for this series. Tokio is the
+    most popular and the most widely supported, so it's a good default.
 
 ## Threads
 
