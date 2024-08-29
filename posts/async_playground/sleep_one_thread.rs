@@ -5,12 +5,13 @@ use std::pin::Pin;
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::LazyLock;
 use std::task::{Context, Poll, Waker};
+use std::thread;
 use std::time::{Duration, Instant};
 
 static WAKER_SENDER: LazyLock<Sender<(Instant, Waker)>> = LazyLock::new(|| {
     let (sender, receiver) = channel::<(Instant, Waker)>();
     // Kick off the waker thread the first time this sender is used.
-    std::thread::spawn(move || {
+    thread::spawn(move || {
         // A sorted multimap of wake times and wakers. The soonest wake time will be first.
         let mut tree = BTreeMap::<Instant, Vec<Waker>>::new();
         loop {

@@ -1,8 +1,9 @@
+use std::thread;
 use std::time::Duration;
 
 fn foo(n: u64) {
     println!("start {n}");
-    std::thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_secs(1));
     println!("end {n}");
 }
 

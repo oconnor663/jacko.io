@@ -2,6 +2,7 @@ use futures::future;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::thread;
 use std::time::Duration;
 
 struct Foo {
@@ -14,7 +15,7 @@ impl Future for Foo {
     fn poll(self: Pin<&mut Self>, _context: &mut Context) -> Poll<()> {
         // This version never returns Pending, so self.started isn't necessary.
         println!("start {}", self.n);
-        std::thread::sleep(Duration::from_secs(1)); // Oops!
+        thread::sleep(Duration::from_secs(1)); // Oops!
         println!("end {}", self.n);
         Poll::Ready(())
     }

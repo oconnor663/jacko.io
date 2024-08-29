@@ -63,7 +63,7 @@ Here's an example function `foo` that takes a second to run:
 ```rust
 fn foo(n: u64) {
     println!("start {n}");
-    std::thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_secs(1));
     println!("end {n}");
 }
 ```
@@ -80,7 +80,7 @@ second instead of ten:[^order]
 LINK: Playground playground://async_playground/threads.rs
 let mut threads = Vec::new();
 for n in 1..=10 {
-    threads.push(std::thread::spawn(move || foo(n)));
+    threads.push(thread::spawn(move || foo(n)));
 }
 for thread in threads {
     thread.join().unwrap();
@@ -174,17 +174,17 @@ happens.
 ## Important Mistakes
 
 We can get some hints about how async works if we start making some mistakes.
-First let's try using [`std::thread::sleep`] instead of [`tokio::time::sleep`]
+First let's try using [`thread::sleep`] instead of [`tokio::time::sleep`]
 in our async function:
 
-[`std::thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
+[`thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
 [`tokio::time::sleep`]: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
 
 ```rust
 LINK: Playground playground://async_playground/tokio_blocking.rs
 async fn foo(n: u64) {
     println!("start {n}");
-    std::thread::sleep(Duration::from_secs(1)); // Oops!
+    thread::sleep(Duration::from_secs(1)); // Oops!
     println!("end {n}");
 }
 ```

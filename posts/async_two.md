@@ -8,13 +8,13 @@
 In Part One we looked at [some async Rust code][part_one] without explaining
 anything about how it worked. That left us with several mysteries: What's an
 `async fn`, and what are the "futures" that they return? What is [`join_all`]
-doing? How is [`tokio::time::sleep`] different from [`std::thread::sleep`]?
-What does `#[tokio::main]` actually do?
+doing? How is [`tokio::time::sleep`] different from [`thread::sleep`]? What
+does `#[tokio::main]` actually do?
 
 [part_one]: playground://async_playground/tokio.rs
 [`join_all`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
 [`tokio::time::sleep`]: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
-[`std::thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
+[`thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
 
 I think the best way to answer these questions is to translate each piece into
 normal, non-async Rust code and stare at it for a while. We'll find that we can
@@ -104,7 +104,7 @@ internet and tell lies][lies].
     that it is ‘pinned in place.'" - [without.boats/blog/pin][pin_post]
 
 [^whole_story]: If you want the whole story right now, read [the post I just
-    quoted][pin_post] from the inventor of `Pin`, and then read [the `std::pin`
+    quoted][pin_post] from the inventor of `Pin`, and then read [the `pin`
     module docs][pin_docs].
 
 [pin_docs]: https://doc.rust-lang.org/std/pin
@@ -213,10 +213,10 @@ after it returns `Ready` it won't be polled again.[^iterator]
 
 [`Iterator::next`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
 
-We're starting to see what happened with the `std::thread::sleep` mistake at
-the end of Part One. If we use that blocking sleep in `Foo::poll` instead of
-returning `Pending`, we get [exactly the same result][same_result]. We're
-breaking the rule about `poll` returning quickly.
+We're starting to see what happened with the `thread::sleep` mistake at the end
+of Part One. If we use that blocking sleep in `Foo::poll` instead of returning
+`Pending`, we get [exactly the same result][same_result]. We're breaking the
+rule about `poll` returning quickly.
 
 [same_result]: playground://async_playground/foo_blocking.rs
 
@@ -405,12 +405,11 @@ directly [using tools like `perf` on Linux][perf].
 [perf]: https://github.com/oconnor663/jacko.io/blob/master/posts/async_playground/perf_stat.sh
 
 We want to call `wake` later, when it's actually time to wake up. One way to do
-that is to spawn a thread to call `std::thread::sleep` and `wake` for us. If we
-do that in every call to `poll`, we'll run into the [too-many-threads crash
-from Part One][same_crash]. We can work around that by spawning just one thread
-and and [using a channel to send `Waker`s to it][shared_thread]. This is a
-correct and viable implementation, but there's something unsatisfying about
-it&hellip;
+that is to spawn a thread to call `thread::sleep` and `wake` for us. If we do
+that in every call to `poll`, we'll run into the [too-many-threads crash from
+Part One][same_crash]. We can work around that by spawning just one thread and
+and [using a channel to send `Waker`s to it][shared_thread]. This is a correct
+and viable implementation, but there's something unsatisfying about it&hellip;
 
 We already have a shared thread that spends most of its time sleeping: the main
 thread of our program! It's going to sleeping forever until someone calls
@@ -527,23 +526,23 @@ fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
 ```
 
 After polling, our main loop reads the first key from this sorted map to get
-the earliest wake time. It `std::time::sleep`s until that time, which fixes the
+the earliest wake time. It `thread::sleep`s until that time, which fixes the
 busy loop problem.[^hold_lock] Then it invokes all the `Waker`s whose wake time
 has passed, before polling again:
 
 [^hold_lock]: We're holding the `WAKERS` lock while we sleep here, which is a
     little sketchy, but it doesn't matter in this single-threaded example. A
-    real multithreaded runtime would use [`std::thread::park_timeout`] or
-    similar instead of sleeping, so that other threads could wake it up early.
+    real multithreaded runtime would use [`thread::park_timeout`] or similar
+    instead of sleeping, so that other threads could wake it up early.
 
-[`std::thread::park_timeout`]: https://doc.rust-lang.org/std/thread/fn.park_timeout.html
+[`thread::park_timeout`]: https://doc.rust-lang.org/std/thread/fn.park_timeout.html
 
 ```rust
 LINK: Playground playground://async_playground/wakers.rs
 while main_future.as_mut().poll(&mut context).is_pending() {
     let mut wakers_tree = WAKERS.lock().unwrap();
     let next_wake = wakers_tree.keys().next().expect("sleep forever?");
-    std::thread::sleep(next_wake.duration_since(Instant::now()));
+    thread::sleep(next_wake.duration_since(Instant::now()));
     while let Some(entry) = wakers_tree.first_entry() {
         if *entry.key() <= Instant::now() {
             entry.remove().into_iter().for_each(Waker::wake);

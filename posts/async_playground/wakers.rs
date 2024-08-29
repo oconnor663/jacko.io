@@ -4,6 +4,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::task::{Context, Poll, Waker};
+use std::thread;
 use std::time::{Duration, Instant};
 
 static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
@@ -49,7 +50,7 @@ fn main() {
     while joined_future.as_mut().poll(&mut context).is_pending() {
         let mut wakers_tree = WAKERS.lock().unwrap();
         let next_wake = wakers_tree.keys().next().expect("sleep forever?");
-        std::thread::sleep(next_wake.saturating_duration_since(Instant::now()));
+        thread::sleep(next_wake.saturating_duration_since(Instant::now()));
         while let Some(entry) = wakers_tree.first_entry() {
             if *entry.key() <= Instant::now() {
                 entry.remove().into_iter().for_each(Waker::wake);

@@ -1,9 +1,10 @@
 use futures::future;
+use std::thread;
 use std::time::Duration;
 
 async fn foo(n: u64) {
     println!("start {n}");
-    std::thread::sleep(Duration::from_secs(1)); // Oops!
+    thread::sleep(Duration::from_secs(1)); // Oops!
     println!("end {n}");
 }
 

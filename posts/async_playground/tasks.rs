@@ -4,6 +4,7 @@ use std::pin::Pin;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Mutex, OnceLock};
 use std::task::{Context, Poll, Waker};
+use std::thread;
 use std::time::{Duration, Instant};
 
 static TASK_SENDER: OnceLock<Sender<BoxedFuture>> = OnceLock::new();
@@ -83,7 +84,7 @@ fn main() {
         // Sleep until the next Waker is scheduled and then invoke Wakers that are ready.
         let mut wakers_tree = WAKERS.lock().unwrap();
         let next_wake = wakers_tree.keys().next().expect("sleep forever?");
-        std::thread::sleep(next_wake.duration_since(Instant::now()));
+        thread::sleep(next_wake.duration_since(Instant::now()));
         while let Some(entry) = wakers_tree.first_entry() {
             if *entry.key() <= Instant::now() {
                 entry.remove().into_iter().for_each(Waker::wake);

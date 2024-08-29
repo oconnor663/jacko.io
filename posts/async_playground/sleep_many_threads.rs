@@ -2,6 +2,7 @@ use futures::future;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::thread;
 use std::time::{Duration, Instant};
 
 struct Sleep {
@@ -17,8 +18,8 @@ impl Future for Sleep {
         } else {
             let wake_time = self.wake_time;
             let waker = context.waker().clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(wake_time.saturating_duration_since(Instant::now()));
+            thread::spawn(move || {
+                thread::sleep(wake_time.saturating_duration_since(Instant::now()));
                 waker.wake();
             });
             Poll::Pending
