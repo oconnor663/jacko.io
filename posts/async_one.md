@@ -171,11 +171,11 @@ now we'll just say that a future is what an async function returns. Let's
 finish up by making a couple small mistakes with futures and seeing what
 happens.
 
-## Mistakes
+## Important Mistakes
 
-We can get our first hint of how all of this works if we make a small mistake,
-using [`std::thread::sleep`] instead of [`tokio::time::sleep`] in our async
-function. Try it:
+We can get some hints about how async works if we start making some mistakes.
+First let's try using [`std::thread::sleep`] instead of [`tokio::time::sleep`]
+in our async function:
 
 [`std::thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
 [`tokio::time::sleep`]: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
@@ -190,11 +190,20 @@ async fn foo(n: u64) {
 ```
 
 Oh no! Everything is running one-at-a-time again! It's an easy mistake to make,
-unfortunately. But we can learn a lot about how a system works by seeing how it
-fails, and what we're learning here is that all of the jobs running "at the
-same time" in the async examples above were actually running on a single
-thread. That's the magic of async. In the next part of this series, we'll dive
-into all the nitty gritty details of how exactly this works.
+unfortunately.[^detect_blocking] But we can learn a lot about how a system
+works by watching it fail, and what we're learning here is that all of the jobs
+running "at the same time" in the async examples above were actually running on
+a single thread. That's the magic of async. In the next part of this series,
+we'll dive into all the nitty gritty details of how exactly this works.
+
+[^detect_blocking]: There have been [attempts][async_std_proposal] to
+    automatically detect and handle blocking in async functions, but that's led
+    to [performance problems][tokio_blocking_note], and it hasn't been possible
+    to handle [all cases][reddit_blocking_comment].
+
+[async_std_proposal]: https://async.rs/blog/stop-worrying-about-blocking-the-new-async-std-runtime/
+[reddit_blocking_comment]: https://www.reddit.com/r/rust/comments/ebfj3x/stop_worrying_about_blocking_the_new_asyncstd/fb4i9z5/
+[tokio_blocking_note]: https://tokio.rs/blog/2020-04-preemption#a-note-on-blocking
 
 TODO: This also doesn't work:
 
