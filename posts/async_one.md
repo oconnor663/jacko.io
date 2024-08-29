@@ -8,27 +8,32 @@
 Async/await, or async IO, is a new-ish language feature that lets us do more
 than one thing at a time. Rust has had async/await since 2019. It's especially
 popular with websites and network services that handle many connections at
-once, because running lots of async "futures" or "tasks" is more efficient than
-running lots of threads.[^lots]
+once,[^lots] because running lots of async "futures" or "tasks" is more
+efficient than running lots of threads. This series of articles is about what
+futures and tasks are and how they work.
 
-[^lots]: "Lots" here usually means 10k or more.
+[^lots]: "Many" here usually means ten thousand or more. This is sometimes
+    called the ["C10K problem"][c10k], short for "10k clients" or "10k
+    connections".
 
-At a very high level, using threads means asking your OS and your hardware to
-run different jobs in parallel for you, but using async/await means
-reorganizing your own code to run those jobs yourself.[^concurrency] That's
-partly why it's more efficient, but for the same reason the details of async
-tend to "leak" into your code, and that makes it harder to learn. This series
-is a details-first introduction to async Rust, focused on translating async
-examples into ordinary Rust code that we can read and play with.
+[c10k]: https://en.wikipedia.org/wiki/C10k_problem
 
-[^concurrency]: The famously confusing technical terms for this distinction are
-    "parallelism" vs "concurrency". I don't think they're helpful for teaching.
+At a high level, using threads is asking your OS and your hardware to do things
+in parallel for you, but using async/await is reorganizing your own code to do
+things in parallel yourself.[^concurrency] That's where the efficiency comes
+from, but it also means that the details of async tend to "leak" into your
+code, and that makes it harder to learn. This series will be a details-first
+introduction to async Rust, focused on translating async examples into ordinary
+Rust code that we can read and play with.
+
+[^concurrency]: The famously confusing technical term for this distinction is
+    "parallelism" vs "concurrency". I'm not going to focus on it.
 
 The examples in this series will use lots of traits, generics, closures, and
 threads. I'll assume that you've written some Rust before and that you've read
 [The Rust Programming Language] or similar.[^ch_20] If not, this will be a bit
-of a firehose, and you might need to refer back to something like [Rust By
-Example] as you go.[^books]
+of a firehose, and you might want to refer to [Rust By Example] when you see
+something new.[^books]
 
 [The Rust Programming Language]: https://doc.rust-lang.org/book/
 [Rust By Example]: https://doc.rust-lang.org/rust-by-example/
@@ -38,23 +43,26 @@ Example] as you go.[^books]
 
 [Chapter 20]: https://doc.rust-lang.org/book/ch20-00-final-project-a-web-server.html
 
-[^books]: If you're the sort of programmer who doesn't like learning new
-    languages from books, consider [this advice from Bryan Cantrill][advice],
-    who's just like you: "With Rust, you need to _learn_ it&hellip;buy the
-    book, sit down, read the book in a quiet place&hellip;Rust rewards that."
+[^books]: If you're the sort of programmer who doesn't like learning languages
+    from books, consider [this advice from Bryan Cantrill][advice], who's just
+    like you: "With Rust, you need to _learn_ it&hellip;buy the book, sit down,
+    read the book in a quiet place&hellip;Rust rewards that."
 
 [advice]: https://youtu.be/HgtRAbE1nBM?t=3913
 
-Most of our async examples will use the [Tokio async
-"runtime"][Tokio].[^more_than_one] You could say that the goal of this series
-is to give us lots of practical intuition about what an async runtime is and
-what it does.
+Most of our async examples will use the [Tokio] async
+"runtime".[^more_than_one] Once we understand futures and tasks, it'll be
+easier to talk about what a runtime is and what it does. For now, it's a
+library we use in our async programs.
 
 [Tokio]: https://tokio.rs/
 
 [^more_than_one]: There are several async runtimes available in Rust, but the
     differences between them aren't important for this series. Tokio is the
     most popular and the most widely supported, so it's a good default.
+
+Let's get started by doing more than one thing at a time with threads. This
+will go smoothly at first, but soon we'll run into trouble.
 
 ## Threads
 
@@ -87,8 +95,13 @@ for thread in threads {
 }
 ```
 
-We can bump that up to [a hundred threads][hundred_threads], and it works just
-fine. But if we try to run [a thousand
+Note that `join` here means "wait for this thread to finish". Threads start
+running in the background as soon as we call `spawn`, so all of them are making
+progress while we wait on the first one, and the rest of the calls to `join`
+return quickly.
+
+We can bump this example up to [a hundred threads][hundred_threads], and it
+works just fine. But if we try to run [a thousand
 threads][thousand_threads],[^thread_limit] it doesn't work anymore:
 
 [hundred_threads]: playground://async_playground/threads_100.rs
@@ -104,9 +117,20 @@ failed to spawn thread: Os { code: 11, kind: WouldBlock, message:
 "Resource temporarily unavailable" }
 ```
 
-Threads are a fine way to run a few jobs in parallel, or even a few hundred,
-but for various reasons they don't scale well beyond that.[^thread_pool] If we
-want to run thousands of jobs at once, we need something different.
+Each thread uses a lot of memory,[^stack_space] so there's a limit on how many
+we can threads we can run at once. It's harder to see on the playground, but we
+can also cause performance problems by switching between lots of threads at
+once. Threads are a fine way to run a few jobs in parallel, or even a few
+hundred, but for various reasons they don't scale well beyond
+that.[^thread_pool] If we want to run thousands of jobs at once, we need
+something different.
+
+TODO: example of thread switching overhead
+
+[^stack_space]: Specifically, each thread allocates space for its "stack",
+    which is 8&nbsp;MiB by default on Linux. The OS uses fancy tricks to
+    allocate this space "lazily", but it's still a lot if we spawn thousands of
+    threads.
 
 [^thread_pool]: A thread pool can be a good approach for CPU-intensive work,
     but when each jobs spends most of its time blocked on IO, the pool quickly
@@ -154,10 +178,21 @@ let joined_future = future::join_all(futures);
 joined_future.await;
 ```
 
-So far this might look like just another way of doing the same thing we were
-doing with threads. But this works even if we bump it up to [a thousand
-jobs][thousand_futures]. In fact, if we [comment out the prints and build in
-release mode][million_futures], we can run _a million jobs_ at once.[^remember]
+Despite its name, [`join_all`] is doing something very different from the
+[`join`] method we used with threads. There joining meant waiting on something,
+but here it means combining multiple "futures" together. We'll get to the
+details in Part Two, but for now we can [add some more prints][tokio_10_dbg] to
+see that can see `join_all` doesn't take any time, and none of `foo`s start
+running until we `.await` the joined future.
+
+[`join_all`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
+[`join`]: https://doc.rust-lang.org/std/thread/struct.JoinHandle.html#method.join
+[tokio_10_dbg]: playground://async_playground/tokio_10_dbg.rs
+
+Unlike the threads example above, this works even if we bump it up to [a
+thousand jobs][thousand_futures]. In fact, if we [comment out the prints and
+build in release mode][million_futures], we can run _a million jobs_ at
+once.[^remember]
 
 [thousand_futures]: playground://async_playground/tokio_1k.rs
 [million_futures]: playground://async_playground/tokio_1m.rs?mode=release
@@ -165,11 +200,6 @@ release mode][million_futures], we can run _a million jobs_ at once.[^remember]
 [^remember]: For me this takes about two seconds, so it's spending about as
     much time working as it is sleeping. And remember this is on the
     Playground, with tight resource limits.
-
-What exactly is a "future" though? Well, that's what Part Two is all about. For
-now we'll just say that a future is what an async function returns. Let's
-finish up by making a couple small mistakes with futures and seeing what
-happens.
 
 ## Important Mistakes
 

@@ -35,6 +35,10 @@ name = "tokio_10"
 path = "tokio_10.rs"
 
 [[bin]]
+name = "tokio_10_dbg"
+path = "tokio_10_dbg.rs"
+
+[[bin]]
 name = "tokio_1k"
 path = "tokio_1k.rs"
 
