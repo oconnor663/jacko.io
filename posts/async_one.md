@@ -6,33 +6,35 @@
 - [Part Three: More!](async_three.html)
 
 Async/await, or async IO, is a new-ish language feature that lets us do more
-than one thing at a time. Rust has had async/await since 2019. It's especially
-popular with websites and network services that handle many connections at
-once,[^lots] because running lots of async "futures" or "tasks" is more
-efficient than running lots of threads. This series of articles is about what
-futures and tasks are and how they work.
+than one thing at a time. Rust has had async/await since 2019.[^new_ish] It's
+especially popular with websites and network services that handle many
+connections at once,[^lots] because running lots of async "futures" or "tasks"
+is more efficient than running lots of threads. This series of articles is
+about what futures and tasks are and how they work.
+
+[^new_ish]: For comparison C# added async/await in 2012, Python in 2015, JS in
+    2017, and C++ in 2020.
 
 [^lots]: "Many" here usually means ten thousand or more. This is sometimes
-    called the ["C10K problem"][c10k], short for "10k clients" or "10k
-    connections".
+    called the ["C10K problem"][c10k], short for 10k clients or connections.
 
 [c10k]: https://en.wikipedia.org/wiki/C10k_problem
 
 At a high level, using threads is asking your OS and your hardware to do things
 in parallel for you, but using async/await is reorganizing your own code to do
 things in parallel yourself.[^concurrency] That's where the efficiency comes
-from, but it also means that the details of async tend to "leak" into your
-code, and that makes it harder to learn. This series will be a details-first
-introduction to async Rust, focused on translating async examples into ordinary
-Rust code that we can read and play with.
+from, but it also means the details of async tend to "leak" into your code, and
+that makes it harder to learn. This series will be a details-first introduction
+to async Rust, focused on translating async examples into ordinary Rust code
+that we can read and play with.
 
 [^concurrency]: The famously confusing technical term for this distinction is
     "parallelism" vs "concurrency". I'm not going to focus on it.
 
-The examples in this series will use lots of traits, generics, closures, and
-threads. I'll assume that you've written some Rust before and that you've read
-[The Rust Programming Language] or similar.[^ch_20] If not, this will be a bit
-of a firehose, and you might want to refer to [Rust By Example] when you see
+Our examples will use lots of traits, generics, closures, and threads. I'll
+assume that you've written some Rust before and that you've read [The Rust
+Programming Language] or similar.[^ch_20] If not, this will be a bit of a
+firehose, and you might want to refer to [Rust By Example] whenever you see
 something new.[^books]
 
 [The Rust Programming Language]: https://doc.rust-lang.org/book/
@@ -118,12 +120,11 @@ failed to spawn thread: Os { code: 11, kind: WouldBlock, message:
 ```
 
 Each thread uses a lot of memory,[^stack_space] so there's a limit on how many
-we can threads we can run at once. It's harder to see on the playground, but we
-can also cause performance problems by switching between lots of threads at
-once. Threads are a fine way to run a few jobs in parallel, or even a few
-hundred, but for various reasons they don't scale well beyond
-that.[^thread_pool] If we want to run thousands of jobs at once, we need
-something different.
+threads we can run at once. It's harder to see on the playground, but we can
+also cause performance problems by switching between lots of threads at once.
+Threads are a fine way to run a few jobs in parallel, or even a few hundred,
+but for various reasons they don't scale well beyond that.[^thread_pool] If we
+want to run thousands of jobs at once, we need something different.
 
 TODO: example of thread switching overhead
 
