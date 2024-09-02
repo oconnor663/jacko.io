@@ -23,8 +23,12 @@ name = "threads_1k"
 path = "threads_1k.rs"
 
 [[bin]]
-name = "basketball"
-path = "basketball.rs"
+name = "basketball_threads"
+path = "basketball_threads.rs"
+
+[[bin]]
+name = "basketball_tasks"
+path = "basketball_tasks.rs"
 
 [[bin]]
 name = "rayon"

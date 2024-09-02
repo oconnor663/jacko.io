@@ -122,17 +122,22 @@ failed to spawn thread: Os { code: 11, kind: WouldBlock, message:
 Each thread uses a lot of memory,[^stack_space] so there's a limit on how many
 threads we can run at once. It's harder to see on the Playground, but we can
 also cause performance problems by [switching between lots of threads at
-once][basketball]. Threads are a fine way to run a few jobs in parallel, or
-even a few hundred, but for various reasons they don't scale well beyond
-that.[^thread_pool] If we want to run thousands of jobs at once, we need
-something different.
+once][basketball_threads].[^basketball_demo] Threads are a fine way to run a
+few jobs in parallel, or even a few hundred, but for various reasons they don't
+scale well beyond that.[^thread_pool] If we want to run thousands of jobs at
+once, we need something different.
 
 [^stack_space]: Specifically, each thread allocates space for its "stack",
     which is 8&nbsp;MiB by default on Linux. The OS uses fancy tricks to
     allocate this space "lazily", but it's still a lot if we spawn thousands of
     threads.
 
-[basketball]: playground://async_playground/basketball.rs?mode=release
+[^basketball_demo]: This is a demo of passing "basketballs" back and forth
+    among many threads, to show how thread switching overhead affects
+    performance as the number of threads grows. It's longer and more
+    complicated than the other examples in Part One, and it's ok to skip it.
+
+[basketball_threads]: playground://async_playground/basketball_threads.rs?mode=release
 
 [^thread_pool]: A thread pool can be a good approach for CPU-intensive work,
     but when each jobs spends most of its time blocked on IO, the pool quickly
@@ -201,7 +206,12 @@ once.[^remember]
 
 [^remember]: For me this takes about two seconds, so it's spending about as
     much time working as it is sleeping. And remember this is on the
-    Playground, with tight resource limits.
+    Playground, with tight resource limits. The [tasks
+    version][basketball_tasks] of the basketball demo above is also much more
+    efficient than the threads version, but it requires lots of concepts we
+    haven't explained yet, so I don't want to focus on it.
+
+[basketball_tasks]: playground://async_playground/basketball_tasks.rs?mode=release
 
 ## Important Mistakes
 

@@ -79,7 +79,7 @@ fn bench(num_threads: usize) -> Duration {
     let start_barrier = Barrier::new(num_threads + 1);
     let mut ball_senders = Vec::new();
     let mut ball_receivers = Vec::new();
-    // Create a channel to send balls to each thread.
+    // Create a channel to send balls to each worker/passer thread.
     for _ in 0..num_threads {
         let (sender, receiver) = channel();
         ball_senders.push(sender);
