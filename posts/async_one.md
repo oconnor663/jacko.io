@@ -150,11 +150,7 @@ once, we need something different.
 
 Let's try the same thing with async/await. Part Two will go into all the
 details, but for now I just want to type it out and run it on the Playground.
-Our async `foo` function looks like this:[^tokio]
-
-[^tokio]: Most of these examples will use the [Tokio](https://tokio.rs/)
-    runtime and the [`futures`](https://docs.rs/futures/) support library.
-    There are other options, but this is the most common way to do things.
+Our async `foo` function looks like this:
 
 ```rust
 async fn foo(n: u64) {
