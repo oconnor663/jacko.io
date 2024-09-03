@@ -1,9 +1,11 @@
-# Async Rust, Part Two: How?
+# Async Rust, Part Two: Futures
 ###### \[date]
 
 - [Part One: Why?](async_one.html)
-- Part Two: How? (you are here)
-- [Part Three: More!](async_three.html)
+- Part Two: Futures (you are here)
+- [Part Three: Tasks](async_three.html)
+- [Part Four: IO](async_four.html)
+- [Part Five: More!](async_five.html)
 
 In Part One we looked at [some async Rust code][part_one] without explaining
 anything about how it worked. That left us with several mysteries: What's an

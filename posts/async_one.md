@@ -2,8 +2,10 @@
 ###### \[date]
 
 - Part One: Why? (you are here)
-- [Part Two: How?](async_two.html)
-- [Part Three: More!](async_three.html)
+- [Part Two: Futures](async_two.html)
+- [Part Three: Tasks](async_three.html)
+- [Part Four: IO](async_four.html)
+- [Part Five: More!](async_five.html)
 
 Async/await, or async IO, is a new-ish language feature that lets us do more
 than one thing at a time. Rust has had async/await since 2019.[^new_ish] It's
