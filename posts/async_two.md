@@ -463,18 +463,23 @@ fn main() {
 This works, but we still have the "busy loop" problem from above. Before we fix
 that, though, we need to make an important mistake:
 
-Since this version of our main loop never stops polling, and since our `Waker`
-does nothing, we might wonder whether calling `wake` in `Sleep::poll` actually
-matters. Surprisingly, it does. If we delete it, [things appear to work at
-first][loop_forever_10]. But when we bump the number of jobs from ten to a
-hundred, [our futures never wake up][loop_forever_100]. What we're seeing is
-that, even though _our_ `Waker` does nothing, there are _other_ `Waker`s in our
-program. When the real [`JoinAll`] has many child futures,[^cutoff] it creates
-its own `Waker`s internally, so it can tell which child asks for a wakeup. This
-is more efficient than polling all of them every time, but it also means that
-children who never call `wake` will never be polled again. Thus the rule is
-that leaf futures must always call `wake`, even if the main loop is waking up
-anyway.
+Since this version of our main loop[^event_loop] never stops polling, and since
+our `Waker` does nothing, we might wonder whether calling `wake` in
+`Sleep::poll` actually matters. Surprisingly, it does. If we delete it, [things
+appear to work at first][loop_forever_10]. But when we bump the number of jobs
+from ten to a hundred, [our futures never wake up][loop_forever_100]. What
+we're seeing is that, even though _our_ `Waker` does nothing, there are _other_
+`Waker`s in our program. When the real [`JoinAll`] has many child
+futures,[^cutoff] it creates its own `Waker`s internally, so it can tell which
+child asks for a wakeup. This is more efficient than polling all of them every
+time, but it also means that children who never call `wake` will never be
+polled again. Thus the rule is that leaf futures must always call `wake`, even
+if the main loop is waking up anyway.
+
+[^event_loop]: This is often called an "event loop", but right now all we have
+    is sleeps, and those aren't really events. We'll build a proper event loop
+    when we get to IO in Part Four. For now I'm going to call this the "main
+    loop".
 
 [loop_forever_10]: playground://async_playground/loop_forever_10.rs
 [loop_forever_100]: playground://async_playground/loop_forever_100.rs
