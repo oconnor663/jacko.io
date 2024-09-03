@@ -31,6 +31,10 @@ name = "basketball_tasks"
 path = "basketball_tasks.rs"
 
 [[bin]]
+name = "basketball_futures"
+path = "basketball_futures.rs"
+
+[[bin]]
 name = "rayon"
 path = "rayon.rs"
 

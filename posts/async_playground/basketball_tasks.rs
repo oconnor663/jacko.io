@@ -25,7 +25,7 @@ fn balls_in_flight() -> usize {
 }
 
 // The code that runs on each worker/passer task.
-async fn pass_the_basketballs_around(
+async fn pass_basketballs_around(
     start_barrier: Arc<Barrier>,
     mut ball_receiver: Receiver<Ball>,
     ball_senders: Arc<Vec<Sender<Ball>>>,
@@ -100,7 +100,7 @@ async fn bench(num_tasks: usize) -> Duration {
         let start_barrier = Arc::clone(&start_barrier);
         let ball_senders = Arc::clone(&ball_senders);
         let trash_sender = trash_sender.clone();
-        tokio::task::spawn(pass_the_basketballs_around(
+        tokio::task::spawn(pass_basketballs_around(
             start_barrier,
             receiver,
             ball_senders,

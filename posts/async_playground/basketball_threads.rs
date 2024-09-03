@@ -57,7 +57,7 @@ fn balls_in_flight() -> usize {
 }
 
 // The code that runs on each worker/passer thread.
-fn pass_the_basketballs_around(
+fn pass_basketballs_around(
     start_barrier: &Barrier,
     ball_receiver: Receiver<Ball>,
     ball_senders: &[Sender<Ball>],
@@ -124,7 +124,7 @@ fn bench(num_threads: usize) -> Duration {
         // Spawn all the worker/passer threads.
         for receiver in ball_receivers {
             scope.spawn(|| {
-                pass_the_basketballs_around(
+                pass_basketballs_around(
                     &start_barrier,
                     receiver,
                     &ball_senders,
