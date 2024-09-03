@@ -8,6 +8,28 @@
 //! demo a few times. If you run this on your own computer, the hope/expectation is that
 //! performance should go up until the number of threads equals the number of CPUs, and then it
 //! should go down after that.
+//!
+//! If you want to build your own demo like this one, there are a few pitfalls you need to watch
+//! out for, or else you might get confusing results. (These are also interesting mistakes to make
+//! on purpose if you have time.):
+//!
+//! - If the threads do no work between passes, then the single-threaded case will be the fastest,
+//!   because it never really synchronizes threads at the hardware level. The busy work in this
+//!   demo simulates a real application doing nontrivial processing in addition to IO, which
+//!   benefits from using multiple cores.
+//!
+//! - Passes need to be random, just like incoming IO in a real application is kind of random. If
+//!   each thread always passes to the same other thread, the threads will form a _ring_. When
+//!   there are fewer balls than threads, the balls will move together around that ring like a
+//!   _train_, and you'll only pay the cost of waking idle threads at the front and back of the
+//!   train.
+//!
+//! - It's important for the threads to send each other work, rather than just having the main
+//!   thread send them work. That would bottleneck the whole program on the main thread and dilute
+//!   the effects we're trying to measure. This is also why we need the `Ball.game_over` signal in
+//!   this demo. If balls only came from the main thread, then only the main thread would be using
+//!   the senders, and it could close them. But here the senders are shared, and the main thread
+//!   can't close them, so we need a stop signal.
 
 use rand::prelude::*;
 use std::sync::mpsc::{channel, Receiver, Sender};
