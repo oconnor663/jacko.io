@@ -138,8 +138,12 @@ name = "tokio_tasks"
 path = "tokio_tasks.rs"
 
 [[bin]]
-name = "tasks"
-path = "tasks.rs"
+name = "tasks_no_spawn"
+path = "tasks_no_spawn.rs"
+
+[[bin]]
+name = "tasks_spawn"
+path = "tasks_spawn.rs"
 
 [[bin]]
 name = "no_pin"

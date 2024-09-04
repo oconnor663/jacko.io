@@ -7,10 +7,10 @@ use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
 
-static TASK_SENDER: OnceLock<Sender<BoxedFuture>> = OnceLock::new();
+static TASK_SENDER: OnceLock<Sender<DynFuture>> = OnceLock::new();
 static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
 
-type BoxedFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
+type DynFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
 
 struct Sleep {
     wake_time: Instant,
@@ -36,25 +36,24 @@ fn sleep(duration: Duration) -> Sleep {
     Sleep { wake_time }
 }
 
-fn spawn_task<F: Future<Output = ()> + Send + 'static>(future: F) {
+fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) {
     TASK_SENDER.get().unwrap().send(Box::pin(future)).unwrap();
 }
 
 async fn foo(n: u64) {
+    println!("start {n}");
     sleep(Duration::from_secs(1)).await;
-    println!("finished foo {n}");
+    println!("end {n}");
 }
 
 async fn async_main() {
-    println!("Spawn 10 tasks in 2 seconds and wait for all of them to finish.\n");
+    // Tokio exits when the main task is finished, like Rust exits when the main thread is
+    // finished. So with tokio::task::spawn, we needed to collect task handles and explicitly await
+    // them. But for simplicity we've skipped implementing task handles, and our main loop runs
+    // until all tasks are finished, so we can spawn() without collecting anything.
     for n in 1..=10 {
-        spawn_task(foo(n));
-        println!("started foo {n}");
-        sleep(Duration::from_millis(200)).await;
+        spawn(foo(n));
     }
-    // NOTE: Tokio exits when the main task is finished, so we need to collect task
-    // handles and await them. Our implementation below continues until all tasks
-    // are finished, so we don't need to collect (or implement) task handles.
 }
 
 fn main() {
@@ -62,12 +61,10 @@ fn main() {
     TASK_SENDER.set(task_sender).unwrap();
     let waker = futures::task::noop_waker();
     let mut context = Context::from_waker(&waker);
-    println!("Start with one task (async_main), which spawns");
-    println!("ten other tasks (foo) in two seconds.\n");
-    let mut tasks: Vec<BoxedFuture> = vec![Box::pin(async_main())];
+    let mut tasks: Vec<DynFuture> = vec![Box::pin(async_main())];
     loop {
-        // Poll all existing tasks, removing any that are finished.
-        let is_pending = |task: &mut BoxedFuture| task.as_mut().poll(&mut context).is_pending();
+        // Poll each task, removing any that are Ready.
+        let is_pending = |task: &mut DynFuture| task.as_mut().poll(&mut context).is_pending();
         tasks.retain_mut(is_pending);
         // Any of the tasks we just polled might've called spawn_task() internally. Drain the
         // TASK_SENDER channel into our local tasks Vec.
@@ -77,7 +74,7 @@ fn main() {
                 tasks.push(task);
             }
         }
-        // If there are no tasks left, we're done!
+        // If there are no tasks left, we're done.
         if tasks.is_empty() {
             break;
         }

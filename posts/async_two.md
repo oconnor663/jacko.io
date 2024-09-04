@@ -21,7 +21,9 @@ does `#[tokio::main]` actually do?
 I think the best way to answer these questions is to translate each piece into
 normal, non-async Rust code and stare at it for a while. We'll find that we can
 replicate `foo` and `join_all` without too much trouble, but writing our own
-`sleep` is going to be a whole different story.[^universe] Here we go.
+`sleep` is going to be a whole different story.[^universe] This will be the
+most difficult part of this series, with the most new details that you need to
+fit in your head at once. Here we go.
 
 [^universe]: [If you wish to make an apple pie from scratch, you must first
     invent the universe.](https://youtu.be/BkHCO8f2TWs?si=gIfadwLGsvawJ3qn)
@@ -407,18 +409,19 @@ directly [using tools like `perf` on Linux][perf].
 [perf]: https://github.com/oconnor663/jacko.io/blob/master/posts/async_playground/perf_stat.sh
 
 We want to call `wake` later, when it's actually time to wake up. One way to do
-that is to spawn a thread to call `thread::sleep` and `wake` for us. If we do
-that in every call to `poll`, we'll run into the [too-many-threads crash from
-Part One][same_crash]. We can work around that by spawning just one thread and
-and [using a channel to send `Waker`s to it][shared_thread]. This is a correct
-and viable implementation, but there's something unsatisfying about it&hellip;
+that is to spawn a thread to call `thread::sleep` and `wake` for us. If we did
+that in every call to `poll`, we'd run into the [too-many-threads crash from
+Part One][same_crash]. We could work around that by spawning one shared thread
+and and [using a channel to send `Waker`s to it][shared_thread]. That would be
+a correct and viable implementation, but there's something unsatisfying about
+it&hellip;
 
-We already have a shared thread that spends most of its time sleeping: the main
-thread of our program! It's going to sleeping forever until someone calls
-`wake`. Does Tokio give us a way to tell it wake up at a specific time instead?
-Well, yes, `tokio::time::sleep`. But that means if we really want to write our
-own `sleep`, and we don't want to spawn an extra thread to make it work, then
-we also need to write our own `main`.
+We already have a thread that spends most of its time sleeping, the main thread
+of our program! Why doesn't Tokio give us a way to tell the main thread to wake
+up at a specific time, so that we don't need two sleeping threads? Well, there
+is a way, that's what `tokio::time::sleep` _is_. But if we really want to write
+our own `sleep`, and we don't want to spawn an extra thread to make it work,
+then it turns out we also need to write our own `main`.
 
 [same_crash]: playground://async_playground/sleep_many_threads.rs
 [shared_thread]: playground://async_playground/sleep_one_thread.rs
@@ -463,7 +466,7 @@ fn main() {
 ```
 
 This works, but we still have the "busy loop" problem from above. Before we fix
-that, though, we need to make an important mistake:
+that, though, we need to make another important mistake:
 
 Since this version of our main loop[^event_loop] never stops polling, and since
 our `Waker` does nothing, we might wonder whether calling `wake` in
