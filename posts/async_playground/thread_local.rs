@@ -53,7 +53,7 @@ fn main() {
     while joined_future.as_mut().poll(&mut context).is_pending() {
         WAKERS.with_borrow_mut(|wakers_tree| {
             let next_wake = wakers_tree.keys().next().expect("sleep forever?");
-            thread::sleep(next_wake.duration_since(Instant::now()));
+            thread::sleep(next_wake.saturating_duration_since(Instant::now()));
             while let Some(entry) = wakers_tree.first_entry() {
                 if *entry.key() <= Instant::now() {
                     entry.remove().into_iter().for_each(Waker::wake);
