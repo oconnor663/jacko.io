@@ -90,16 +90,16 @@ second instead of ten:[^order]
 
 ```rust
 LINK: Playground playground://async_playground/threads.rs
-let mut threads = Vec::new();
+let mut thread_handles = Vec::new();
 for n in 1..=10 {
-    threads.push(thread::spawn(move || foo(n)));
+    thread_handles.push(thread::spawn(move || foo(n)));
 }
-for thread in threads {
-    thread.join().unwrap();
+for handle in thread_handles {
+    handle.join().unwrap();
 }
 ```
 
-Note that `join` here means "wait for this thread to finish". Threads start
+Note that `join` here means "wait for the thread to finish". Threads start
 running in the background as soon as we call `spawn`, so all of them are making
 progress while we wait on the first one, and the rest of the calls to `join`
 return quickly.

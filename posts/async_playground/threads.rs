@@ -8,11 +8,11 @@ fn foo(n: u64) {
 }
 
 fn main() {
-    let mut threads = Vec::new();
+    let mut thread_handles = Vec::new();
     for n in 1..=10 {
-        threads.push(thread::spawn(move || foo(n)));
+        thread_handles.push(thread::spawn(move || foo(n)));
     }
-    for thread in threads {
-        thread.join().unwrap();
+    for handle in thread_handles {
+        handle.join().unwrap();
     }
 }
