@@ -28,7 +28,7 @@ impl Context {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 struct Waker {}
 
 impl Waker {

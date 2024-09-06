@@ -105,11 +105,9 @@ async fn bench(num_futures: usize) -> Duration {
         future::Either::Left(_) => unreachable!(),
         future::Either::Right(_) => {}
     }
-    // The game_over_future finished. Stop the clock.
-    let game_time = Instant::now() - game_start;
-    // The worker futures never finished above, but we're about to drop them and never poll them
-    // again. This is how cancellation works.
-    game_time
+    // The game_over_future finished. Stop the clock. The worker futures never finished above, but
+    // we're about to drop them and never poll them again. This is how cancellation works.
+    Instant::now() - game_start
 }
 
 #[tokio::main]
