@@ -493,12 +493,13 @@ if the main loop is waking up anyway.
 [^cutoff]: As of `futures` v0.3.30, [the exact cutoff is
     31](https://github.com/rust-lang/futures-rs/blob/0.3.30/futures-util/src/future/join_all.rs#L35).
 
-Ok, back to `main`. Somehow our loop needs to get ahold of each `Waker` and its
-wake time. Let's use a global variable for this:[^thread_local]
+Ok, back to `main`. Somehow our loop needs to get at each `Waker` and its wake
+time. Let's use a global variable for this. As usual in Rust, we need to wrap
+it in a `Mutex` if we want to mutate it from safe code:[^thread_local]
 
 [^thread_local]: It would be slightly more efficient to [use `thread_local!`
-    and `RefCell` instead of `Mutex`][thread_local], but `Mutex` is the
-    familiar way to make a global variable in safe Rust, and it's good enough.
+    and `RefCell` instead of `Mutex`][thread_local], but `Mutex` is more
+    familiar, and it's good enough.
 
 [thread_local]: playground://async_playground/thread_local.rs
 

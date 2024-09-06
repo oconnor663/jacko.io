@@ -4,11 +4,24 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
+futures = "0.3.30"
 tokio = { version = "1.39.3", features = ["full"] }
 
 [[bin]]
 name = "await"
 path = "await.rs"
+
+[[bin]]
+name = "tasks_no_send_no_static"
+path = "tasks_no_send_no_static.rs"
+
+[[bin]]
+name = "tasks_one_send_no_static"
+path = "tasks_one_send_no_static.rs"
+
+[[bin]]
+name = "tasks_no_static"
+path = "tasks_no_static.rs"
 
 [[bin]]
 name = "recursion"

@@ -8,8 +8,6 @@ use std::time::{Duration, Instant};
 
 static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
 
-type DynFuture = Pin<Box<dyn Future<Output = ()>>>;
-
 struct Sleep {
     wake_time: Instant,
 }
@@ -40,6 +38,8 @@ async fn foo(n: u64) {
     println!("end {n}");
 }
 
+type DynFuture = Pin<Box<dyn Future<Output = ()>>>;
+
 fn main() {
     let mut tasks: Vec<DynFuture> = Vec::new();
     for n in 1..=10 {
@@ -51,7 +51,7 @@ fn main() {
         // Poll each task, removing any that are Ready.
         let is_pending = |task: &mut DynFuture| task.as_mut().poll(&mut context).is_pending();
         tasks.retain_mut(is_pending);
-        // If there are no tasks left, we're done.
+        // If there are no tasks left, we're done. Note that this is different from Tokio.
         if tasks.is_empty() {
             break;
         }
