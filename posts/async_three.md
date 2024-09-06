@@ -21,7 +21,7 @@ while joined_future.as_mut().poll(&mut context).is_pending() {
 
 That `joined_future` is the simplest possible example of a task. It's a
 top-level future that's owned and polled by the main loop. That loop only
-polled one task, but there's nothing stopping us from having more than one.
+polls one task, but there's nothing stopping us from having more than one.
 And if we had a collection of tasks, we could even add to that collection
 at runtime.
 
@@ -66,22 +66,32 @@ pattern[^futures_unordered] without the performance overhead of threads.
 
 Building on the main loop we wrote in Part Two, we can write our own
 `spawn`. We'll do it in two steps. First we'll make space for multiple
-futures in our main loop, and then we'll implement the `spawn` function to
+tasks in our main loop, and then we'll implement the `spawn` function to
 add new ones.
 
 ## Tasks
 
-If our main loop is going to poll a collection of futures, what type should
-that collection be? In Part Two we used `Vec<Pin<Box<F>>>`,[^ignore_pin]
-where `F` was a generic type parameter on `JoinAll`, but our main function
-doesn't have any type parameters. We also want this collection to be able
-to hold futures of different types at the same time. The Rust feature we
-need here is ["dynamic trait objects"][dyn], or `dyn Trait`.[^dyn] Let's
-start with a type alias so we don't have to write this more than
-once:[^box]
+For this first step, we'll start with [the main loop we wrote at the end of
+Part Two][wakers]. We already know how to poll many futures at once,
+because that's what we did [when we implemented `JoinAll`][join_all]. How
+much of that code can we copy/paste?
 
-[^ignore_pin]: We're still ignoring `Pin` for now, but we're about to see
-    `Box` do some important work.
+[wakers]: playground://async_playground/wakers.rs
+[join_all]: playground://async_playground/join.rs
+
+One thing we'll need to change is the type of the `Vec`. Our `JoinAll` used
+`Vec<Pin<Box<F>>>`,[^ignore_pin] where `F` was a generic type parameter,
+but our main function doesn't have any type parameters. On top of that, we
+want this `Vec` to hold futures of different types at the same
+time.[^same_thing] The Rust feature we need here is ["dynamic trait
+objects"][dyn], or `dyn Trait`.[^dyn] Let's start with a type alias so we
+don't have to write this more than once:[^box]
+
+[^ignore_pin]: We're still ignoring `Pin` for now, but `Box` is about to
+    start doing some important work.
+
+[^same_thing]: `JoinAll` can also hold futures of different types, if you
+    choose its type parameter `F` the same way we're about to.
 
 [dyn]: https://doc.rust-lang.org/book/ch17-02-trait-objects.html
 
@@ -89,15 +99,15 @@ once:[^box]
     in [error handling], where `Box<dyn Error>` is a catch-all type for the `?`
     operator. If you're coming from C++, `dyn Trait` is the closest thing Rust
     has to "`virtual` inheritance". If this is your first time seeing it, you
-    might want to look a the [Rust by Example entry for `dyn`][rbe_dyn].
+    might want to play with the [Rust by Example entry for `dyn`][rbe_dyn].
 
 [error handling]: https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html
 [rbe_dyn]: https://doc.rust-lang.org/rust-by-example/trait/dyn.html
 
 [^box]: This is where we start to care about the difference between `T` and
     `Box<T>`. Because `dyn Trait` is a ["dynamically sized type"][dst], we
-    can't hold an object of that type directly in a local variable or a
-    `Vec` element. We have to `Box` it.
+    can't hold an object of that type directly in a local variable or a `Vec`
+    element. We have to `Box` it.
 
 [dst]: https://doc.rust-lang.org/book/ch19-04-advanced-types.html#dynamically-sized-types-and-the-sized-trait
 
@@ -105,28 +115,65 @@ once:[^box]
 type DynFuture = Pin<Box<dyn Future<Output = ()>>>;
 ```
 
-We'll manage our `Vec<DynFuture>` using `retain_mut` like we did with
-`JoinAll`, removing futures from the `Vec` as soon as they're `Ready`.
-Here's a sketch out what our main loop will look like:
+Note that `DynFuture` doesn't have any type parameters. We can fit _any_ future
+into this one type, as long as its `Output` is `()`. Now instead of building a
+`join_future` in our `main` function, we'll build a `Vec<DynFuture>`, and we'll
+start calling these futures "tasks":[^coercion]
+
+[^coercion]: `Box::pin(foo(n))` is still a concrete future type, but pushing it
+    into the `Vec<DynFuture>` "coerces" the concrete type to `dyn Future`.
+    Specifically, it's an ["unsized coercion"].
+
+["unsized coercion"]: https://doc.rust-lang.org/reference/type-coercions.html#unsized-coercions
 
 ```rust
-let mut tasks: Vec<DynFuture> = ...
+LINK: Playground playground://async_playground/tasks_no_spawn.rs
+let mut tasks: Vec<DynFuture> = Vec::new();
+for n in 1..=10 {
+    tasks.push(Box::pin(foo(n)));
+}
+```
+
+We can manage the `Vec<DynFuture>` using `retain_mut` like `JoinAll` did,
+removing futures from the `Vec` as soon as they're `Ready`. We do need to
+restructure the `while` loop into a `loop`/`break` so that we can do all the
+polling, then check whether we're done, then handle `Waker`s. Now it looks like
+this:
+
+```rust
+LINK: Playground playground://async_playground/tasks_no_spawn.rs
 loop {
     // Poll each task, removing any that are Ready.
     let is_pending = |task: &mut DynFuture| {
         task.as_mut().poll(&mut context).is_pending()
     };
     tasks.retain_mut(is_pending);
-
     // If there are no tasks left, we're done.
     if tasks.is_empty() {
         break;
     }
-
-    // Handle WAKERS and sleeping as we did in Part Two.
-    ...
-}
+    // Otherwise handle WAKERS and sleep as in Part Two...
 ```
+
+This works fine, but it doesn't feel like we've accomplished much. Mostly we
+just copy/pasted from `JoinAll` and tweaked the types. But we've laid some
+important groundwork.
+
+Before we move on, I want to highlight a couple differences between our tasks
+and Tokio's tasks. The same way a regular Rust program exits when the main
+thread is done, without waiting for background threads, a Tokio program exits
+when the main task is done, without waiting for background tasks. But our main
+loop continues until _all_ tasks are done. Our way is simpler, because we don't
+need to implement [`JoinHandle`] for our tasks.[^lazy] Tokio also plumbs the
+return value of a task through the `JoinHandle`, whereas we're assuming tasks
+have no return value. These simplifications will work well enough for the rest
+of this series.
+
+[`JoinHandle`]: https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html
+
+[^lazy]: This is left as an exercise for the reader, as they say.
+
+## Spawn
 
 [Here's a custom event loop with a growable list of tasks.][custom_tasks]
 

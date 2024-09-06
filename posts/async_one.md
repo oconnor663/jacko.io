@@ -138,8 +138,10 @@ once, we need something different.
     among many threads, to show how thread switching overhead affects
     performance as the number of threads grows. It's longer and more
     complicated than the other examples in Part One, and it's ok to skip it.
+    TODO: Is [this version][basketball_threads_orig] still blocked?
 
 [basketball_threads]: https://play.rust-lang.org/?version=stable&mode=release&edition=2021&gist=fd952dba2f51ee595cd9ff6dbbc08c38
+[basketball_threads_orig]: playground://async_playground/basketball_threads.rs?mode=release
 
 [^thread_pool]: A thread pool can be a good approach for CPU-intensive work,
     but when each jobs spends most of its time blocked on IO, the pool quickly
