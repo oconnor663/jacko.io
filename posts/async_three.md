@@ -177,21 +177,20 @@ of this series.
 ## Spawn
 
 The `spawn` function will insert a future into the tasks `Vec`. How should it
-access the `Vec`? It'd be nice if we could do the same thing we did with
+access the `Vec`? It would be nice if we could do the same thing we did with
 `WAKERS` and make `TASKS` a global variable protected by a `Mutex`, but that's
-not going to work this time. It worked before because the main loop only locked
-`WAKERS` after it finished polling. But if `TASKS` is global, the main loop
-will have to lock it while it's polling, and any task that calls `spawn` will
-deadlock.
+not going to work this time. The main loop only locks `WAKERS` after it
+finishes polling, but if `TASKS` were global, the main loop would lock it
+during polling, and any task that called `spawn` would deadlock.
 
-We can work around this by keeping `tasks` local to the main loop and making a
-separate global called `NEW_TASKS`:[^vec_deque]
+We can work around this with two separate lists. We'll keep the `tasks` list
+local to the main loop and add a global called `NEW_TASKS`:[^vec_deque]
 
 [^vec_deque]: We could use a `VecDeque` instead of a `Vec` if we wanted to poll
-    tasks in FIFO order instead of LIFO order. Alternatively, using a [channel]
-    would get rid of the `while let` footgun below, but creating a channel
-    isn't `const`, so we'd need a [`OnceLock`] or similar to initialize the
-    `static`.
+    tasks in FIFO order instead of LIFO order. We could also use a [channel],
+    which as an added benefit would would get rid of the `while let` footgun
+    below. Creating a channel isn't `const`, however, so we'd need a
+    [`OnceLock`] or similar to initialize the `static`.
 
 [channel]: https://doc.rust-lang.org/rust-by-example/std_misc/channels.html
 [`OnceLock`]: https://doc.rust-lang.org/stable/std/sync/struct.OnceLock.html
@@ -234,7 +233,7 @@ it's `Send`:
 type DynFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
 ```
 
-Ok, now the main loo&hellip;no it still doesn't build:
+Ok, now the&hellip;nope it still doesn't build:
 
 ```
 LINK: Playground playground://async_playground/compiler_errors/tasks_one_send_no_static.rs
@@ -296,20 +295,19 @@ can just say we don't want those.[^thread_local]
 
 Ok&hellip;_now_ the main loop can pop from `NEW_TASKS` and push into `tasks`.
 It's not much extra code, but there are a couple pitfalls to watch out for, and
-this time they're runtime problems instead of compiler errors. First, we need
-to poll new tasks at least once as we collect them, rather than waiting until
-the next iteration of the main loop, so that they get a chance to register
-wakeups before we sleep.[^wakeups] Second, we need to make sure that
-`NEW_TASKS` is unlocked before we poll, or else we'll reintroduce the deadlock
-we're trying to avoid.[^deadlock] Here's the expanded main loop, with new code
-in the middle:
+this time they're runtime bugs instead of compiler errors. First, we need to
+poll new tasks at least once as we collect them, rather than waiting until the
+next iteration of the main loop, so that they get a chance to register wakeups
+before we sleep.[^wakeups] Second, we need to make sure that `NEW_TASKS` is
+unlocked before we poll, or else we'll reintroduce the deadlock we're trying to
+avoid.[^deadlock] Here's the expanded main loop, with new code in the middle:
 
 [^wakeups]: We'd notice this mistake immediately below, after we added the
     `async_main` function that calls `spawn`. If our main loop didn't poll
     those new tasks before it tried to read the next wakeup time, then there
     wouldn't be a wakeup time, and it would panic.
 
-[^deadlock]: This mistake is surprisingly easy to make. A method chain like
+[^deadlock]: Unfortunately this is an easy mistake to make. A method chain like
     `.lock().unwrap().pop()` creates a temporary [`MutexGuard`] that lasts
     until the end of the current ["temporary scope"][rule]. In this example as
     written, that's the semicolon after the `let-else`, so the guard does get
@@ -327,12 +325,12 @@ in the middle:
     scope", but the first part of a `match`, `if let`, or `while let`
     expression (the "scrutinee") is not. This rule is necessary for matching on
     borrowing methods like [`Vec::first`] or [`String::trim`], but it's
-    unnecessary for matching on methods like [`Vec::pop`] or [`String::len`]
-    that return owned values. It might be nice if Rust dropped temporaries "as
-    early as possible", but the downside is that drop timing would depend on
-    borrow checker analysis, which isn't generally stable. The [current rule of
-    thumb][mrustc] is that a correct Rust program can be compiled without the
-    borrow checker.
+    unnecessary and counterintuitive with methods like [`Vec::pop`] or
+    [`String::len`] that return owned values. It might be nice if Rust dropped
+    temporaries as soon as possible, but the downside is that drop timing would
+    depend on borrow checker analysis, which isn't generally stable. Some Rust
+    compilers have even [skipped borrow checking entirely][mrustc], since
+    correct programs can be compiled without it.
 
 [`MutexGuard`]: https://doc.rust-lang.org/stable/std/sync/struct.MutexGuard.html
 [`Vec::first`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.first
@@ -396,7 +394,8 @@ different now. We could fix that, but let's keep it the way it is. It's a good
 reminder that, like threads, tasks running at the same time can run in any
 order.
 
-So, did we do all that work just to have another way to spell `join_all`? Well,
-yes and no. They are similar on the inside. But we're about to move beyond
-sleeping and printing to look at real IO, and we're going to find that `spawn`
-is exactly what we want when we're listening for network connections. Onward!
+So, did we really do all this work just to have another way to spell
+`join_all`? Well, yes and no. They're very similar on the inside. But we're
+about to move beyond sleeping and printing to look at real IO, and we're going
+to find that `spawn` is exactly what we want when we're listening for network
+connections. Onward!
