@@ -299,18 +299,50 @@ It's not much extra code, but there are a couple pitfalls to watch out for, and
 this time they're runtime problems instead of compiler errors. First, we need
 to poll new tasks at least once as we collect them, rather than waiting until
 the next iteration of the main loop, so that they get a chance to register
-wakeups before we sleep. Second, we need to make sure that `NEW_TASKS` is
-unlocked before we poll, or else we'll reintroduce the deadlock we're trying to
-avoid.[^deadlock] Here's the expanded main loop, with new code in the middle:
+wakeups before we sleep.[^wakeups] Second, we need to make sure that
+`NEW_TASKS` is unlocked before we poll, or else we'll reintroduce the deadlock
+we're trying to avoid.[^deadlock] Here's the expanded main loop, with new code
+in the middle:
 
-[^deadlock]: A method chain like `.lock().unwrap().pop()` creates a temporary
-    `MutexGuard` that lasts until the end of the current "statement". Normally
-    that means the next semicolon. However, in the first line (the "scrutinee")
-    of a `match`, an `if let`, or a `while let`, the current statement includes
-    the entire following block. That rule fixes some common lifetime errors,
-    but [it's a big footgun with locks][footgun].
+[^wakeups]: We'd notice this mistake immediately below, after we added the
+    `async_main` function that calls `spawn`. If our main loop didn't poll
+    those new tasks before it tried to read the next wakeup time, then there
+    wouldn't be a wakeup time, and it would panic.
 
+[^deadlock]: This mistake is surprisingly easy to make. A method chain like
+    `.lock().unwrap().pop()` creates a temporary [`MutexGuard`] that lasts
+    until the end of the current ["temporary scope"][rule]. In this example as
+    written, that's the semicolon after the `let-else`, so the guard does get
+    dropped before `poll`. But if we combined the inner `loop` and the
+    `let-else` into a `while let`, or if we replaced the `let-else` with an `if
+    let`, the guard would last until the end of the _block_, and we'd still be
+    holding the lock when we called `poll`. If we made this mistake, and if we
+    also made `foo` call `spawn` before its first `.await`, this example would
+    deadlock. This is [an unfortunate footgun with `Mutex`][footgun]. There's
+    [a Clippy lint for it][lint], but as of Rust 1.81 it's still disabled by
+    default.
+    <br>
+    &emsp;&emsp;The [formal rule for this behavior][rule] is that the first
+    part of an `if` or `while` expression (the "condition") is a "temporary
+    scope", but the first part of a `match`, `if let`, or `while let`
+    expression (the "scrutinee") is not. This rule is necessary for matching on
+    borrowing methods like [`Vec::first`] or [`String::trim`], but it's
+    unnecessary for matching on methods like [`Vec::pop`] or [`String::len`]
+    that return owned values. It might be nice if Rust dropped temporaries "as
+    early as possible", but the downside is that drop timing would depend on
+    borrow checker analysis, which isn't generally stable. The [current rule of
+    thumb][mrustc] is that a correct Rust program can be compiled without the
+    borrow checker.
+
+[`MutexGuard`]: https://doc.rust-lang.org/stable/std/sync/struct.MutexGuard.html
+[`Vec::first`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.first
+[`String::trim`]: https://doc.rust-lang.org/std/string/struct.String.html#method.trim
 [footgun]: https://fasterthanli.me/articles/a-rust-match-made-in-hell
+[rule]: https://doc.rust-lang.org/reference/destructors.html#temporary-scopes
+[`Vec::pop`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.pop
+[`String::len`]: https://doc.rust-lang.org/std/string/struct.String.html#method.len
+[mrustc]: https://www.reddit.com/r/rust/comments/168qvrt/mrustc_now_has_half_of_a_borrow_checker/
+[lint]: https://rust-lang.github.io/rust-clippy/master/index.html#/significant_drop_in_scrutinee
 
 ```rust
 LINK: Playground playground://async_playground/tasks_spawn.rs
