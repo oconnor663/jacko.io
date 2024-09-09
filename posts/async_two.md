@@ -474,12 +474,13 @@ our `Waker` does nothing, we might wonder whether calling `wake` in
 appear to work at first][loop_forever_10]. But when we bump the number of jobs
 from ten to a hundred, [our futures never wake up][loop_forever_100]. What
 we're seeing is that, even though _our_ `Waker` does nothing, there are _other_
-`Waker`s in our program. When the real [`JoinAll`] has many child
-futures,[^cutoff] it creates its own `Waker`s internally, so it can tell which
-child asks for a wakeup. This is more efficient than polling all of them every
-time, but it also means that children who never call `wake` will never be
-polled again. Thus the rule is that leaf futures must always call `wake`, even
-if the main loop is waking up anyway.
+`Waker`s hidden in our program. Specifically, when the real [`JoinAll`] has
+many child futures,[^cutoff] it creates its own `Waker`s internally, which lets
+it tell which child asked for a wakeup. That's more efficient than polling all
+of them every time, but it means that children who invoke their own `Waker`
+will never get polled again. Thus the rule is that `Pending` futures must
+_always_ arrange to call `wake` somehow, even when they know main loop is
+waking up anyway.
 
 [^event_loop]: This is often called an "event loop", but right now all we have
     is sleeps, and those aren't really events. We'll build a proper event loop

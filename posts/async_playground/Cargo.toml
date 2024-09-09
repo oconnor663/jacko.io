@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 futures = "0.3.30"
+libc = "0.2.158"
 num_cpus = "1.16.0"
 rand = "0.8.5"
 rayon = "1.10.0"
@@ -172,3 +173,7 @@ path = "tokio_client.rs"
 [[bin]]
 name = "tokio_client_server"
 path = "tokio_client_server.rs"
+
+[[bin]]
+name = "client_server"
+path = "client_server.rs"
