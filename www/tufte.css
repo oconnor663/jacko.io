@@ -251,9 +251,9 @@ a:link::-moz-selection {
 
 div.code_link a {
     position: absolute;
-    top: 0;
-    right: 0;
-    background-color: #eee8d5;
+    top: 4px;
+    right: 4px;
+    background-color: #fdf6e3;
     padding: 5px;
     border-radius: 5px;
     border-style: solid;
@@ -350,11 +350,14 @@ h3 > code {
 pre > code {
     line-height: 1.2;
     width: 52.5%;
-    margin-left: 2.5%;
     overflow-x: auto;
     display: block;
     position: relative; /* for code_link */
     color: #657b83;
+    background: #f4edda; /* a 3:2 blend of Base2 and Base3 */
+    border-radius: 7px;
+    margin-right: 1%;
+    padding: 0.4% 0.75%;
 }
 
 pre.fullwidth > code {
