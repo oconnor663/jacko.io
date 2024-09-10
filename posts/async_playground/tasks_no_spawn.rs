@@ -32,13 +32,13 @@ fn sleep(duration: Duration) -> Sleep {
     Sleep { wake_time }
 }
 
+type DynFuture = Pin<Box<dyn Future<Output = ()>>>;
+
 async fn foo(n: u64) {
     println!("start {n}");
     sleep(Duration::from_secs(1)).await;
     println!("end {n}");
 }
-
-type DynFuture = Pin<Box<dyn Future<Output = ()>>>;
 
 fn main() {
     let mut tasks: Vec<DynFuture> = Vec::new();
@@ -48,7 +48,7 @@ fn main() {
     let waker = futures::task::noop_waker();
     let mut context = Context::from_waker(&waker);
     loop {
-        // Poll each task, removing any that are Ready.
+        // Poll each task and remove any that are Ready.
         let is_pending = |task: &mut DynFuture| task.as_mut().poll(&mut context).is_pending();
         tasks.retain_mut(is_pending);
         // If there are no tasks left, we're done. Note that this is different from Tokio.

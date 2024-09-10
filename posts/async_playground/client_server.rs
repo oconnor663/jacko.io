@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::io;
 use std::io::prelude::*;
@@ -5,11 +6,11 @@ use std::mem;
 use std::net::{TcpListener, TcpStream};
 use std::os::fd::{AsRawFd, RawFd};
 use std::pin::Pin;
-use std::sync::Mutex;
-use std::task::{Context, Poll, Waker};
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Wake, Waker};
 use std::time::{Duration, Instant};
 
-static WAKE_TIMES: Mutex<Vec<(Instant, Waker)>> = Mutex::new(Vec::new());
+static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
 
 struct Sleep {
     wake_time: Instant,
@@ -22,8 +23,9 @@ impl Future for Sleep {
         if Instant::now() >= self.wake_time {
             Poll::Ready(())
         } else {
-            let waker = context.waker().clone();
-            WAKE_TIMES.lock().unwrap().push((self.wake_time, waker));
+            let mut wakers_tree = WAKE_TIMES.lock().unwrap();
+            let wakers_vec = wakers_tree.entry(self.wake_time).or_default();
+            wakers_vec.push(context.waker().clone());
             Poll::Pending
         }
     }
@@ -34,7 +36,93 @@ fn sleep(duration: Duration) -> Sleep {
     Sleep { wake_time }
 }
 
+type DynFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+static NEW_TASKS: Mutex<Vec<DynFuture>> = Mutex::new(Vec::new());
+
+enum JoinState<T> {
+    Unawaited,
+    Awaited(Waker),
+    Ready(T),
+    Done,
+}
+
+struct JoinHandle<T> {
+    state: Arc<Mutex<JoinState<T>>>,
+}
+
+impl<T> Future for JoinHandle<T> {
+    type Output = T;
+
+    fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<T> {
+        let mut guard = self.state.lock().unwrap();
+        match mem::replace(&mut *guard, JoinState::Done) {
+            JoinState::Ready(value) => Poll::Ready(value),
+            JoinState::Unawaited | JoinState::Awaited(_) => {
+                // Replace the previous Waker, if any. We only need the most recent one.
+                *guard = JoinState::Awaited(context.waker().clone());
+                Poll::Pending
+            }
+            JoinState::Done => unreachable!("polled again after Ready"),
+        }
+    }
+}
+
+fn spawn<F, T>(future: F) -> JoinHandle<T>
+where
+    F: Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
+    let join_state = Arc::new(Mutex::new(JoinState::Unawaited));
+    let join_handle = JoinHandle {
+        state: join_state.clone(),
+    };
+    let task = Box::pin(async move {
+        let value = future.await;
+        let mut guard = join_state.lock().unwrap();
+        let previous = mem::replace(&mut *guard, JoinState::Ready(value));
+        if let JoinState::Awaited(waker) = previous {
+            waker.wake();
+        }
+    });
+    NEW_TASKS.lock().unwrap().push(task);
+    join_handle
+}
+
+// In production we'd use AtomicBool instead of Mutex<bool>.
+struct AwakeFlag(Mutex<bool>);
+
+impl AwakeFlag {
+    fn is_awake(&self) -> bool {
+        *self.0.lock().unwrap()
+    }
+
+    fn clear(&self) {
+        *self.0.lock().unwrap() = false;
+    }
+}
+
+impl Wake for AwakeFlag {
+    fn wake(self: Arc<Self>) {
+        *self.0.lock().unwrap() = true;
+    }
+}
+
 static POLL_FDS: Mutex<Vec<(RawFd, Waker)>> = Mutex::new(Vec::new());
+
+async fn tcp_bind(address: &str) -> io::Result<TcpListener> {
+    // XXX: technically blocking, assumed to return quickly
+    let listener = TcpListener::bind(address)?;
+    listener.set_nonblocking(true)?;
+    Ok(listener)
+}
+
+async fn tcp_connect(address: &str) -> io::Result<TcpStream> {
+    // XXX: technically blocking, assumed to return quickly
+    let socket = TcpStream::connect(address)?;
+    socket.set_nonblocking(true)?;
+    Ok(socket)
+}
 
 struct TcpAccept<'a> {
     listener: &'a TcpListener,
@@ -46,8 +134,8 @@ impl<'a> Future for TcpAccept<'a> {
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<TcpStream>> {
         match self.listener.accept() {
             Ok((stream, _)) => {
-                stream.set_nonblocking(true).expect("cannot fail");
-                Poll::Ready(Ok(stream))
+                let result = stream.set_nonblocking(true);
+                Poll::Ready(result.and(Ok(stream)))
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                 let raw_fd = self.listener.as_raw_fd();
@@ -60,7 +148,7 @@ impl<'a> Future for TcpAccept<'a> {
     }
 }
 
-fn accept(listener: &TcpListener) -> TcpAccept {
+fn tcp_accept(listener: &TcpListener) -> TcpAccept {
     TcpAccept { listener }
 }
 
@@ -93,7 +181,7 @@ impl<'a, 'b> Future for TcpReadLine<'a> {
     }
 }
 
-fn read_line(reader: &mut io::BufReader<TcpStream>) -> TcpReadLine {
+fn tcp_read_line(reader: &mut io::BufReader<TcpStream>) -> TcpReadLine {
     let line = String::new();
     TcpReadLine { reader, line }
 }
@@ -109,53 +197,53 @@ async fn foo_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
 async fn server_main(listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
-        let socket = accept(&listener).await?;
+        let socket = tcp_accept(&listener).await?;
         spawn(async move { foo_response(n, socket).await.unwrap() });
         n += 1;
     }
 }
 
 async fn foo_request() -> io::Result<()> {
-    // XXX: technically blocking, assumed to return quickly
-    let socket = TcpStream::connect("localhost:8000")?;
+    let socket = tcp_connect("localhost:8000").await?;
     socket.set_nonblocking(true).expect("cannot fail");
     let mut reader = io::BufReader::new(socket);
-    while let Some(line) = read_line(&mut reader).await? {
+    while let Some(line) = tcp_read_line(&mut reader).await? {
         print!("{}", line); // `line` includes a trailing newline
     }
     Ok(())
 }
 
-async fn async_main() {
+async fn async_main() -> io::Result<()> {
     // Open the listener here, to avoid racing against the server thread.
-    // XXX: technically blocking, assumed to return quickly
-    let listener = TcpListener::bind("localhost:8000").unwrap();
-    listener.set_nonblocking(true).expect("cannot fail");
+    let listener = tcp_bind("localhost:8000").await?;
     spawn(async { server_main(listener).await.unwrap() });
+    let mut task_handles = Vec::new();
     for _ in 1..=10 {
-        spawn(async { foo_request().await.unwrap() });
+        task_handles.push(spawn(foo_request()));
     }
-}
-
-type DynFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static NEW_TASKS: Mutex<Vec<DynFuture>> = Mutex::new(Vec::new());
-
-fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) {
-    NEW_TASKS.lock().unwrap().push(Box::pin(future));
+    for handle in task_handles {
+        handle.await?;
+    }
+    Ok(())
 }
 
 fn main() {
-    let waker = futures::task::noop_waker();
+    let awake_flag = Arc::new(AwakeFlag(Mutex::new(false)));
+    let waker = Waker::from(Arc::clone(&awake_flag));
     let mut context = Context::from_waker(&waker);
-    let mut tasks: Vec<DynFuture> = vec![Box::pin(async_main())];
+    let mut main_task = Box::pin(async_main());
+    let mut other_tasks: Vec<DynFuture> = Vec::new();
     loop {
-        // Poll each task, removing any that are Ready.
+        // Poll the main future and exit immediately if it's done.
+        if main_task.as_mut().poll(&mut context).is_ready() {
+            return;
+        }
+        // Poll other tasks and remove any that are Ready.
         let is_pending = |task: &mut DynFuture| task.as_mut().poll(&mut context).is_pending();
-        tasks.retain_mut(is_pending);
-        // The tasks we just polled might've spawned new tasks. Pop from NEW_TASKS until it's
-        // empty. Note that we can't use while-let here, because that would keep NEW_TASKS locked
-        // in the loop body. See https://fasterthanli.me/articles/a-rust-match-made-in-hell.
+        other_tasks.retain_mut(is_pending);
+        // Some tasks might have spawned new tasks. Pop from NEW_TASKS until it's empty. Note that
+        // we can't use while-let here, because that would keep NEW_TASKS locked in the loop body.
+        // See https://fasterthanli.me/articles/a-rust-match-made-in-hell.
         loop {
             let Some(mut task) = NEW_TASKS.lock().unwrap().pop() else {
                 break;
@@ -164,15 +252,17 @@ fn main() {
             // to let them register wakeups. Drop the ones that return Ready. This poll can also
             // spawn more tasks, so it's important that NEW_TASKS isn't locked here.
             if task.as_mut().poll(&mut context).is_pending() {
-                tasks.push(task);
+                other_tasks.push(task);
             }
         }
-        // If there are no tasks left, we're done. Note that this is different from Tokio.
-        if tasks.is_empty() {
-            break;
+        // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been set. This might
+        // poll futures that aren't ready yet, which is inefficient but allowed.
+        if awake_flag.is_awake() {
+            awake_flag.clear();
+            continue;
         }
-        // Block on POLL_FDS until one of them is readable. If there are any SLEEP_WAKERS
-        // scheduled, set a timeout for the next wakeup.
+        // All tasks are either sleeping or blocked on IO. Use libc::poll to wait for IO on any of
+        // the POLL_FDS. If there are any SLEEP_WAKERS, use the next wakeup as a timeout.
         let mut poll_fds = POLL_FDS.lock().unwrap();
         let mut poll_structs = Vec::new();
         for &(raw_fd, _) in poll_fds.iter() {
@@ -182,12 +272,10 @@ fn main() {
                 revents: 0,           // return field, unused
             });
         }
-        let mut wake_times = WAKE_TIMES.lock().unwrap();
-        let min_wake_time = wake_times.iter().map(|(time, _)| time).min();
-        let timeout_ms = if let Some(wake_time) = min_wake_time {
-            wake_time
-                .saturating_duration_since(Instant::now())
-                .as_millis() as libc::c_int
+        let mut wakers_tree = WAKE_TIMES.lock().unwrap();
+        let timeout_ms = if let Some(time) = wakers_tree.keys().next() {
+            let duration = time.saturating_duration_since(Instant::now());
+            duration.as_millis() as libc::c_int
         } else {
             -1 // infinite timeout
         };
@@ -199,12 +287,17 @@ fn main() {
             )
         };
         assert_ne!(poll_error_code, -1, "libc::poll failed");
-        // Drain POLL_FDS and WAKE_TIMES and invoke all their wakers. This might wake some futures
-        // early, but they'll register another wakeup when we poll them.
-        for (_, waker) in poll_fds.drain(..) {
-            waker.wake();
+        // Invoke Wakers from WAKE_TIMES if their time has come.
+        while let Some(entry) = wakers_tree.first_entry() {
+            if *entry.key() <= Instant::now() {
+                entry.remove().into_iter().for_each(Waker::wake);
+            } else {
+                break;
+            }
         }
-        for (_, waker) in wake_times.drain(..) {
+        // Invoke all Wakers from POLL_FDS. This might wake futures that aren't ready yet, but if
+        // so they'll register another wakeup. It's inefficient but allowed.
+        for (_, waker) in poll_fds.drain(..) {
             waker.wake();
         }
     }
