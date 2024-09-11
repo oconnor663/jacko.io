@@ -343,7 +343,7 @@ avoid.[^deadlock] Here's the expanded main loop, with new code in the middle:
 [lint]: https://rust-lang.github.io/rust-clippy/master/index.html#/significant_drop_in_scrutinee
 
 ```rust
-LINK: Playground playground://async_playground/tasks_spawn.rs
+LINK: Playground playground://async_playground/tasks_no_join.rs
 loop {
     // Poll each task, removing any that are Ready.
     let is_pending = |task: &mut DynFuture| {
@@ -375,7 +375,7 @@ With all that in place, instead of hardcoding all our tasks in `main`, we can
 define an `async_main` function let it `spawn` tasks:
 
 ```rust
-LINK: Playground playground://async_playground/tasks_spawn.rs
+LINK: Playground playground://async_playground/tasks_no_join.rs
 async fn async_main() {
     // Note that this is different from Tokio.
     for n in 1..=10 {

@@ -32,18 +32,18 @@ fn sleep(duration: Duration) -> Sleep {
     Sleep { wake_time }
 }
 
-async fn foo(n: u64) {
-    println!("start {n}");
-    sleep(Duration::from_secs(1)).await;
-    println!("end {n}");
-}
-
 type DynFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
 
 static NEW_TASKS: Mutex<Vec<DynFuture>> = Mutex::new(Vec::new());
 
 fn spawn<F: Future<Output = ()>>(future: F) {
     NEW_TASKS.lock().unwrap().push(Box::pin(future));
+}
+
+async fn foo(n: u64) {
+    println!("start {n}");
+    sleep(Duration::from_secs(1)).await;
+    println!("end {n}");
 }
 
 fn main() {

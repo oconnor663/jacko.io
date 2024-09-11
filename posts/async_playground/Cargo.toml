@@ -143,8 +143,16 @@ name = "tasks_no_spawn"
 path = "tasks_no_spawn.rs"
 
 [[bin]]
-name = "tasks_spawn"
-path = "tasks_spawn.rs"
+name = "tasks_no_join"
+path = "tasks_no_join.rs"
+
+[[bin]]
+name = "tasks_noop_waker"
+path = "tasks_noop_waker.rs"
+
+[[bin]]
+name = "tasks"
+path = "tasks.rs"
 
 [[bin]]
 name = "no_pin"
