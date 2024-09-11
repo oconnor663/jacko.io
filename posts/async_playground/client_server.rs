@@ -226,7 +226,7 @@ async fn async_main() -> io::Result<()> {
     Ok(())
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     let awake_flag = Arc::new(AwakeFlag(Mutex::new(false)));
     let waker = Waker::from(Arc::clone(&awake_flag));
     let mut context = Context::from_waker(&waker);
@@ -234,8 +234,8 @@ fn main() {
     let mut other_tasks: Vec<DynFuture> = Vec::new();
     loop {
         // Poll the main future and exit immediately if it's done.
-        if main_task.as_mut().poll(&mut context).is_ready() {
-            return;
+        if let Poll::Ready(result) = main_task.as_mut().poll(&mut context) {
+            return result;
         }
         // Poll other tasks and remove any that are Ready.
         let is_pending = |task: &mut DynFuture| task.as_mut().poll(&mut context).is_pending();
