@@ -35,7 +35,7 @@ impl Waker {
     fn wake(self) {}
 }
 
-static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
+static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
 
 struct Sleep {
     wake_time: Instant,
@@ -48,8 +48,8 @@ impl Future for Sleep {
         if Instant::now() >= self.wake_time {
             Poll::Ready(())
         } else {
-            let mut wakers_tree = WAKERS.lock().unwrap();
-            let wakers_vec = wakers_tree.entry(self.wake_time).or_default();
+            let mut wake_times = WAKE_TIMES.lock().unwrap();
+            let wakers_vec = wake_times.entry(self.wake_time).or_default();
             wakers_vec.push(context.waker().clone());
             Poll::Pending
         }
@@ -113,10 +113,10 @@ fn main() {
     }
     let mut joined_future = join_all(futures);
     while joined_future.poll(&mut Context {}).is_pending() {
-        let mut wakers_tree = WAKERS.lock().unwrap();
-        let next_wake = wakers_tree.keys().next().expect("sleep forever?");
+        let mut wake_times = WAKE_TIMES.lock().unwrap();
+        let next_wake = wake_times.keys().next().expect("sleep forever?");
         thread::sleep(next_wake.saturating_duration_since(Instant::now()));
-        while let Some(entry) = wakers_tree.first_entry() {
+        while let Some(entry) = wake_times.first_entry() {
             if *entry.key() <= Instant::now() {
                 entry.remove().into_iter().for_each(Waker::wake);
             } else {

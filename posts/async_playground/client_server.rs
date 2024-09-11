@@ -23,8 +23,8 @@ impl Future for Sleep {
         if Instant::now() >= self.wake_time {
             Poll::Ready(())
         } else {
-            let mut wakers_tree = WAKE_TIMES.lock().unwrap();
-            let wakers_vec = wakers_tree.entry(self.wake_time).or_default();
+            let mut wake_times = WAKE_TIMES.lock().unwrap();
+            let wakers_vec = wake_times.entry(self.wake_time).or_default();
             wakers_vec.push(context.waker().clone());
             Poll::Pending
         }
@@ -111,14 +111,14 @@ impl Wake for AwakeFlag {
 static POLL_FDS: Mutex<Vec<(RawFd, Waker)>> = Mutex::new(Vec::new());
 
 async fn tcp_bind(address: &str) -> io::Result<TcpListener> {
-    // XXX: technically blocking, assumed to return quickly
+    // XXX: This is technically blocking. Assume it returns quickly.
     let listener = TcpListener::bind(address)?;
     listener.set_nonblocking(true)?;
     Ok(listener)
 }
 
 async fn tcp_connect(address: &str) -> io::Result<TcpStream> {
-    // XXX: technically blocking, assumed to return quickly
+    // XXX: This is technically blocking. Assume it returns quickly.
     let socket = TcpStream::connect(address)?;
     socket.set_nonblocking(true)?;
     Ok(socket)
@@ -187,7 +187,7 @@ fn tcp_read_line(reader: &mut io::BufReader<TcpStream>) -> TcpReadLine {
 }
 
 async fn foo_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
-    // XXX: technically blocking, assumed to return quickly
+    // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
     writeln!(&mut socket, "start {n}")?;
     sleep(Duration::from_secs(1)).await;
     writeln!(&mut socket, "end {n}")?;
@@ -205,7 +205,6 @@ async fn server_main(listener: TcpListener) -> io::Result<()> {
 
 async fn foo_request() -> io::Result<()> {
     let socket = tcp_connect("localhost:8000").await?;
-    socket.set_nonblocking(true).expect("cannot fail");
     let mut reader = io::BufReader::new(socket);
     while let Some(line) = tcp_read_line(&mut reader).await? {
         print!("{}", line); // `line` includes a trailing newline
@@ -262,7 +261,7 @@ fn main() {
             continue;
         }
         // All tasks are either sleeping or blocked on IO. Use libc::poll to wait for IO on any of
-        // the POLL_FDS. If there are any SLEEP_WAKERS, use the next wakeup as a timeout.
+        // the POLL_FDS. If there are any WAKE_TIMES, use the earliest as a timeout.
         let mut poll_fds = POLL_FDS.lock().unwrap();
         let mut poll_structs = Vec::new();
         for &(raw_fd, _) in poll_fds.iter() {
@@ -272,8 +271,8 @@ fn main() {
                 revents: 0,           // return field, unused
             });
         }
-        let mut wakers_tree = WAKE_TIMES.lock().unwrap();
-        let timeout_ms = if let Some(time) = wakers_tree.keys().next() {
+        let mut wake_times = WAKE_TIMES.lock().unwrap();
+        let timeout_ms = if let Some(time) = wake_times.keys().next() {
             let duration = time.saturating_duration_since(Instant::now());
             duration.as_millis() as libc::c_int
         } else {
@@ -286,9 +285,11 @@ fn main() {
                 timeout_ms,
             )
         };
-        assert_ne!(poll_error_code, -1, "libc::poll failed");
+        if poll_error_code == -1 {
+            panic!("libc::poll failed: {}", io::Error::last_os_error());
+        }
         // Invoke Wakers from WAKE_TIMES if their time has come.
-        while let Some(entry) = wakers_tree.first_entry() {
+        while let Some(entry) = wake_times.first_entry() {
             if *entry.key() <= Instant::now() {
                 entry.remove().into_iter().for_each(Waker::wake);
             } else {
@@ -297,8 +298,6 @@ fn main() {
         }
         // Invoke all Wakers from POLL_FDS. This might wake futures that aren't ready yet, but if
         // so they'll register another wakeup. It's inefficient but allowed.
-        for (_, waker) in poll_fds.drain(..) {
-            waker.wake();
-        }
+        poll_fds.drain(..).map(|pair| pair.1).for_each(Waker::wake);
     }
 }

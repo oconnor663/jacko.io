@@ -8,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 thread_local! {
-    static WAKERS: RefCell<BTreeMap<Instant, Vec<Waker>>> = RefCell::new(BTreeMap::new());
+    static WAKE_TIMES: RefCell<BTreeMap<Instant, Vec<Waker>>> = RefCell::new(BTreeMap::new());
 }
 
 struct Sleep {
@@ -22,8 +22,8 @@ impl Future for Sleep {
         if Instant::now() >= self.wake_time {
             Poll::Ready(())
         } else {
-            WAKERS.with_borrow_mut(|wakers_tree| {
-                let wakers_vec = wakers_tree.entry(self.wake_time).or_default();
+            WAKE_TIMES.with_borrow_mut(|wake_times| {
+                let wakers_vec = wake_times.entry(self.wake_time).or_default();
                 wakers_vec.push(context.waker().clone());
                 Poll::Pending
             })
@@ -51,10 +51,10 @@ fn main() {
     let waker = futures::task::noop_waker();
     let mut context = Context::from_waker(&waker);
     while joined_future.as_mut().poll(&mut context).is_pending() {
-        WAKERS.with_borrow_mut(|wakers_tree| {
-            let next_wake = wakers_tree.keys().next().expect("sleep forever?");
+        WAKE_TIMES.with_borrow_mut(|wake_times| {
+            let next_wake = wake_times.keys().next().expect("sleep forever?");
             thread::sleep(next_wake.saturating_duration_since(Instant::now()));
-            while let Some(entry) = wakers_tree.first_entry() {
+            while let Some(entry) = wake_times.first_entry() {
                 if *entry.key() <= Instant::now() {
                     entry.remove().into_iter().for_each(Waker::wake);
                 } else {
