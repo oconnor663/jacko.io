@@ -12,6 +12,14 @@ name = "await"
 path = "await.rs"
 
 [[bin]]
+name = "foo_ref"
+path = "foo_ref.rs"
+
+[[bin]]
+name = "foo_ref_lifetime"
+path = "foo_ref_lifetime.rs"
+
+[[bin]]
 name = "tasks_no_send_no_static"
 path = "tasks_no_send_no_static.rs"
 

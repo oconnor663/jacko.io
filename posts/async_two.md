@@ -91,14 +91,14 @@ struct Foo {
 
 Ok so apparently [`Box::pin`] returns a [`Pin::<Box<T>>`][struct_pin]. We're
 about to see a lot of this `Pin` business, so I need to say something about it.
-The whole story is big and fascinating and actually kind of
-beautiful.[^beautiful] We'll come back to it in Part Three.[^whole_story] For
-now I'm going to take an…unorthodox approach. I'm just going to [go on the
-internet and tell lies][lies].
+The whole story is big and fascinating,[^quote] and we'll come back to it at
+the bottom of this part.[^whole_story] But for now I'm going to take
+an…unorthodox approach. I'm just going to [go on the internet and tell
+lies][lies].
 
 [struct_pin]: https://doc.rust-lang.org/std/pin/struct.Pin.html
 
-[^beautiful]: "Most importantly, these objects are not meant to be _always
+[^quote]: "Most importantly, these objects are not meant to be _always
     immovable_. Instead, they are meant to be freely moved for a certain period
     of their lifecycle, and at a certain point they should stop being moved
     from then on. That way, you can move a self-referential future around as
@@ -111,8 +111,8 @@ internet and tell lies][lies].
     quoted][pin_post] from the inventor of `Pin`, and then read [the `pin`
     module docs][pin_docs].
 
-[pin_docs]: https://doc.rust-lang.org/std/pin
 [pin_post]: https://without.boats/blog/pin
+[pin_docs]: https://doc.rust-lang.org/std/pin
 
 [lies]: https://www.youtube.com/watch?v=iHrZRJR4igQ&t=10s
 
@@ -566,3 +566,82 @@ while joined_future.as_mut().poll(&mut context).is_pending() {
 ```
 
 This works, and it does everything on one thread.
+
+## Pin
+
+Now that we have some intuition about how `async` functions turn into `Future`
+structs, we can say a bit more about `Pin`. There's a problem that comes up
+when we use references, iterators, or other forms of borrowing in an `async
+fn`. We won't need to do that in this series, but imagine our `foo` function
+took a reference internally for some reason:
+
+```rust
+LINK: Playground playground://async_playground/tokio_ref.rs
+async fn foo(n: u64) {
+    let n_ref = &n;
+    println!("start {n_ref}");
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    println!("end {n_ref}");
+}
+```
+
+That example compiles and runs just fine, and it looks like perfectly ordinary
+Rust code, but what does the same change look like on our `Foo` future?
+
+```rust
+LINK: Playground playground://async_playground/compiler_errors/foo_ref.rs
+struct Foo {
+    n: u64,
+    n_ref: &u64,
+    // other fields...
+}
+```
+
+That doesn't compile:
+
+```
+LINK: Playground playground://async_playground/compiler_errors/foo_ref.rs
+error[E0106]: missing lifetime specifier
+ --> src/main.rs:3:12
+  |
+3 |     n_ref: &u64,
+  |            ^ expected named lifetime parameter
+```
+
+What should the lifetime of `n_ref` be? The short answer is, there's no good
+answer.[^longer] Self-referential borrows are generally illegal in Rust
+structs, and there's no syntax for what `n_ref` is trying to do. This avoids
+tricky questions around when we're allowed to mutate `n` or move `Foo`.
+
+[^longer]: The longer answer is that we can hack a lifetime parameter onto
+    `Foo`, but that makes it [impossible to do anything useful after we've
+    constructed it][foo_ref_lifetime]. Unfortunately the compiler's hints in
+    situations like this tend to be misleading, and "fighting the borrow
+    checker" here takes us in circles.
+
+[foo_ref_lifetime]: playground://async_playground/compiler_errors/foo_ref_lifetime.rs
+
+But then, how did we get away with `async fn foo` above? What `Future` struct
+did the compiler generate?[^smart] It turns out that Rust does [some very
+unsafe things][erase] internally to erase invalid lifetimes.[^unsafe_pinned]
+The job of the `Pin` type is then to encapsulate all that unsafety, so that we
+can write our custom futures like `JoinAll` in safe code, without the risk of
+dangling pointers or memory corruption.
+
+[^smart]: A "sufficiently smart compiler" might optimize `n_ref` away in this
+    simple case, but that won't work when we have complex iterators or when we
+    share references with other futures.
+
+[erase]: https://tmandry.gitlab.io/blog/posts/optimizing-await-1/#generators-as-data-structures
+
+[^unsafe_pinned]: In fact, this transformation is [so wildly unsafe][transmute]
+    that some of the compiler magic necessary to make it formally sound [hasn't
+    been written yet][unsafe_pinned].
+
+[transmute]: https://doc.rust-lang.org/nomicon/transmutes.html
+[unsafe_pinned]: https://rust-lang.github.io/rfcs/3467-unsafe-pinned.html
+
+Since we aren't going to rely on internal borrowing in this series, we won't
+get into the nuts and bolts of the `Pin` API. If you want all the details,
+start with [this post by the inventor of `Pin`][pin_post] and then read through
+[the official `Pin` docs][pin_docs].

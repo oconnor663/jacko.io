@@ -135,6 +135,10 @@ name = "boxed_recursion"
 path = "boxed_recursion.rs"
 
 [[bin]]
+name = "tokio_ref"
+path = "tokio_ref.rs"
+
+[[bin]]
 name = "tokio_tasks"
 path = "tokio_tasks.rs"
 
