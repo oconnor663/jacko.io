@@ -255,3 +255,7 @@ for future in futures {
     future.await; // Oops!
 }
 ```
+
+---
+
+[Part Two: Futures →](async_two.html)
