@@ -43,7 +43,7 @@ for handle in task_handles {
 
 `foo` is still an `async fn`, but otherwise this is very similar to [how we did
 the same thing with threads][threads]. Like threads, but unlike ordinary
-futures, tasks start running in the background as soon as you `spawn` them. A
+futures, tasks start running in the background as soon as we `spawn` them. A
 common design pattern for network services is to have a main loop that listens
 for new connections and spawns a thread to handle each connection. Async tasks
 let us use the same design pattern[^futures_unordered] without the performance
@@ -64,10 +64,12 @@ overhead of threads.
 [`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
 
 Building on [the main loop we wrote in Part Two][wakers], we can write our own
-`spawn`. We'll do it in two steps. First we'll make space for multiple tasks in
-the main loop, and then we'll implement the `spawn` function to add new ones.
+`spawn`. We'll do it in three steps: First we'll make space for multiple tasks
+in the main loop, then we'll write the `spawn` function to add new tasks, and
+finally we'll implement [`JoinHandle`] to let one task wait for another.
 
 [wakers]: playground://async_playground/wakers.rs
+[`JoinHandle`]: https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html
 
 ## Dyn
 
@@ -77,24 +79,24 @@ copy/paste?
 
 [join_all]: playground://async_playground/join.rs
 
-One thing we need to change is the type of the `Vec`. Our `JoinAll` used
-`Vec<Pin<Box<F>>>`,[^ignore_pin] where `F` was a generic type parameter, but
-our main function doesn't have any type parameters. We also want our new `Vec`
-to be able to hold futures of different types at the same time.[^same_thing]
-The Rust feature we need here is ["dynamic trait objects"][dyn], or `dyn
-Trait`.[^dyn] Let's start with a type alias so we don't have to write this more
-than once:[^box]
+One thing we need to change is the type of the `Vec` of futures. Our `JoinAll`
+used `Vec<Pin<Box<F>>>`,[^ignore_pin] where `F` was a generic type parameter,
+but our main function doesn't have any type parameters. We also want the new
+`Vec` to be able to hold futures of different types at the same
+time.[^same_thing] The Rust feature we need here is ["dynamic trait
+objects"][dyn], or `dyn Trait`.[^dyn] Let's start with a type alias so we don't
+have to write this more than once:[^box]
 
-[^ignore_pin]: We're still ignoring `Pin` for now, but `Box` is about to do
-    some important work.
+[^ignore_pin]: We're still not paying much attention to `Pin`, but `Box` is
+    about to do some important work.
 
 [^same_thing]: `JoinAll` can do this too, if you set `F` to the same type we're
     about to use.
 
 [dyn]: https://doc.rust-lang.org/book/ch17-02-trait-objects.html
 
-[^dyn]: `dyn Trait` isn't specific to async Rust. You might have seen it before
-    in [error handling], where `Box<dyn Error>` is a catch-all type for the `?`
+[^dyn]: `dyn Trait` isn't specific to async. You might have seen it before in
+    [error handling], where `Box<dyn Error>` is a catch-all type for the `?`
     operator. If you're coming from C++, `dyn Trait` is the closest thing Rust
     has to "`virtual` inheritance". If this is your first time seeing it, you
     might want to play with the [Rust by Example page for `dyn`][rbe_dyn].
@@ -133,8 +135,8 @@ for n in 1..=10 {
 ```
 
 We can manage the `Vec<DynFuture>` using `retain_mut` like `JoinAll` did,
-removing futures from the `Vec` as soon as they're `Ready`. We do need to
-restructure the `while` loop into a `loop`/`break` so that we can do all the
+removing futures from the `Vec` as soon as they're `Ready`. We need to
+rearrange the `while` loop into a `loop`/`break` so that we can do all the
 polling, then check whether we're done, then handle `Waker`s. Now it looks like
 this:
 
@@ -156,35 +158,31 @@ loop {
     ...
 ```
 
-This works fine, but it doesn't feel like we've accomplished much. Mostly we
-just copy/pasted from `JoinAll` and tweaked the types. But we've laid some
+This works fine, though it might not feel like we've accomplished much. Mostly
+we just copy/pasted from `JoinAll` and tweaked the types. But we've laid some
 important groundwork.
 
-Before we move on, I want to highlight a couple differences between our tasks
-and Tokio's tasks. The same way a regular Rust program exits when the main
-thread is done, without waiting for background threads, a Tokio program exits
-when the main task is done, without waiting for background tasks. But our main
-loop continues until _all_ tasks are done. Our way is simpler, because we can
-skip implementing [`JoinHandle`] for our tasks.[^lazy] Tokio also plumbs the
-return value of a task through its `JoinHandle`, whereas we're assuming tasks
-have no return value. These simplifications will work well enough for the rest
-of this series.
-
-[`JoinHandle`]: https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html
-
-[^lazy]: This is left as an exercise for the reader, as they say.
+Note that the behavior of this loop is somewhat different from how tasks work
+in Tokio. The same way a regular Rust program exits when the main thread is
+done without waiting for background threads, a Tokio program also exits when
+the main _task_ is done without waiting for background tasks. However, this
+version of our main loop continues until _all_ tasks are done. It also assumes
+that tasks have no return value. We'll fix both of these things when we get to
+`JoinHandle` below, but let's do `spawn` first.
 
 ## Spawn
 
-The `spawn` function will insert a future into the tasks `Vec`. How should it
-access the `Vec`? It would be nice if we could do the same thing we did with
-`WAKERS` and make `TASKS` a global variable protected by a `Mutex`, but that's
-not going to work this time. The main loop only locks `WAKERS` after it
-finishes polling, but if `TASKS` were global, the main loop would lock it
-during polling, and any task that called `spawn` would deadlock.
+The `spawn` function inserts another future into the tasks `Vec`. How should it
+access the `Vec`? It would be convenient if we could do the same thing we did
+with `WAKERS` and make `TASKS` a global variable protected by a `Mutex`, but
+that's not going to work this time. Our main loop only needs to lock `WAKERS`
+after it's finished polling, but if we made `TASKS` global, then the main loop
+would lock it _during_ polling, and any task that called `spawn` would
+deadlock.
 
-We can work around this with two separate lists. We'll keep the `tasks` list
-local to the main loop and add a global called `NEW_TASKS`:[^vec_deque]
+We'll work around that with two separate lists. We'll keep the `tasks` list
+where it is, local to the main loop, and we'll add a global called
+`NEW_TASKS`:[^vec_deque]
 
 [^vec_deque]: We could use a `VecDeque` instead of a `Vec` if we wanted to poll
     tasks in FIFO order instead of LIFO order. We could also use a [channel],
@@ -247,7 +245,7 @@ error[E0277]: `F` cannot be sent between threads safely
            `Pin<Box<(dyn futures::Future<Output = ()> + std::marker::Send + 'static)>>`
 ```
 
-Sure, `spawn` has to make the same promise:
+Fair enough, `spawn` has to make the same promise:
 
 ```rust
 fn spawn<F: Future<Output = ()> + Send>(future: F) { ... }
@@ -269,8 +267,8 @@ error[E0310]: the parameter type `F` may not live long enough
 
 Global variables have the `'static` lifetime, meaning they don't hold pointers
 to anything that could go away. Trait objects like `DynFuture` are `'static` by
-default, but generic type parameters like `F` are not. If `spawn` wants to put
-`F` in a global, it has to explicitly say that `F` is `'static`:
+default, but type parameters like `F` are not. If `spawn` wants to put `F` in a
+global, it also has to promise that `F` is `'static`:
 
 ```rust
 fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) { ... }
@@ -295,11 +293,11 @@ can just say we don't want those.[^thread_local]
 
 Ok&hellip;_now_ the main loop can pop from `NEW_TASKS` and push into `tasks`.
 It's not much extra code, but there are a couple pitfalls to watch out for, and
-this time they're runtime bugs instead of compiler errors. First, we need to
-poll new tasks at least once as we collect them, rather than waiting until the
-next iteration of the main loop, so that they get a chance to register wakeups
-before we sleep.[^wakeups] Second, we need to make sure that `NEW_TASKS` is
-unlocked before we poll, or else we'll reintroduce the deadlock we're trying to
+this time they're runtime bugs instead of compiler errors. First, we have to
+poll new tasks as we collect them, rather than waiting until the next iteration
+of the main loop, so they get a chance to register wakeups before we
+sleep.[^wakeups] Second, we have to make sure that `NEW_TASKS` is unlocked
+before we poll, or else we'll recreate the same deadlock we were trying to
 avoid.[^deadlock] Here's the expanded main loop, with new code in the middle:
 
 [^wakeups]: We'd notice this mistake immediately below, after we added the
@@ -371,13 +369,13 @@ loop {
     ...
 ```
 
-With all that in place, instead of hardcoding all our tasks in `main`, we can
-define an `async_main` function let it `spawn` tasks:
+With all that in place, instead of hardcoding all whole task list in `main`, we
+can define an `async_main` function let it do the spawning:
 
 ```rust
 LINK: Playground playground://async_playground/tasks_no_join.rs
 async fn async_main() {
-    // Note that this is different from Tokio.
+    // The main loop currently waits for all tasks to finish.
     for n in 1..=10 {
         spawn(foo(n));
     }
@@ -393,6 +391,167 @@ It works! Because of how we push and pop `NEW_TASKS`, the order of prints is
 different now. We could fix that, but let's keep it the way it is. It's a good
 reminder that, like threads, tasks running at the same time can run in any
 order.
+
+## JoinHandle
+
+As we noted above, Tokio supports tasks that run in the background without
+blocking program exit, and it also supports tasks with return
+values.[^listen_loop] Both of those things require [`tokio::task::spawn`] to
+return a [`tokio::task::JoinHandle`], to very similar how
+[`std::thread::spawn`] returns a [`std::thread::JoinHandle`]. We'll implement
+our own `JoinHandle` to get the same features. Also, the only way for our tasks
+to block so far has been `sleep`, and introducing a second form of blocking
+will lead us into some interesting bugs.
+
+[^listen_loop]: We won't need task return values ourselves, but once we
+    implement blocking, we'll see that carrying a value doesn't add any extra
+    lines of code. We'll need non-blocking background tasks when we get to IO,
+    though, so that our example can exit after "client" tasks are finished,
+    without taking extra steps to shut down the "server" task.
+
+[`tokio::task::spawn`]: https://docs.rs/tokio/latest/tokio/task/fn.spawn.html
+[`tokio::task::JoinHandle`]: https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html
+[`std::thread::spawn`]: https://doc.rust-lang.org/std/thread/fn.spawn.html
+[`std::thread::JoinHandle`]: https://doc.rust-lang.org/std/thread/struct.JoinHandle.html
+
+`JoinHandle` needs to communicate between one task that's finishing and another
+task that's waiting on it. The waiting side needs somewhere to put its `Waker`,
+so that the finishing side can invoke it.[^one_waker] The finishing side also
+needs somewhere to put its return value `T`, so that the waiting side can
+receive it. Since we don't need both of those things at the same time, we'll
+use an `enum`. The `enum` needs to be shared and also mutable, so we'll wrap it
+in an `Arc`[^arc] and a `Mutex`:[^rc_refcell]
+
+[^one_waker]: Note that we only need space for one `Waker`. It's possible that
+    different calls to `poll` could supply different `Waker`s, but the
+    [contract of `Future::poll`][contract] is that "only the `Waker` from the
+    `Context` passed to the most recent call should be scheduled to receive a
+    wakeup."
+
+[contract]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
+
+[^arc]: [`Arc`] is an atomic reference-counted smart pointer, similar to
+    [`std::shared_ptr`] in C++. It behaves like a shared reference, but it's
+    not bound to the lifetime of any particular scope. `Arc` is the standard
+    way to share objects that don't have a fixed scope (so you can't use a
+    shared reference) but also aren't global (so you can't use a `static`).
+
+[`Arc`]: https://doc.rust-lang.org/std/sync/struct.Arc.html
+[`std::shared_ptr`]: https://en.cppreference.com/w/cpp/memory/shared_ptr
+
+[^rc_refcell]: If we had used `thread_local!` instead of `static` to implement
+    `NEW_TASKS` above, and avoided the `Send` requirements that came with that,
+    then we could also use `Rc` and `RefCell` here instead of `Arc` and
+    `Mutex`.
+
+```rust
+LINK: Playground playground://async_playground/tasks_noop_waker.rs
+enum JoinState<T> {
+    Unawaited,
+    Awaited(Waker),
+    Ready(T),
+    Done,
+}
+
+struct JoinHandle<T> {
+    state: Arc<Mutex<JoinState<T>>>,
+}
+```
+
+Awaiting the `JoinHandle` is how we wait for a task to finish, so `JoinHandle`
+needs to implement `Future`. One tricky detail to watch out for is that the
+waiting thread wants to take ownership of the `T` from `JoinState::Ready(T)`,
+but `Arc<Mutex<JoinState>>` will only give us a reference to the `JoinState`
+itself, and Rust won't let us "leave a hole" behind that reference. Instead, we
+need to replace the whole `JoinState` with [`mem::replace`]:[^mem_take]
+
+[`mem::replace`]: https://doc.rust-lang.org/std/mem/fn.replace.html
+
+[^mem_take]: It would be more convenient if we could use [`mem::take`] directly
+    on `&mut T`, but that only works if `T` implements [`Default`], and we
+    don't want our `spawn` function to require that. Another option is a
+    library called [`replace_with`], which lets us "leave a hole" behind any
+    `&mut T` temporarily, but it's [not entirely clear][soundness] whether that
+    approach is sound.
+
+[`mem::take`]: https://doc.rust-lang.org/std/mem/fn.take.html
+[`Default`]: https://doc.rust-lang.org/std/default/trait.Default.html
+[`replace_with`]: https://docs.rs/replace_with
+[soundness]: https://github.com/rust-lang/rfcs/pull/1736#issuecomment-1311564676
+
+```rust
+LINK: Playground playground://async_playground/tasks_noop_waker.rs
+impl<T> Future for JoinHandle<T> {
+    type Output = T;
+
+    fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<T> {
+        let mut guard = self.state.lock().unwrap();
+        // Use JoinState::Done as a placeholder, to take ownership of T.
+        match mem::replace(&mut *guard, JoinState::Done) {
+            JoinState::Ready(value) => Poll::Ready(value),
+            JoinState::Unawaited | JoinState::Awaited(_) => {
+                // Replace the previous Waker, if any.
+                *guard = JoinState::Awaited(context.waker().clone());
+                Poll::Pending
+            }
+            JoinState::Done => unreachable!("polled again after Ready"),
+        }
+    }
+}
+```
+
+Futures passed to `spawn` don't know anything about `JoinState`, so we need a
+wrapper function to handle their return values and invoke a `Waker` if there is
+one:[^async_block]
+
+[^async_block]: Rust also supports async blocks, written `async { ... }`, which
+    act like async closures that take no arguments. If we didn't want this
+    adapter to be a standalone function, we could also move its body into
+    `spawn` below and make it an async block.
+
+```rust
+LINK: Playground playground://async_playground/tasks_noop_waker.rs
+async fn wrap_with_join_state<F: Future>(
+    future: F,
+    join_state: Arc<Mutex<JoinState<F::Output>>>,
+) {
+    let value = future.await;
+    let mut guard = join_state.lock().unwrap();
+    if let JoinState::Awaited(waker) = &*guard {
+        waker.wake_by_ref();
+    }
+    *guard = JoinState::Ready(value)
+}
+```
+
+Using that wrapper, we can write our own `spawn`:[^send_bound]
+
+[^send_bound]: `T` will need to be `Send` and `'static` just like `F`.
+    Concretely, the future returned by `wrap_with_join_state` needs to be
+    coercible to `DynFuture`, which means the `JoinState<T>` that it contains
+    needs to be `Send` and `'static`, which means T needs to be too. This time
+    around I'll skip the "discovery" phase and just write all the bounds the
+    first time.
+
+```rust
+LINK: Playground playground://async_playground/tasks_noop_waker.rs
+fn spawn<F, T>(future: F) -> JoinHandle<T>
+where
+    F: Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
+    let join_state = Arc::new(Mutex::new(JoinState::Unawaited));
+    let join_handle = JoinHandle {
+        state: Arc::clone(&join_state),
+    };
+    let task = Box::pin(wrap_with_join_state(future, join_state));
+    NEW_TASKS.lock().unwrap().push(task);
+    join_handle
+}
+```
+
+
+
 
 So, did we really do all this work just to have another way to spell
 `join_all`? Well, yes and no. They're very similar on the inside. But we're

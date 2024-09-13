@@ -53,6 +53,7 @@ impl<T> Future for JoinHandle<T> {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<T> {
         let mut guard = self.state.lock().unwrap();
+        // Use JoinState::Done as a placeholder, to take ownership of T.
         match mem::replace(&mut *guard, JoinState::Done) {
             JoinState::Ready(value) => Poll::Ready(value),
             JoinState::Unawaited | JoinState::Awaited(_) => {
@@ -65,6 +66,15 @@ impl<T> Future for JoinHandle<T> {
     }
 }
 
+async fn wrap_with_join_state<F: Future>(future: F, join_state: Arc<Mutex<JoinState<F::Output>>>) {
+    let value = future.await;
+    let mut guard = join_state.lock().unwrap();
+    if let JoinState::Awaited(waker) = &*guard {
+        waker.wake_by_ref();
+    }
+    *guard = JoinState::Ready(value)
+}
+
 fn spawn<F, T>(future: F) -> JoinHandle<T>
 where
     F: Future<Output = T> + Send + 'static,
@@ -72,16 +82,9 @@ where
 {
     let join_state = Arc::new(Mutex::new(JoinState::Unawaited));
     let join_handle = JoinHandle {
-        state: join_state.clone(),
+        state: Arc::clone(&join_state),
     };
-    let task = Box::pin(async move {
-        let value = future.await;
-        let mut guard = join_state.lock().unwrap();
-        let previous = mem::replace(&mut *guard, JoinState::Ready(value));
-        if let JoinState::Awaited(waker) = previous {
-            waker.wake();
-        }
-    });
+    let task = Box::pin(wrap_with_join_state(future, join_state));
     NEW_TASKS.lock().unwrap().push(task);
     join_handle
 }

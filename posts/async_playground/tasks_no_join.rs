@@ -47,6 +47,7 @@ async fn foo(n: u64) {
 }
 
 async fn async_main() {
+    // The main loop currently waits for all tasks to finish.
     for n in 1..=10 {
         spawn(foo(n));
     }
