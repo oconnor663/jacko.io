@@ -265,13 +265,21 @@ impl Output {
             let theme_set = ThemeSet::load_defaults();
             let mut line_highlighter =
                 HighlightLines::new(syntax, &theme_set.themes["Solarized (light)"]);
-            for line_text in &code_lines.lines {
+            for (i, line_text) in code_lines.lines.iter().enumerate() {
                 let ranges: Vec<(Style, &str)> = line_highlighter
                     .highlight_line(line_text, &syntax_set)
                     .unwrap();
                 let line_html =
                     styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No).unwrap();
+                // Line numbers conventionally start with 1.
+                let line_number = i + 1;
+                if code_lines.highlighted_lines.is_faded(line_number) {
+                    self.document_html += "<span class=\"faded_code\">";
+                }
                 self.document_html += &line_html;
+                if code_lines.highlighted_lines.is_faded(line_number) {
+                    self.document_html += "</span>";
+                }
                 self.document_html += "<br>";
             }
         } else {
@@ -447,36 +455,99 @@ struct CodeLink {
     url: String,
 }
 
+struct HighlightedLines {
+    line_numbers: Vec<usize>,
+}
+
+impl HighlightedLines {
+    fn empty() -> Self {
+        Self {
+            line_numbers: Vec::new(),
+        }
+    }
+
+    /// Parse an expression like "1,3-5" into [1,3,4,5].
+    fn parse(ranges: &str) -> Self {
+        let mut line_numbers = Vec::new();
+        for element in ranges.split(',') {
+            if element.contains('-') {
+                // ranges like "3-5"
+                let mut numbers = element.split('-');
+                let start: usize = numbers
+                    .next()
+                    .expect("first number split")
+                    .trim()
+                    .parse()
+                    .expect("first number parse");
+                let end: usize = numbers
+                    .next()
+                    .expect("second number split")
+                    .trim()
+                    .parse()
+                    .expect("second number parse");
+                assert!(numbers.next().is_none());
+                for i in start..=end {
+                    // note: these ranges are inclusive
+                    line_numbers.push(i);
+                }
+            } else if !element.is_empty() {
+                // standalone numbers like "1"
+                let number: usize = element.trim().parse().expect("number parse");
+                line_numbers.push(number);
+            }
+        }
+        Self { line_numbers }
+    }
+
+    /// Note that line numbers conventionally start from 1.
+    fn is_faded(&self, line_number: usize) -> bool {
+        !self.line_numbers.is_empty() && !self.line_numbers.contains(&line_number)
+    }
+}
+
 struct CodeLines {
     link: Option<CodeLink>,
     lines: Vec<String>,
+    highlighted_lines: HighlightedLines,
 }
 
 impl CodeLines {
     // Markdown doesn't make it easy to put anchor tags around an entire code block. Use a hacky
-    // "LINK: " tag on the first line of a codeblock as a workaround.
+    // tags format like "LINK: " on the first lines of a codeblock as a workaround.
     fn parse(text: &str) -> CodeLines {
         let mut lines = text.lines().peekable();
-        let mut link = None;
         let link_tag = "LINK: ";
-        if lines
-            .peek()
-            .expect("at least one line")
-            .starts_with(link_tag)
-        {
-            // Consume the "LINK: " line.
-            let link_line = lines.next().unwrap();
-            let after_tag = &link_line[link_tag.len()..];
-            let (text, url) = after_tag.rsplit_once(' ').expect("no link text?");
-            assert_eq!(text, text.trim());
-            link = Some(CodeLink {
-                text: text.into(),
-                url: url.into(),
-            });
+        let mut code_link = None;
+        let highlight_tag = "HIGHLIGHT: ";
+        let mut highlight_lines = HighlightedLines::empty();
+        loop {
+            let Some(next_line) = lines.peek() else {
+                break;
+            };
+            if next_line.starts_with(link_tag) {
+                // Consume the "LINK: " line.
+                let link_line = lines.next().unwrap();
+                let after_tag = &link_line[link_tag.len()..];
+                let (text, url) = after_tag.rsplit_once(' ').expect("no link text?");
+                assert_eq!(text, text.trim());
+                code_link = Some(CodeLink {
+                    text: text.into(),
+                    url: url.into(),
+                });
+            } else if next_line.starts_with(highlight_tag) {
+                // Consume the "HIGHLIGHT: " line.
+                let highlight_line = lines.next().unwrap();
+                let after_tag = &highlight_line[highlight_tag.len()..];
+                highlight_lines = HighlightedLines::parse(after_tag);
+            } else {
+                // No more tags. The rest of the lines are text.
+                break;
+            }
         }
         CodeLines {
-            link,
+            link: code_link,
             lines: lines.map(String::from).collect(),
+            highlighted_lines: highlight_lines,
         }
     }
 

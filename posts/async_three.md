@@ -341,6 +341,7 @@ avoid.[^deadlock] Here's the expanded main loop, with new code in the middle:
 
 ```rust
 LINK: Playground playground://async_playground/tasks_no_join.rs
+HIGHLIGHT: 8-17
 loop {
     // Poll each task, removing any that are Ready.
     let is_pending = |task: &mut DynFuture| {

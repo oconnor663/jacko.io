@@ -336,6 +336,10 @@ code, pre > code {
     white-space: pre;
 }
 
+.faded_code {
+    opacity: .4;
+}
+
 h1 > code,
 h2 > code,
 h3 > code {
