@@ -53,6 +53,7 @@ impl<T> Future for JoinHandle<T> {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<T> {
         let mut guard = self.state.lock().unwrap();
+        // Use JoinState::Done as a placeholder, to take ownership of T.
         match mem::replace(&mut *guard, JoinState::Done) {
             JoinState::Ready(value) => Poll::Ready(value),
             JoinState::Unawaited | JoinState::Awaited(_) => {
@@ -92,12 +93,11 @@ where
 struct AwakeFlag(Mutex<bool>);
 
 impl AwakeFlag {
-    fn is_awake(&self) -> bool {
-        *self.0.lock().unwrap()
-    }
-
-    fn clear(&self) {
-        *self.0.lock().unwrap() = false;
+    fn check_and_clear(&self) -> bool {
+        let mut guard = self.0.lock().unwrap();
+        let check = *guard;
+        *guard = false;
+        check
     }
 }
 
@@ -130,7 +130,7 @@ fn main() {
     let mut main_task = Box::pin(async_main());
     let mut other_tasks: Vec<DynFuture> = Vec::new();
     loop {
-        // Poll the main future and exit immediately if it's done.
+        // Poll the main task and exit immediately if it's done.
         if main_task.as_mut().poll(&mut context).is_ready() {
             return;
         }
@@ -151,17 +151,15 @@ fn main() {
                 other_tasks.push(task);
             }
         }
-        // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been set. This might
-        // poll futures that aren't ready yet, which is inefficient but allowed.
-        if awake_flag.is_awake() {
-            awake_flag.clear();
+        // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been set. Polling
+        // futures that aren't ready yet is inefficient but allowed.
+        if awake_flag.check_and_clear() {
             continue;
         }
         // Sleep until the next Waker is scheduled and then invoke Wakers that are ready.
         let mut wake_times = WAKE_TIMES.lock().unwrap();
-        if let Some(next_wake) = wake_times.keys().next() {
-            thread::sleep(next_wake.saturating_duration_since(Instant::now()));
-        }
+        let next_wake = wake_times.keys().next().expect("sleep forever?");
+        thread::sleep(next_wake.saturating_duration_since(Instant::now()));
         while let Some(entry) = wake_times.first_entry() {
             if *entry.key() <= Instant::now() {
                 entry.remove().into_iter().for_each(Waker::wake);

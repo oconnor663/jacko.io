@@ -500,9 +500,9 @@ impl<T> Future for JoinHandle<T> {
 }
 ```
 
-Futures passed to `spawn` don't know anything about `JoinState`, so we need a
-wrapper function to handle their return values and invoke a `Waker` if there is
-one:[^async_block]
+At the other end of the communication, Futures passed to `spawn` don't know
+anything about `JoinState`, so we need a wrapper function to handle their
+return values and invoke a `Waker` if there is one:[^async_block]
 
 [^async_block]: Rust also supports async blocks, written `async { ... }`, which
     act like async closures that take no arguments. If we didn't want this
@@ -530,8 +530,8 @@ Using that wrapper, we can write our own `spawn`:[^send_bound]
     Concretely, the future returned by `wrap_with_join_state` needs to be
     coercible to `DynFuture`, which means the `JoinState<T>` that it contains
     needs to be `Send` and `'static`, which means T needs to be too. This time
-    around I'll skip the "discovery" phase and just write all the bounds the
-    first time.
+    around I'll skip the "discovery" phase and just write the bounds correctly
+    the first time.
 
 ```rust
 LINK: Playground playground://async_playground/tasks_noop_waker.rs
@@ -550,11 +550,204 @@ where
 }
 ```
 
+We want our main loop to keep going only until the main task is finished, and
+not to wait for other tasks. Let's split the main task out from the `tasks`
+list, which we can rename to `other_tasks`:
 
+```rust
+LINK: Playground playground://async_playground/tasks_noop_waker.rs
+let mut main_task = Box::pin(async_main());
+let mut other_tasks: Vec<DynFuture> = Vec::new();
+loop {
+    // Poll the main task and exit immediately if it's done.
+    if main_task.as_mut().poll(&mut context).is_ready() {
+        return;
+    }
+    // Poll other tasks and remove any that are Ready.
+    let is_pending = |task: &mut DynFuture| {
+        task.as_mut().poll(&mut context).is_pending()
+    };
+    other_tasks.retain_mut(is_pending);
+    // Handle NEW_TASKS and WAKERS...
+```
 
+Finally, we can collect and await the `JoinHandle`s in our `async_main`
+function. Now our tasks look like the Tokio tasks we started with:[^unwrap]
+
+[^unwrap]: The Tokio version had an extra `.unwrap()` after `handle.await`,
+    because Tokio catches panics and converts them to `Result`s, again similar
+    to `std::thread`. If we wanted to do the same thing, then inside of
+    `wrap_with_join_state` above we'd use [`FutureExt::catch_unwind`], the
+    async-adapted version of [`std::panic::catch_unwind`]. `JoinHandle::Output`
+    would be the corresponding `Result`.
+
+[`FutureExt::catch_unwind`]: https://docs.rs/futures/latest/futures/future/trait.FutureExt.html#method.catch_unwind
+[`std::panic::catch_unwind`]: https://doc.rust-lang.org/std/panic/fn.catch_unwind.html
+
+```rust
+LINK: Playground playground://async_playground/tasks_noop_waker.rs
+async fn async_main() {
+    let mut task_handles = Vec::new();
+    for n in 1..=10 {
+        task_handles.push(spawn(foo(n)));
+    }
+    for handle in task_handles {
+        handle.await;
+    }
+}
+```
+
+This was a lot of changes to make all at once. You might want to open [the code
+from the `spawn` section][last] side-by-side with [the code from this
+section][this]. Fortunately, it all builds. It even almost works. It prints the
+correct output, but then it panics:
+
+[last]: playground://async_playground/tasks_no_join.rs
+[this]: playground://async_playground/tasks_noop_waker.rs
+
+```
+LINK: Playground playground://async_playground/tasks_noop_waker.rs
+...
+end 3
+end 2
+end 1
+thread 'main' panicked at tasks_noop_waker.rs:137:50:
+sleep forever?
+```
+
+## Waker
+
+The panic is coming from this line, which has been in our main loop since the
+end of Part Two:
+
+```rust
+LINK: Playground playground://async_playground/tasks_noop_waker.rs
+let next_wake = wake_times.keys().next().expect("sleep forever?");
+```
+
+The loop is about to `sleep`, so it asks for the next wake time, but the
+`WAKE_TIMES` tree is empty. Previously we could assume that if any task
+returned `Pending`, there must be at least one wake time registered, because
+the only source of blocking was `Sleep`. But now we have a second source of
+blocking: `JoinHandle`. If a `JoinHandle` is `Pending`, it could be because the
+other task is sleeping and has registered a wake time. However, it could also
+be that the other task is about to return `Ready` as soon as we poll it, and we
+just haven't polled it yet. This is sensitive to the _order_ of our tasks list.
+If a task at the front is waiting on a task at the back, we might end up with
+`Pending` tasks and yet no wakeups scheduled.
+
+And that's exactly what's happened to us. Our main task is probably blocking on
+the first `JoinHandle`. The main loop wakes up, polls the main task, and that
+handle is still `Pending`. Then it polls all the `other_tasks`. Each of them
+prints an "end" message, signals its `JoinHandle`, and returns `Ready`. At that
+point, we need to poll the main task again instead of trying to sleep. But how
+can the loop know that? Do we need to hack in another `static` flag? No,
+there's already a way to tell the main loop not to sleep: `Waker`!
+
+We've been using [`futures::task::noop_waker`] to supply a dummy `Waker` since
+Part Two. When `Sleep` was the only source of blocking, there was nothing for
+the `Waker` to communicate, and all we needed was a placeholder to satisfy the
+compiler. But things have changed. Our `wrap_with_join_state` function is
+already invoking `Waker`s correctly when tasks finish, and now we want those
+`Waker`s to _do something_. How do we make our own `Waker`?
+
+[`futures::task::noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
+
+`Waker` implements `From<Arc<W>>`, where `W` is anything with the [`Wake`]
+trait, which requires a `wake` method.[^RawWaker] That method takes `self:
+Arc<Self>`, which is a little funny,[^clone] but apart from that we can do
+whatever we want with it. The simplest option is to build what's effectively an
+`Arc<Mutex<bool>>`[^atomic] and then set it to `true` when any task needs a
+wakeup.[^waker_per_task] That's not much different from a `static` flag, but in
+theory other people's futures could invoke our `Waker` without needing to know
+the private implementation details of our main loop. Here's our glorified
+`bool`:
+
+[^RawWaker]: There's also [a fancy `unsafe` way to build a `Waker`][from_raw]
+    from something called a [`RawWaker`]. That's what Tokio does, and it's what
+    we'd have to do if we were targeting a `no_std` environment without `Arc`.
+
+[from_raw]: https://doc.rust-lang.org/std/task/struct.Waker.html#method.from_raw
+[`RawWaker`]: https://doc.rust-lang.org/std/task/struct.RawWaker.html
+[`Wake`]: https://doc.rust-lang.org/alloc/task/trait.Wake.html
+
+[^clone]: `Arc` is there because `Waker` is `Clone`. It would be nice if we
+    could address that more directly with a bound like `W: Wake + Clone` on the
+    `From` impl, but that turns out not to work because of a requirement of
+    `dyn Trait` objects called ["object safety"][object_safe].
+
+[object_safe]: https://huonw.github.io/blog/2015/01/object-safety
+
+[^atomic]: Using [`AtomicBool`] for this would be more efficient, but `Mutex`
+    is more familiar and good enough. If you want a three hour deep dive on
+    atomics, listen to [_atomic<> Weapons_ by Herb Sutter][atomic_weapons].
+
+[`AtomicBool`]: https://doc.rust-lang.org/std/sync/atomic/struct.AtomicBool.html
+[atomic_weapons]: https://www.youtube.com/watch?v=A8eCGOqgvH4
+
+[^waker_per_task]: We could also construct a unique `Waker` for each task and
+    then only poll tasks that have woken up. We saw that
+    [`futures::future::JoinAll`][join_all] does something like this in Part
+    Two. We could even get this "for free" by replacing our tasks `Vec` with a
+    [`FuturesUnordered`]. This is left as an exercise for the reader, as they
+    say.
+
+[join_all]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
+[`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
+
+```rust
+LINK: Playground playground://async_playground/tasks.rs
+struct AwakeFlag(Mutex<bool>);
+
+impl AwakeFlag {
+    fn check_and_clear(&self) -> bool {
+        let mut guard = self.0.lock().unwrap();
+        let check = *guard;
+        *guard = false;
+        check
+    }
+}
+
+impl Wake for AwakeFlag {
+    fn wake(self: Arc<Self>) {
+        *self.0.lock().unwrap() = true;
+    }
+}
+```
+
+We can create an `AwakeFlag` and make a `Waker` with it at the start of `main`:
+
+```rust
+LINK: Playground playground://async_playground/tasks.rs
+let awake_flag = Arc::new(AwakeFlag(Mutex::new(false)));
+let waker = Waker::from(Arc::clone(&awake_flag));
+let mut context = Context::from_waker(&waker);
+```
+
+Now we can finally add the check that started this whole
+discussion:[^another_deadlock]
+
+[^another_deadlock]: The reason I defined `.check_and_clear()` above, instead
+    of taking the `MutexGuard` here, is that we can create another deadlock if
+    we forget to drop that guard. The last thing our main loop does is invoke
+    `Wakers`, and `AwakeFlag::wake` takes the same lock.
+
+```rust
+// Some tasks might wake other tasks. Re-poll if the AwakeFlag has been
+// set. Polling futures that aren't ready yet is inefficient but allowed.
+if awake_flag.check_and_clear() {
+    continue;
+}
+```
+
+It works!
 
 So, did we really do all this work just to have another way to spell
 `join_all`? Well, yes and no. They're very similar on the inside. But we're
 about to move beyond sleeping and printing to look at real IO, and we're going
 to find that `spawn` is exactly what we want when we're listening for network
 connections. Onward!
+
+---
+
+[← Part Two: Futures](async_two.html) — [Part Four: IO →](async_four.html)

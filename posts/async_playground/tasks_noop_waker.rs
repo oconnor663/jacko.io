@@ -111,7 +111,7 @@ fn main() {
     let mut main_task = Box::pin(async_main());
     let mut other_tasks: Vec<DynFuture> = Vec::new();
     loop {
-        // Poll the main future and exit immediately if it's done.
+        // Poll the main task and exit immediately if it's done.
         if main_task.as_mut().poll(&mut context).is_ready() {
             return;
         }

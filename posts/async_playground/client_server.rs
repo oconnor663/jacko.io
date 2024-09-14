@@ -56,6 +56,7 @@ impl<T> Future for JoinHandle<T> {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<T> {
         let mut guard = self.state.lock().unwrap();
+        // Use JoinState::Done as a placeholder, to take ownership of T.
         match mem::replace(&mut *guard, JoinState::Done) {
             JoinState::Ready(value) => Poll::Ready(value),
             JoinState::Unawaited | JoinState::Awaited(_) => {
@@ -95,12 +96,11 @@ where
 struct AwakeFlag(Mutex<bool>);
 
 impl AwakeFlag {
-    fn is_awake(&self) -> bool {
-        *self.0.lock().unwrap()
-    }
-
-    fn clear(&self) {
-        *self.0.lock().unwrap() = false;
+    fn check_and_clear(&self) -> bool {
+        let mut guard = self.0.lock().unwrap();
+        let check = *guard;
+        *guard = false;
+        check
     }
 }
 
@@ -235,7 +235,7 @@ fn main() -> io::Result<()> {
     let mut main_task = Box::pin(async_main());
     let mut other_tasks: Vec<DynFuture> = Vec::new();
     loop {
-        // Poll the main future and exit immediately if it's done.
+        // Poll the main task and exit immediately if it's done.
         if let Poll::Ready(result) = main_task.as_mut().poll(&mut context) {
             return result;
         }
@@ -256,10 +256,9 @@ fn main() -> io::Result<()> {
                 other_tasks.push(task);
             }
         }
-        // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been set. This might
-        // poll futures that aren't ready yet, which is inefficient but allowed.
-        if awake_flag.is_awake() {
-            awake_flag.clear();
+        // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been set. Polling
+        // futures that aren't ready yet is inefficient but allowed.
+        if awake_flag.check_and_clear() {
             continue;
         }
         // All tasks are either sleeping or blocked on IO. Use libc::poll to wait for IO on any of
