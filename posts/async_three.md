@@ -306,17 +306,16 @@ avoid.[^deadlock] Here's the expanded main loop, with new code in the middle:
     wouldn't be a wakeup time, and it would panic.
 
 [^deadlock]: Unfortunately this is an easy mistake to make. A method chain like
-    `.lock().unwrap().pop()` creates a temporary [`MutexGuard`] that lasts
-    until the end of the current ["temporary scope"][rule]. In this example as
-    written, that's the semicolon after the `let-else`, so the guard does get
-    dropped before `poll`. But if we combined the inner `loop` and the
-    `let-else` into a `while let`, or if we replaced the `let-else` with an `if
-    let`, the guard would last until the end of the _block_, and we'd still be
-    holding the lock when we called `poll`. If we made this mistake, and if we
-    also made `foo` call `spawn` before its first `.await`, this example would
-    deadlock. This is [an unfortunate footgun with `Mutex`][footgun]. There's
-    [a Clippy lint for it][lint], but as of Rust 1.81 it's still disabled by
-    default.
+    `.lock().unwrap().pop()` creates a [`MutexGuard`] that lasts until the end
+    of the current ["temporary scope"][rule]. In this example as written,
+    that's the semicolon after the `let-else`. But if we combined the inner
+    `loop` and the `let-else` into a `while let`, or if we replaced the
+    `let-else` with an `if let`, the guard would last until the end of the
+    _block_, and we'd still be holding the lock when we called `poll`. If we
+    made this mistake, and if we also made `foo` call `spawn` before its first
+    `.await`, this example would deadlock. This is [an unfortunate footgun with
+    `Mutex`][footgun]. There's [a Clippy lint for it][lint], but as of Rust
+    1.81 it's still disabled by default.
     <br>
     &emsp;&emsp;The [formal rule for this behavior][rule] is that the first
     part of an `if` or `while` expression (the "condition") is a "temporary
@@ -325,10 +324,10 @@ avoid.[^deadlock] Here's the expanded main loop, with new code in the middle:
     borrowing methods like [`Vec::first`] or [`String::trim`], but it's
     unnecessary and counterintuitive with methods like [`Vec::pop`] or
     [`String::len`] that return owned values. It might be nice if Rust dropped
-    temporaries as soon as possible, but the downside is that drop timing would
-    depend on borrow checker analysis, which isn't generally stable. Some Rust
-    compilers have even [skipped borrow checking entirely][mrustc], since
-    correct programs can be compiled without it.
+    temporaries as soon as possible, but then drop timing would depend on
+    borrow checker analysis, which isn't generally stable. Some Rust compilers
+    have even [skipped borrow checking entirely][mrustc], since correct
+    programs can be compiled without it.
 
 [`MutexGuard`]: https://doc.rust-lang.org/stable/std/sync/struct.MutexGuard.html
 [`Vec::first`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.first
@@ -397,11 +396,11 @@ order.
 As we noted above, Tokio supports tasks that run in the background without
 blocking program exit, and it also supports tasks with return
 values.[^listen_loop] Both of those things require [`tokio::task::spawn`] to
-return a [`tokio::task::JoinHandle`], to very similar how
+return a [`tokio::task::JoinHandle`], very similar to how
 [`std::thread::spawn`] returns a [`std::thread::JoinHandle`]. We'll implement
 our own `JoinHandle` to get the same features. Also, the only way for our tasks
 to block so far has been `sleep`, and introducing a second form of blocking
-will lead us into some interesting bugs.
+will lead us into an interesting bug.
 
 [^listen_loop]: We won't need task return values ourselves, but once we
     implement blocking, we'll see that carrying a value doesn't add any extra
@@ -414,13 +413,13 @@ will lead us into some interesting bugs.
 [`std::thread::spawn`]: https://doc.rust-lang.org/std/thread/fn.spawn.html
 [`std::thread::JoinHandle`]: https://doc.rust-lang.org/std/thread/struct.JoinHandle.html
 
-`JoinHandle` needs to communicate between one task that's finishing and another
-task that's waiting on it. The waiting side needs somewhere to put its `Waker`,
-so that the finishing side can invoke it.[^one_waker] The finishing side also
-needs somewhere to put its return value `T`, so that the waiting side can
-receive it. Since we don't need both of those things at the same time, we'll
-use an `enum`. The `enum` needs to be shared and also mutable, so we'll wrap it
-in an `Arc`[^arc] and a `Mutex`:[^rc_refcell]
+`JoinHandle` needs to communicate between a task that's finishing and another
+task that's waiting for it to finish. The waiting side needs somewhere to put
+its `Waker`, so that the finishing side can invoke it.[^one_waker] The
+finishing side also needs somewhere to put its return value `T`, so that the
+waiting side can receive it. Since we don't need both of those things at the
+same time, we'll use an `enum`. The `enum` needs to be shared and mutable, so
+we'll wrap it in an `Arc`[^arc] and a `Mutex`:[^rc_refcell]
 
 [^one_waker]: Note that we only need space for one `Waker`. It's possible that
     different calls to `poll` could supply different `Waker`s, but the
@@ -500,14 +499,14 @@ impl<T> Future for JoinHandle<T> {
 }
 ```
 
-At the other end of the communication, Futures passed to `spawn` don't know
+At the other end of the communication, futures passed to `spawn` don't know
 anything about `JoinState`, so we need a wrapper function to handle their
 return values and invoke a `Waker` if there is one:[^async_block]
 
 [^async_block]: Rust also supports async blocks, written `async { ... }`, which
     act like async closures that take no arguments. If we didn't want this
-    adapter to be a standalone function, we could also move its body into
-    `spawn` below and make it an async block.
+    adapter to be a standalone function, we could move its body into `spawn`
+    below and make it an async block.
 
 ```rust
 LINK: Playground playground://async_playground/tasks_noop_waker.rs
@@ -571,8 +570,8 @@ loop {
     // Handle NEW_TASKS and WAKERS...
 ```
 
-Finally, we can collect and await the `JoinHandle`s in our `async_main`
-function. Now our tasks look like the Tokio tasks we started with:[^unwrap]
+Finally, we can collect and await the `JoinHandle`s in `async_main`. Now our
+tasks look like the Tokio tasks we started with:[^unwrap]
 
 [^unwrap]: The Tokio version had an extra `.unwrap()` after `handle.await`,
     because Tokio catches panics and converts them to `Result`s, again similar
@@ -658,8 +657,8 @@ trait, which requires a `wake` method.[^RawWaker] That method takes `self:
 Arc<Self>`, which is a little funny,[^clone] but apart from that we can do
 whatever we want with it. The simplest option is to build what's effectively an
 `Arc<Mutex<bool>>`[^atomic] and then set it to `true` when any task needs a
-wakeup.[^waker_per_task] That's not much different from a `static` flag, but in
-theory other people's futures could invoke our `Waker` without needing to know
+wakeup.[^waker_per_task] That's not so different from a `static` flag, but in
+theory other people's futures can invoke our `Waker` without needing to know
 the private implementation details of our main loop. Here's our glorified
 `bool`:
 
@@ -680,15 +679,17 @@ the private implementation details of our main loop. Here's our glorified
 
 [^atomic]: Using [`AtomicBool`] for this would be more efficient, but `Mutex`
     is more familiar and good enough. If you want a three hour deep dive on
-    atomics, listen to [_atomic<> Weapons_ by Herb Sutter][atomic_weapons].
+    atomics, listen to ["atomic<> Weapons" by Herb Sutter][atomic_weapons].
+    That talk is focused on C++, but C and Rust both stole their atomic memory
+    models from C++ anyway.
 
 [`AtomicBool`]: https://doc.rust-lang.org/std/sync/atomic/struct.AtomicBool.html
 [atomic_weapons]: https://www.youtube.com/watch?v=A8eCGOqgvH4
 
 [^waker_per_task]: We could also construct a unique `Waker` for each task and
-    then only poll tasks that have woken up. We saw that
-    [`futures::future::JoinAll`][join_all] does something like this in Part
-    Two. We could even get this "for free" by replacing our tasks `Vec` with a
+    then only poll tasks that have woken up. We saw
+    [`futures::future::JoinAll`][join_all] do something like this in Part Two.
+    We could even get this "for free" by replacing our tasks `Vec` with a
     [`FuturesUnordered`]. This is left as an exercise for the reader, as they
     say.
 
@@ -724,7 +725,7 @@ let waker = Waker::from(Arc::clone(&awake_flag));
 let mut context = Context::from_waker(&waker);
 ```
 
-Now we can finally add the check that started this whole
+Now we can finally add the check in the main loop that started this whole
 discussion:[^another_deadlock]
 
 [^another_deadlock]: The reason I defined `.check_and_clear()` above, instead
