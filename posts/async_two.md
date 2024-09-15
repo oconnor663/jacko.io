@@ -92,31 +92,22 @@ struct Foo {
 Ok so apparently [`Box::pin`] returns a [`Pin::<Box<T>>`][struct_pin]. We're
 about to see a lot of this `Pin` business, and we have to talk about it. `Pin`
 solves a big problem that async/await has in languages without a garbage
-collector. It's a deep topic,[^quote] and we'll have more to say about it at
-the end of this chapter, but _our_ code won't run into this problem until much
+collector. It's a deep topic, and we'll touch on it again at the end of this
+chapter, but _our_ code won't demonstrate the problem until much
 later.[^iterators] So for now, I'm going to take an…unorthodox approach. I'm
-just gonna [go on the internet and tell lies][lies].
+gonna [just go on the internet and tell lies][lies].
 
 [struct_pin]: https://doc.rust-lang.org/std/pin/struct.Pin.html
 
-[^iterators]: Readers who already know about `Pin`: We did see [a Tokio example
-    in Chapter One][tokio_serial] that relies on `Pin` guarantees for
-    soundness, because it holds a local iterator across an `.await`. Can you
-    spot it without clicking on the link? That fact didn't even occur to me
-    when I wrote the example, which I think is a testament to the success of
-    `Pin`. Our implementation will do something similar when we get to
-    `JoinHandle` in Chapter Three.
+[^iterators]: Readers who already know about `Pin`: There was [a Tokio example
+    in Chapter One][tokio_serial] that implicitly relied on `Pin` for safety,
+    because it held a local borrow across `.await` points. Can you spot it
+    without clicking on the link? That fact didn't even occur to me when I
+    wrote the example, which I think is a testament to the success of `Pin`.
+    Our implementation will do something similar when we get to `JoinHandle` in
+    Chapter Three.
 
 [tokio_serial]: playground://async_playground/tokio_serial.rs
-
-[^quote]: "Most importantly, these objects are not meant to be _always
-    immovable_. Instead, they are meant to be freely moved for a certain period
-    of their lifecycle, and at a certain point they should stop being moved
-    from then on. That way, you can move a self-referential future around as
-    you compose it with other futures until eventually you put it into the
-    place it will live for as long as you poll it. So we needed a way to
-    express that an object is no longer allowed to be moved; in other words,
-    that it is ‘pinned in place.'" - [without.boats/blog/pin][pin_post]
 
 [lies]: https://www.youtube.com/watch?v=iHrZRJR4igQ&t=10s
 
@@ -560,16 +551,25 @@ has passed, before polling again:
 
 ```rust
 LINK: Playground playground://async_playground/wakers.rs
-HIGHLIGHT: 2-11
-while joined_future.as_mut().poll(&mut context).is_pending() {
-    let mut wakers_tree = WAKERS.lock().unwrap();
-    let next_wake = wakers_tree.keys().next().expect("sleep forever?");
-    thread::sleep(next_wake.saturating_duration_since(Instant::now()));
-    while let Some(entry) = wakers_tree.first_entry() {
-        if *entry.key() <= Instant::now() {
-            entry.remove().into_iter().for_each(Waker::wake);
-        } else {
-            break;
+HIGHLIGHT: 10-19
+fn main() {
+    let mut futures = Vec::new();
+    for n in 1..=10 {
+        futures.push(foo(n));
+    }
+    let mut joined_future = Box::pin(future::join_all(futures));
+    let waker = futures::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
+    while joined_future.as_mut().poll(&mut context).is_pending() {
+        let mut wake_times = WAKE_TIMES.lock().unwrap();
+        let next_wake = wake_times.keys().next().expect("sleep forever?");
+        thread::sleep(next_wake.saturating_duration_since(Instant::now()));
+        while let Some(entry) = wake_times.first_entry() {
+            if *entry.key() <= Instant::now() {
+                entry.remove().into_iter().for_each(Waker::wake);
+            } else {
+                break;
+            }
         }
     }
 }
@@ -577,16 +577,15 @@ while joined_future.as_mut().poll(&mut context).is_pending() {
 
 This works, and it does everything on one thread.
 
-## Pin
+## Aside: Pin
 
 Now that we have some intuition about how `async` functions turn into `Future`
-structs, we can say a bit more about `Pin`. It's there to solve a problem that
-comes up when an `async fn` creates references, iterators, or other forms of
-borrowing. We won't need any of that in this series, but imagine our `foo`
-function took a reference internally for some reason:
+structs, we can say a bit more about the problem that `Pin` solves. Imagine our
+`async fn foo` took a reference internally for some reason:
 
 ```rust
 LINK: Playground playground://async_playground/tokio_ref.rs
+HIGHLIGHT: 2,3,5
 async fn foo(n: u64) {
     let n_ref = &n;
     println!("start {n_ref}");
@@ -596,14 +595,16 @@ async fn foo(n: u64) {
 ```
 
 That compiles and runs just fine, and it looks like perfectly ordinary Rust
-code. But what would the same change look like on our `Foo` future?
+code. But what would the same change look like in our `Foo` future?
 
 ```rust
 LINK: Playground playground://async_playground/compiler_errors/foo_ref.rs
+HIGHLIGHT: 2,3
 struct Foo {
     n: u64,
     n_ref: &u64,
-    // other fields...
+    started: bool,
+    sleep_future: Pin<Box<tokio::time::Sleep>>,
 }
 ```
 
@@ -618,11 +619,11 @@ error[E0106]: missing lifetime specifier
   |            ^ expected named lifetime parameter
 ```
 
-What's the lifetime of `n_ref`? The short answer is, there's no good
-answer.[^longer] Self-referential borrows are generally illegal in Rust
+What's the lifetime of `n_ref` supposed to be? The short answer is, there's no
+good answer.[^longer] Self-referential borrows are generally illegal in Rust
 structs, and there's no syntax for what `n_ref` is trying to do. Without this
 rule, we'd have to ask tricky questions about when we're allowed to mutate `n`
-and when we're allowed to move `Foo`.
+and when we're allowed to move `Foo`.[^quote]
 
 [^longer]: The longer answer is that we can hack a lifetime parameter onto
     `Foo`, but that makes it [impossible to do anything useful after we've
@@ -631,6 +632,15 @@ and when we're allowed to move `Foo`.
     checker" here takes us in circles.
 
 [foo_ref_lifetime]: playground://async_playground/compiler_errors/foo_ref_lifetime.rs
+
+[^quote]: "Most importantly, these objects are not meant to be _always
+    immovable_. Instead, they are meant to be freely moved for a certain period
+    of their lifecycle, and at a certain point they should stop being moved
+    from then on. That way, you can move a self-referential future around as
+    you compose it with other futures until eventually you put it into the
+    place it will live for as long as you poll it. So we needed a way to
+    express that an object is no longer allowed to be moved; in other words,
+    that it is ‘pinned in place.'" - [without.boats/blog/pin][pin_post]
 
 But then, how did we get away with `async fn foo` above? What `Future` struct
 did the compiler generate for us?[^smart] It turns out that Rust does [some
@@ -652,14 +662,17 @@ without the risk of dangling pointers or memory corruption.
 [transmute]: https://doc.rust-lang.org/nomicon/transmutes.html
 [unsafe_pinned]: https://rust-lang.github.io/rfcs/3467-unsafe-pinned.html
 
-Since our futures aren't going to do any internal borrowing in this series, we
-won't go any further into the details of the `Pin` API. If you want the whole
-story, start with [this post by the inventor of `Pin`][pin_post] and then read
-through [the official `Pin` docs][pin_docs]. We're going to go off in a
+We won't go any further into the details of the `Pin` API, but if you want the
+whole story, start with [this post by the inventor of `Pin`][pin_post] and then
+read through [the official `Pin` docs][pin_docs]. We're going to march off in a
 different direction: tasks.
 
 [pin_post]: https://without.boats/blog/pin
 [pin_docs]: https://doc.rust-lang.org/std/pin
+
+## Aside: Superpowers
+
+cancellation and recursion
 
 ---
 

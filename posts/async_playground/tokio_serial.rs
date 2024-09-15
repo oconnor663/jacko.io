@@ -13,6 +13,8 @@ async fn main() {
     for n in 1..=10 {
         futures.push(foo(n));
     }
+    // Note that the iterator in this loop is held across
+    // .await points. This is only safe because of Pin!
     for future in futures {
         future.await; // Oops!
     }
