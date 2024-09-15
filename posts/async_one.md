@@ -7,31 +7,34 @@
 - [Part Four: IO](async_four.html)
 - [Part Five: More!](async_five.html)
 
-Async/await, or async IO, is a new-ish language feature that lets us do more
+Async/await, or "async IO", is a new-ish language feature that lets us do more
 than one thing at a time. Rust has had async/await since 2019.[^new_ish] It's
 especially popular with websites and network services that handle many
 connections at once,[^lots] because running lots of async "futures" or "tasks"
 is more efficient than running lots of threads. This series of articles is
 about what futures and tasks are and how they work.
 
-[^new_ish]: For comparison C# added async/await in 2012, Python in 2015, JS in
-    2017, and C++ in 2020.
+[^new_ish]: For comparison C# added async/await in 2012, Python added it in
+    2015, JS in 2017, and C++ in 2020.
 
 [^lots]: "Many" here usually means ten thousand or more. This is sometimes
     called the ["C10K problem"][c10k], short for 10k clients or connections.
 
 [c10k]: https://en.wikipedia.org/wiki/C10k_problem
 
-At a high level, using threads is asking your OS and your hardware to do things
-in parallel for you, but using async/await is reorganizing your own code to do
-things in parallel yourself.[^concurrency] That's where the efficiency comes
-from, but it also means the details of async tend to "leak" into your code, and
-that makes it harder to learn. This series will be a details-first introduction
-to async Rust, focused on translating async examples into ordinary Rust code
-that we can read and play with.
+At a high level, using threads means asking your OS and your hardware to do
+things in parallel for you, but using async/await means reorganizing your own
+code to do it yourself.[^concurrency] That's where the efficiency comes from,
+but it also means the details of async tend to "leak" into your code, and that
+makes it harder to learn. This series will be a details-first introduction to
+async Rust, focused on translating async examples into ordinary Rust code that
+we can execute and understand.
 
-[^concurrency]: The famously confusing technical term for this distinction is
-    "parallelism" vs "concurrency". I'm not going to focus on it.
+[^concurrency]: The famously confusing technical terms for this distinction are
+    "parallelism" and "concurrency". They're important in programming language
+    theory, because they abstract over many different languages and OSs. But
+    since we're talking specifically about Rust, we can say "threads" and
+    "futures".
 
 Our examples will use lots of traits, generics, closures, and threads. I'll
 assume that you've written some Rust before and that you've read [The Rust
@@ -55,15 +58,15 @@ something new.[^books]
 [advice]: https://youtu.be/HgtRAbE1nBM?t=3913
 
 Most of our async examples will use the [Tokio] async
-"runtime".[^more_than_one] Once we understand futures and tasks, it'll be
-easier to talk about what a runtime is and what it does. For now, it's a
-library we use in our async programs.
+"runtime".[^more_than_one] Building our own futures and tasks will help us
+understand what a runtime is and what it does. For now, it's a library we use
+to write async programs.
 
 [Tokio]: https://tokio.rs/
 
 [^more_than_one]: There are several async runtimes available in Rust, but the
     differences between them aren't important for this series. Tokio is the
-    most popular and the most widely supported, so it's a good default.
+    most popular and the most widely supported, and it's a good default.
 
 Let's get started by doing more than one thing at a time with threads. This
 will go smoothly at first, but soon we'll run into trouble.
