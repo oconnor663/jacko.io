@@ -93,17 +93,17 @@ Ok so apparently [`Box::pin`] returns a [`Pin::<Box<T>>`][struct_pin]. We're
 about to see a lot of this `Pin` business, and we have to talk about it. `Pin`
 solves a big problem that async/await has in languages without a garbage
 collector. It's a deep topic,[^quote] and we'll have more to say about it at
-the end of this chapter, but _our code_ won't really care about this problem
-until much later.[^iterators] So for now I'm going to take an…unorthodox
-approach. I'm just going to [go on the internet and tell lies][lies].
+the end of this chapter, but _our_ code won't run into this problem until much
+later.[^iterators] So for now, I'm going to take an…unorthodox approach. I'm
+just gonna [go on the internet and tell lies][lies].
 
 [struct_pin]: https://doc.rust-lang.org/std/pin/struct.Pin.html
 
-[^iterators]: Readers who already know about `Pin`: We saw [one Tokio example
-    in Chapter One][tokio_serial] that depends on `Pin` guarantees for
+[^iterators]: Readers who already know about `Pin`: We did see [a Tokio example
+    in Chapter One][tokio_serial] that relies on `Pin` guarantees for
     soundness, because it holds a local iterator across an `.await`. Can you
-    spot it without clicking on the link? That didn't even occur to me when I
-    first wrote the example, which I think is a testament to the success of
+    spot it without clicking on the link? That fact didn't even occur to me
+    when I wrote the example, which I think is a testament to the success of
     `Pin`. Our implementation will do something similar when we get to
     `JoinHandle` in Chapter Three.
 

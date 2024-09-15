@@ -615,13 +615,22 @@ async fn async_main() {
 }
 ```
 
-This was a lot of changes to make all at once. You might want to open [the code
-from the `spawn` section][last] side-by-side with [the code from this
-section][this]. Fortunately, it all builds. It even almost works. It prints the
-correct output, but then it panics:
+That was a lot of changes all at once. You might want to open [the code from
+the `spawn` section][last] side-by-side with [the code from this
+section][this]. Fortunately, it all builds.[^rely_on_pin] It even almost works.
+It prints the correct output, but then it panics:
 
 [last]: playground://async_playground/tasks_no_join.rs
 [this]: playground://async_playground/tasks_noop_waker.rs
+
+[^rely_on_pin]: Shhh, do you hear that? [What you do not hear][iocaine] is the
+    sound of relying on `Pin` guarantees: `async_main` borrows `task_handles`
+    across an `.await` point, and that would be unsound if the future it
+    returned could move after it was polled. This is the first time we've
+    relied on `Pin` in our own code. We'll do it again in the next chapter,
+    when our IO futures start holding references.
+
+[iocaine]: https://www.youtube.com/watch?v=rMz7JBRbmNo
 
 ```
 LINK: Playground playground://async_playground/tasks_noop_waker.rs
