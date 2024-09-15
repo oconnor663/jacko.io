@@ -90,12 +90,24 @@ struct Foo {
 ```
 
 Ok so apparently [`Box::pin`] returns a [`Pin::<Box<T>>`][struct_pin]. We're
-about to see a lot of this `Pin` business, so I need to say something about it.
-The whole story is big and fascinating,[^quote] and we'll say more about it
-below,[^whole_story] but for now I'm going to take an…unorthodox approach. I'm
-just going to [go on the internet and tell lies][lies].
+about to see a lot of this `Pin` business, and we have to talk about it. `Pin`
+solves a big problem that async/await has in languages without a garbage
+collector. It's a deep topic,[^quote] and we'll have more to say about it at
+the end of this chapter, but _our code_ won't really care about this problem
+until much later.[^iterators] So for now I'm going to take an…unorthodox
+approach. I'm just going to [go on the internet and tell lies][lies].
 
 [struct_pin]: https://doc.rust-lang.org/std/pin/struct.Pin.html
+
+[^iterators]: Readers who already know about `Pin`: We saw [one Tokio example
+    in Chapter One][tokio_serial] that depends on `Pin` guarantees for
+    soundness, because it holds a local iterator across an `.await`. Can you
+    spot it without clicking on the link? That didn't even occur to me when I
+    first wrote the example, which I think is a testament to the success of
+    `Pin`. Our implementation will do something similar when we get to
+    `JoinHandle` in Chapter Three.
+
+[tokio_serial]: playground://async_playground/tokio_serial.rs
 
 [^quote]: "Most importantly, these objects are not meant to be _always
     immovable_. Instead, they are meant to be freely moved for a certain period
@@ -106,43 +118,35 @@ just going to [go on the internet and tell lies][lies].
     express that an object is no longer allowed to be moved; in other words,
     that it is ‘pinned in place.'" - [without.boats/blog/pin][pin_post]
 
-[^whole_story]: If you want the whole story right now, read [the post I just
-    quoted][pin_post] from the inventor of `Pin`, and then read [the `pin`
-    module docs][pin_docs].
-
-[pin_post]: https://without.boats/blog/pin
-[pin_docs]: https://doc.rust-lang.org/std/pin
-
 [lies]: https://www.youtube.com/watch?v=iHrZRJR4igQ&t=10s
 
 `Pin` does nothing.[^truth] `Pin<Box<T>>` is the same as [`Box<T>`], which is
 the same as `T`.[^box] We're about to see `.as_mut()`, which returns `Pin<&mut
-T>`, which is the same as `&mut T`. For the rest of Part Two, please try to
-ignore `Pin`.
+T>`, which is the same as `&mut T`. Whenever you see `Pin`, please try to
+ignore it.
 
 [^truth]: As far as lies go, this one is pretty close to the truth. `Pin`'s job
     is to _prevent_ certain things in safe code, namely, moving certain futures
     after they've been polled. It's like how a shared reference prevents
-    mutation. The reference itself doesn't really _do_ anything; it just
-    represents not having permission.
+    mutation. The reference doesn't _do_ much, but it represents permission.
 
 [`Box<T>`]: https://doc.rust-lang.org/std/boxed/struct.Box.html
 
-[^box]: This is arguably a bigger lie, because unlike `Pin`, `Box<T>` actually
-    _does_ something: it puts `T` "on the heap". I'm using `Box::pin` as
-    shortcut to avoid talking about ["pin projection"][projection]. But it's
-    important to note that most futures in Rust are _not_ heap allocated, at
-    least not individually. This is different from coroutines in C++20, which
-    are automatically heap allocated.
+[^box]: This is a bigger lie, because unlike `Pin`, `Box<T>` actually _does_
+    something: it puts `T` "on the heap". I'm using `Box::pin` as shortcut to
+    avoid talking about ["pin projection"][projection]. But note that most
+    futures in Rust are _not_ heap allocated, at least not individually. This
+    is different from coroutines in C++20, which are automatically heap
+    allocated.
 
 [projection]: https://doc.rust-lang.org/std/pin/index.html#projections-and-structural-pinning
 
 …
 
 Seriously? Why put all these details on the page if we're just supposed to
-ignore them? The reason is that they're an unavoidable part of the [`Future`]
-trait, and `Foo`'s whole purpose in life is to implement that trait. With all
-that in mind, here's where the magic happens:
+ignore them? Because they're an unavoidable part of the [`Future`] trait, and
+`Foo`'s whole purpose in life is to implement that trait. With all that in
+mind, here's where the magic happens:
 
 [`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
 
@@ -166,19 +170,23 @@ impl Future for Foo {
 }
 ```
 
-We finally have something more to say about what a "future" is. Futures
-implement the `Future` trait and have a `poll` method. The `poll` method asks,
-"Is this future finished?" If so, it returns [`Poll::Ready`] with the future's
-`Output`.[^no_output] If not, it returns [`Poll::Pending`]. We can see that
-`Foo::poll` won't return `Ready` until `Sleep::poll` has returned `Ready`.
+None of the calling code has changed. This non-async `fn foo` and the `struct
+Foo` that it returns are drop-in replacements for `async fn foo`. They do
+exactly the same thing. Click on the Playground button to see it run.
+
+We finally have something more to say about what a "future" is. Apparently,
+futures implement the `Future` trait and have a `poll` method. The `poll`
+method asks, "Is this future finished?" If so, it returns [`Poll::Ready`] with
+the future's `Output`.[^no_output] If not, it returns [`Poll::Pending`]. We can
+see that `Foo::poll` won't return `Ready` until `Sleep::poll` has returned
+`Ready`.
 
 [`Poll::Ready`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 [`Poll::Pending`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 
 [^no_output]: `async fn foo` has no return value, so the `Foo` future has no
     `Output`. Rust represents no value with `()`, the empty tuple, also known
-    as the "unit" type. Functions and futures with no return value are used for
-    their side effects, like printing.
+    as the "unit" type.
 
 But `poll` isn't just a question; it's also where the work of the future
 happens. In `Foo`'s case, it's where the printing happens. This forces a
@@ -189,7 +197,7 @@ later. This compromise is the key to running thousands or millions of futures
 at the same time, like we did in Part One.
 
 [^timing]: If you're skeptical, you can [add some timing and logging][timing]
-    around `Sleep::poll` to see that it does in fact return quickly.
+    around `Sleep::poll` to see that it returns quickly.
 
 [timing]: playground://async_playground/foo_timing.rs?mode=release
 
@@ -646,6 +654,9 @@ won't go any further into the details of the `Pin` API. If you want the whole
 story, start with [this post by the inventor of `Pin`][pin_post] and then read
 through [the official `Pin` docs][pin_docs]. We're going to go off in a
 different direction: tasks.
+
+[pin_post]: https://without.boats/blog/pin
+[pin_docs]: https://doc.rust-lang.org/std/pin
 
 ---
 
