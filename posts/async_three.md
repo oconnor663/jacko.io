@@ -32,12 +32,16 @@ example][tokio_10] using `spawn` instead of `join_all`:
 
 ```rust
 LINK: Playground playground://async_playground/tokio_tasks.rs
-let mut task_handles = Vec::new();
-for n in 1..=10 {
-    task_handles.push(tokio::task::spawn(foo(n)));
-}
-for handle in task_handles {
-    handle.await.unwrap();
+HIGHLIGHT: 3-9
+#[tokio::main]
+async fn main() {
+    let mut task_handles = Vec::new();
+    for n in 1..=10 {
+        task_handles.push(tokio::task::spawn(foo(n)));
+    }
+    for handle in task_handles {
+        handle.await.unwrap();
+    }
 }
 ```
 
@@ -128,10 +132,15 @@ start calling these futures "tasks":[^coercion]
 
 ```rust
 LINK: Playground playground://async_playground/tasks_no_spawn.rs
-let mut tasks: Vec<DynFuture> = Vec::new();
-for n in 1..=10 {
-    tasks.push(Box::pin(foo(n)));
-}
+HIGHLIGHT: 2-5
+fn main() {
+    let mut tasks: Vec<DynFuture> = Vec::new();
+    for n in 1..=10 {
+        tasks.push(Box::pin(foo(n)));
+    }
+    let waker = futures::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
+    ...
 ```
 
 We can manage the `Vec<DynFuture>` using `retain_mut` like `JoinAll` did,
@@ -142,20 +151,23 @@ this:
 
 ```rust
 LINK: Playground playground://async_playground/tasks_no_spawn.rs
-loop {
-    // Poll each task, removing any that are Ready.
-    let is_pending = |task: &mut DynFuture| {
-        task.as_mut().poll(&mut context).is_pending()
-    };
-    tasks.retain_mut(is_pending);
+HIGHLIGHT: 3-16
+    let waker = futures::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
+    loop {
+        // Poll each task, removing any that are Ready.
+        let is_pending = |task: &mut DynFuture| {
+            task.as_mut().poll(&mut context).is_pending()
+        };
+        tasks.retain_mut(is_pending);
 
-    // If there are no tasks left, we're done.
-    if tasks.is_empty() {
-        break;
-    }
+        // If there are no tasks left, we're done.
+        if tasks.is_empty() {
+            break;
+        }
 
-    // Otherwise handle WAKERS and sleep as in Part Two...
-    ...
+        // Otherwise handle WAKERS and sleep as in Part Two...
+        ...
 ```
 
 This works fine, though it might not feel like we've accomplished much. Mostly
@@ -374,6 +386,7 @@ can define an `async_main` function let it do the spawning:
 
 ```rust
 LINK: Playground playground://async_playground/tasks_no_join.rs
+HIGHLIGHT: 1-6,11
 async fn async_main() {
     // The main loop currently waits for all tasks to finish.
     for n in 1..=10 {
@@ -382,7 +395,8 @@ async fn async_main() {
 }
 
 fn main() {
-    ...
+    let waker = futures::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
     let mut tasks: Vec<DynFuture> = vec![Box::pin(async_main())];
     ...
 ```
@@ -556,19 +570,23 @@ list, which we can rename to `other_tasks`:
 
 ```rust
 LINK: Playground playground://async_playground/tasks_noop_waker.rs
-let mut main_task = Box::pin(async_main());
-let mut other_tasks: Vec<DynFuture> = Vec::new();
-loop {
-    // Poll the main task and exit immediately if it's done.
-    if main_task.as_mut().poll(&mut context).is_ready() {
-        return;
-    }
-    // Poll other tasks and remove any that are Ready.
-    let is_pending = |task: &mut DynFuture| {
-        task.as_mut().poll(&mut context).is_pending()
-    };
-    other_tasks.retain_mut(is_pending);
-    // Handle NEW_TASKS and WAKERS...
+HIGHLIGHT: 4-15
+fn main() {
+    let waker = futures::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
+    let mut main_task = Box::pin(async_main());
+    let mut other_tasks: Vec<DynFuture> = Vec::new();
+    loop {
+        // Poll the main task and exit immediately if it's done.
+        if main_task.as_mut().poll(&mut context).is_ready() {
+            return;
+        }
+        // Poll other tasks and remove any that are Ready.
+        let is_pending = |task: &mut DynFuture| {
+            task.as_mut().poll(&mut context).is_pending()
+        };
+        other_tasks.retain_mut(is_pending);
+        // Handle NEW_TASKS and WAKERS...
 ```
 
 Finally, we can collect and await the `JoinHandle`s in `async_main`. Now our
@@ -721,9 +739,12 @@ We can create an `AwakeFlag` and make a `Waker` with it at the start of `main`:
 
 ```rust
 LINK: Playground playground://async_playground/tasks.rs
-let awake_flag = Arc::new(AwakeFlag(Mutex::new(false)));
-let waker = Waker::from(Arc::clone(&awake_flag));
-let mut context = Context::from_waker(&waker);
+HIGHLIGHT: 2-4
+fn main() {
+    let awake_flag = Arc::new(AwakeFlag(Mutex::new(false)));
+    let waker = Waker::from(Arc::clone(&awake_flag));
+    let mut context = Context::from_waker(&waker);
+    ...
 ```
 
 Now we can finally add the check in the main loop that started this whole
@@ -735,11 +756,24 @@ discussion:[^another_deadlock]
     `Wakers`, and `AwakeFlag::wake` takes the same lock.
 
 ```rust
+LINK: Playground playground://async_playground/tasks.rs
+HIGHLIGHT: 11-15
+// Collect new tasks, poll them, and keep the ones that are Pending.
+loop {
+    let Some(mut task) = NEW_TASKS.lock().unwrap().pop() else {
+        break;
+    };
+    // It's important that NEW_TASKS isn't locked here.
+    if task.as_mut().poll(&mut context).is_pending() {
+        other_tasks.push(task);
+    }
+}
 // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been
 // set. Polling futures that aren't ready yet is inefficient but allowed.
 if awake_flag.check_and_clear() {
     continue;
 }
+// Otherwise handle WAKERS and sleep as in Part Two...
 ```
 
 It works!

@@ -391,6 +391,7 @@ time we return `Pending`:
 
 ```rust
 LINK: Playground playground://async_playground/sleep_busy.rs
+HIGHLIGHT: 5
 fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
     if Instant::now() >= self.wake_time {
         Poll::Ready(())
@@ -532,6 +533,7 @@ map in `Sleep::poll`:[^or_default]
 
 ```rust
 LINK: Playground playground://async_playground/wakers.rs
+HIGHLIGHT: 5-7
 fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
     if Instant::now() >= self.wake_time {
         Poll::Ready(())
@@ -558,6 +560,7 @@ has passed, before polling again:
 
 ```rust
 LINK: Playground playground://async_playground/wakers.rs
+HIGHLIGHT: 2-11
 while joined_future.as_mut().poll(&mut context).is_pending() {
     let mut wakers_tree = WAKERS.lock().unwrap();
     let next_wake = wakers_tree.keys().next().expect("sleep forever?");
