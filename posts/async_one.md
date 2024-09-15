@@ -90,12 +90,14 @@ second instead of ten:[^order]
 
 ```rust
 LINK: Playground playground://async_playground/threads.rs
-let mut thread_handles = Vec::new();
-for n in 1..=10 {
-    thread_handles.push(thread::spawn(move || foo(n)));
-}
-for handle in thread_handles {
-    handle.join().unwrap();
+fn main() {
+    let mut thread_handles = Vec::new();
+    for n in 1..=10 {
+        thread_handles.push(thread::spawn(move || foo(n)));
+    }
+    for handle in thread_handles {
+        handle.join().unwrap();
+    }
 }
 ```
 
@@ -164,25 +166,37 @@ async fn foo(n: u64) {
 }
 ```
 
-Making a few calls to `foo` one at a time looks like this:
+Making a few calls to `foo` one at a time looks like this:[^tokio_main]
+
+[^tokio_main]: In Chapter Two and Chapter Three we'll implement a lot of what
+    `#[tokio::main]` is doing ourselves. Until then we can just take it on
+    faith that it's "the thing we put before `main` when we use Tokio."
 
 ```rust
 LINK: Playground playground://async_playground/tokio.rs
-foo(1).await;
-foo(2).await;
-foo(3).await;
+HIGHLIGHT: 3-5
+#[tokio::main]
+async fn main() {
+    foo(1).await;
+    foo(2).await;
+    foo(3).await;
+}
 ```
 
 Making several calls at the same time looks like this:
 
 ```rust
 LINK: Playground playground://async_playground/tokio_10.rs
-let mut futures = Vec::new();
-for n in 1..=10 {
-    futures.push(foo(n));
+HIGHLIGHT: 3-8
+#[tokio::main]
+async fn main() {
+    let mut futures = Vec::new();
+    for n in 1..=10 {
+        futures.push(foo(n));
+    }
+    let joined_future = future::join_all(futures);
+    joined_future.await;
 }
-let joined_future = future::join_all(futures);
-joined_future.await;
 ```
 
 Despite its name, [`join_all`] is doing something very different from the
@@ -251,8 +265,16 @@ TODO: This also doesn't work:
 
 ```rust
 LINK: Playground playground://async_playground/tokio_serial.rs
-for future in futures {
-    future.await; // Oops!
+HIGHLIGHT: 7-9
+#[tokio::main]
+async fn main() {
+    let mut futures = Vec::new();
+    for n in 1..=10 {
+        futures.push(foo(n));
+    }
+    for future in futures {
+        future.await; // Oops!
+    }
 }
 ```
 
