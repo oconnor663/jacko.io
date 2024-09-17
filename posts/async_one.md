@@ -1,11 +1,11 @@
-# Async Rust, Part One: Why?
+# Async Rust, Chapter One: Why?
 ###### \[date]
 
-- Part One: Why? (you are here)
-- [Part Two: Futures](async_two.html)
-- [Part Three: Tasks](async_three.html)
-- [Part Four: IO](async_four.html)
-- [Part Five: More!](async_five.html)
+- Chapter One: Why? (you are here)
+- [Chapter Two: Futures](async_two.html)
+- [Chapter Three: Tasks](async_three.html)
+- [Chapter Four: IO](async_four.html)
+- [Chapter Five: More!](async_five.html)
 
 Async/await, or "async IO", is a new-ish language feature that lets us do more
 than one thing at a time. Rust has had async/await since 2019.[^new_ish] It's
@@ -142,7 +142,7 @@ once, we need something different.
 [^basketball_demo]: This is a demo of passing "basketballs" back and forth
     among many threads, to show how thread switching overhead affects
     performance as the number of threads grows. It's longer and more
-    complicated than the other examples in Part One, and it's ok to skip it.
+    complicated than the other examples in Chapter One, and it's ok to skip it.
     TODO: Is [this version][basketball_threads_orig] still blocked?
 
 [basketball_threads]: https://play.rust-lang.org/?version=stable&mode=release&edition=2021&gist=fd952dba2f51ee595cd9ff6dbbc08c38
@@ -157,7 +157,7 @@ once, we need something different.
 
 ## Async
 
-Let's try the same thing with async/await. Part Two will go into all the
+Let's try the same thing with async/await. Chapter Two will go into all the
 details, but for now I just want to type it out and run it on the Playground.
 Our async `foo` function looks like this:
 
@@ -205,7 +205,7 @@ async fn main() {
 Despite its name, [`join_all`] is doing something very different from the
 [`join`] method we used with threads. There joining meant waiting on something,
 but here it means combining multiple "futures" together. We'll get to the
-details in Part Two, but for now we can [add some more prints][tokio_10_dbg] to
+details in Chapter Two, but for now we can [add some more prints][tokio_10_dbg] to
 see that can see `join_all` doesn't take any time, and none of `foo`s start
 running until we `.await` the joined future.
 
@@ -252,8 +252,8 @@ Oh no! Everything is running one-at-a-time again! It's an easy mistake to make,
 unfortunately.[^detect_blocking] But we can learn a lot about how a system
 works by watching it fail, and what we're learning here is that all of the jobs
 running "at the same time" in the async examples above were actually running on
-a single thread. That's the magic of async. In the next part of this series,
-we'll dive into all the nitty gritty details of how exactly this works.
+a single thread. That's the magic of async. In the next chapter, we'll dive
+into all the nitty gritty details of how exactly this works.
 
 [^detect_blocking]: There have been [attempts][async_std_proposal] to
     automatically detect and handle blocking in async functions, but that's led
@@ -283,4 +283,4 @@ async fn main() {
 
 ---
 
-[Part Two: Futures →](async_two.html)
+[Chapter Two: Futures →](async_two.html)

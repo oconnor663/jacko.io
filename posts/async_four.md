@@ -1,10 +1,14 @@
-# Async Rust, Part Four: IO
+# Async Rust, Chapter Four: IO
 ###### \[date]
 
-- [Part One: Why?](async_one.html)
-- [Part Two: Futures](async_two.html)
-- [Part Three: Tasks](async_three.html)
-- Part Four: IO (you are here)
-- [Part Five: More!](async_five.html)
+- [Chapter One: Why?](async_one.html)
+- [Chapter Two: Futures](async_two.html)
+- [Chapter Three: Tasks](async_three.html)
+- Chapter Four: IO (you are here)
+- [Chapter Five: More!](async_five.html)
 
 IO placeholder.
+
+---
+
+[← Chapter Three: Tasks](async_three.html)
