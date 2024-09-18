@@ -28,7 +28,7 @@ top-level future that's owned and polled by the main loop. Here we only have
 one task, but there's nothing stopping us from having more than one. And if we
 had a collection of tasks, we could even add to that collection at runtime.
 
-This is what [`tokio::task::spawn`] does. We can rewrite our [original Tokio
+That's what [`tokio::task::spawn`] does. We can rewrite our [original Tokio
 example][tokio_10] using `spawn` instead of `join_all`:
 
 [`tokio::task::spawn`]: https://docs.rs/tokio/latest/tokio/task/fn.spawn.html
@@ -51,11 +51,10 @@ async fn main() {
 
 `foo` is still an `async fn`, but otherwise this is very similar to [how we did
 the same thing with threads][threads]. Like threads, but unlike ordinary
-futures, tasks start running in the background as soon as we `spawn` them. A
-common design pattern for network services is to have a main loop that listens
-for new connections and spawns a thread to handle each connection. Async tasks
-let us use the same design pattern[^futures_unordered] without the performance
-overhead of threads.
+futures, tasks start running in the background as soon as we `spawn` them. It's
+common in network services to have a main loop that listens for new connections
+and spawns a thread to handle each connection. Async tasks let us use this
+pattern without the performance overhead of threads.[^futures_unordered]
 
 [threads]: playground://async_playground/threads.rs
 
@@ -87,7 +86,7 @@ copy/paste?
 
 [join_all]: playground://async_playground/join.rs
 
-One thing we need to change is the type of the `Vec` of futures. Our `JoinAll`
+One thing we need to change is the type of the futures `Vec`. Our `JoinAll`
 used `Vec<Pin<Box<F>>>`,[^ignore_pin] where `F` was a generic type parameter,
 but our main function doesn't have any type parameters. We also want the new
 `Vec` to be able to hold futures of different types at the same
@@ -123,10 +122,10 @@ have to write this more than once:[^box]
 type DynFuture = Pin<Box<dyn Future<Output = ()>>>;
 ```
 
-Note that `DynFuture` doesn't have any type parameters. We can fit _any_ future
-into this one type, as long as its `Output` is `()`. Now instead of building a
-`join_future` in our `main` function, we'll build a `Vec<DynFuture>`, and we'll
-start calling these futures "tasks":[^coercion]
+Note that `DynFuture` doesn't have any type parameters. We can fit _any_ boxed
+future into this _one_ type, as long as its `Output` is `()`. Now instead of
+building a `join_future` in our `main` function, we'll build a
+`Vec<DynFuture>`, and we'll start calling these futures "tasks":[^coercion]
 
 [^coercion]: `Box::pin(foo(n))` is still a concrete future type, but pushing it
     into the `Vec<DynFuture>` "coerces" the concrete type to `dyn Future`.
@@ -386,7 +385,7 @@ loop {
 ```
 
 With all that in place, instead of hardcoding all whole task list in `main`, we
-can define an `async_main` function let it do the spawning:
+can define an `async_main` function and let it do the spawning:
 
 ```rust
 LINK: Playground playground://async_playground/tasks_no_join.rs
@@ -419,7 +418,7 @@ return a [`tokio::task::JoinHandle`], very similar to how
 [`std::thread::spawn`] returns a [`std::thread::JoinHandle`]. We'll implement
 our own `JoinHandle` to get the same features. Also, the only way for our tasks
 to block so far has been `sleep`, and introducing a second form of blocking
-will lead us into an interesting bug.
+will lead to an interesting bug.
 
 [^listen_loop]: We won't need task return values ourselves, but once we
     implement blocking, we'll see that carrying a value doesn't add any extra
@@ -436,8 +435,8 @@ will lead us into an interesting bug.
 task that's waiting for it to finish. The waiting side needs somewhere to put
 its `Waker`, so that the finishing side can invoke it.[^one_waker] The
 finishing side also needs somewhere to put its return value `T`, so that the
-waiting side can receive it. Since we don't need both of those things at the
-same time, we'll use an `enum`. The `enum` needs to be shared and mutable, so
+waiting side can receive it. We won't need both of those things at the same
+time, so we can use an `enum`. We need this `enum` to be shared and mutable, so
 we'll wrap it in an `Arc`[^arc] and a `Mutex`:[^rc_refcell]
 
 [^one_waker]: Note that we only need space for one `Waker`. It's possible that
@@ -488,9 +487,9 @@ need to replace the whole `JoinState` with [`mem::replace`]:[^mem_take]
 [^mem_take]: It would be more convenient if we could use [`mem::take`] directly
     on `&mut T`, but that only works if `T` implements [`Default`], and we
     don't want our `spawn` function to require that. Another option is a
-    library called [`replace_with`], which lets us "leave a hole" behind any
-    `&mut T` temporarily, but it's [not entirely clear][soundness] whether that
-    approach is sound.
+    library called [`replace_with`], which does let us "leave a hole" behind
+    any `&mut T` temporarily, but it's [not entirely clear][soundness] whether
+    that approach is sound.
 
 [`mem::take`]: https://doc.rust-lang.org/std/mem/fn.take.html
 [`Default`]: https://doc.rust-lang.org/std/default/trait.Default.html
@@ -518,9 +517,9 @@ impl<T> Future for JoinHandle<T> {
 }
 ```
 
-At the other end of the communication, futures passed to `spawn` don't know
+At the other end of the communication, futures passed to `spawn` won't know
 anything about `JoinState`, so we need a wrapper function to handle their
-return values and invoke a `Waker` if there is one:[^async_block]
+return values and invoke the `Waker` if there is one:[^async_block]
 
 [^async_block]: Rust also supports async blocks, written `async { ... }`, which
     act like async closures that take no arguments. If we didn't want this
@@ -542,7 +541,8 @@ async fn wrap_with_join_state<F: Future>(
 }
 ```
 
-Using that wrapper, we can write our own `spawn`:[^send_bound]
+Now we'll use that wrapper in our `spawn` function, so that it accepts any
+`Output` type and returns a `JoinHandle`:[^send_bound]
 
 [^send_bound]: `T` will need to be `Send` and `'static` just like `F`.
     Concretely, the future returned by `wrap_with_join_state` needs to be
@@ -568,33 +568,16 @@ where
 }
 ```
 
-We want our main loop to keep going only until the main task is finished, and
-not to wait for other tasks. Let's split the main task out from the `tasks`
-list, which we can rename to `other_tasks`:
+We can collect and `.await` those `JoinHandle`s in `async_main`,[^rely_on_pin]
+similar to how we used Tokio tasks above:[^unwrap]
 
-```rust
-LINK: Playground playground://async_playground/tasks_noop_waker.rs
-HIGHLIGHT: 4-15
-fn main() {
-    let waker = futures::task::noop_waker();
-    let mut context = Context::from_waker(&waker);
-    let mut main_task = Box::pin(async_main());
-    let mut other_tasks: Vec<DynFuture> = Vec::new();
-    loop {
-        // Poll the main task and exit immediately if it's done.
-        if main_task.as_mut().poll(&mut context).is_ready() {
-            return;
-        }
-        // Poll other tasks and remove any that are Ready.
-        let is_pending = |task: &mut DynFuture| {
-            task.as_mut().poll(&mut context).is_pending()
-        };
-        other_tasks.retain_mut(is_pending);
-        // Handle NEW_TASKS and WAKERS...
-```
-
-Finally, we can collect and await the `JoinHandle`s in `async_main`. Now our
-tasks look like the Tokio tasks we started with:[^unwrap]
+[^rely_on_pin]: Shhh, do you hear that? [What you do not hear][iocaine] is the
+    sound of relying on `Pin` guarantees: This version of `async_main` borrows
+    `task_handles` across an `.await` point, so the returned future contains
+    both `task_handles` and pointers to it. That would be unsound if the future
+    could move after it was polled and after the borrow was established. This
+    is the first time we've relied on `Pin` like this in our own code. We'll do
+    it again in the next chapter, when our IO futures start holding references.
 
 [^unwrap]: The Tokio version had an extra `.unwrap()` after `handle.await`,
     because Tokio catches panics and converts them to `Result`s, again similar
@@ -619,20 +602,44 @@ async fn async_main() {
 }
 ```
 
-That was a lot of changes all at once. You might want to open [the code from
-the `spawn` section][last] side-by-side with [the code from this
-section][this]. Fortunately, it all builds.[^rely_on_pin] It even almost works.
-It prints the correct output, but then it panics:
+Now that we can control which tasks we're waiting on, we want our main loop to
+exit after the main task is finished. Let's split the main task out from the
+`tasks` list, which we can rename to `other_tasks`:[^eagle_eyed]
+
+[^eagle_eyed]: Eagle-eyed readers might spot that we're no longer coercing
+    `main_task` to a `DynFuture`. That means that `async_main` doesn't have to
+    return `()`. We'll take advantage of that in the next chapter to return
+    `io::Result<()>`. Technically `async_main` doesn't have to be `Send`
+    anymore either, but we won't mess with that.
+
+```rust
+LINK: Playground playground://async_playground/tasks_noop_waker.rs
+HIGHLIGHT: 4-15
+fn main() {
+    let waker = futures::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
+    let mut main_task = Box::pin(async_main());
+    let mut other_tasks: Vec<DynFuture> = Vec::new();
+    loop {
+        // Poll the main task and exit immediately if it's done.
+        if main_task.as_mut().poll(&mut context).is_ready() {
+            return;
+        }
+        // Poll other tasks and remove any that are Ready.
+        let is_pending = |task: &mut DynFuture| {
+            task.as_mut().poll(&mut context).is_pending()
+        };
+        other_tasks.retain_mut(is_pending);
+        // Handle NEW_TASKS and WAKERS...
+```
+
+Done! That was a lot of changes all at once, so you might want to open [the
+code from the last section][last] side-by-side with [the code from this
+section][this]. Fortunately, it all builds. It even&hellip;_almost_ works. Our program prints the
+correct output, but then it panics:
 
 [last]: playground://async_playground/tasks_no_join.rs
 [this]: playground://async_playground/tasks_noop_waker.rs
-
-[^rely_on_pin]: Shhh, do you hear that? [What you do not hear][iocaine] is the
-    sound of relying on `Pin` guarantees: `async_main` borrows `task_handles`
-    across an `.await` point, and that would be unsound if the future it
-    returned could move after it was polled. This is the first time we've
-    relied on `Pin` in our own code. We'll do it again in the next chapter,
-    when our IO futures start holding references.
 
 [iocaine]: https://www.youtube.com/watch?v=rMz7JBRbmNo
 
@@ -647,6 +654,8 @@ thread 'main' panicked at tasks_noop_waker.rs:137:50:
 sleep forever?
 ```
 
+This is the interesting bug we were looking forward to!
+
 ## Waker
 
 The panic is coming from this line, which has been in our main loop since the
@@ -654,7 +663,10 @@ end of Chapter Two:
 
 ```rust
 LINK: Playground playground://async_playground/tasks_noop_waker.rs
+HIGHLIGHT: 2
+let mut wake_times = WAKE_TIMES.lock().unwrap();
 let next_wake = wake_times.keys().next().expect("sleep forever?");
+thread::sleep(next_wake.saturating_duration_since(Instant::now()));
 ```
 
 The loop is about to `sleep`, so it asks for the next wake time, but the
@@ -689,7 +701,7 @@ already invoking `Waker`s correctly when tasks finish, and now we want those
 trait, which requires a `wake` method.[^RawWaker] That method takes `self:
 Arc<Self>`, which is a little funny,[^clone] but apart from that we can do
 whatever we want with it. The simplest option is to build what's effectively an
-`Arc<Mutex<bool>>`[^atomic] and then set it to `true` when any task needs a
+`Arc<Mutex<bool>>`[^atomic] and to set it to `true` when any task needs a
 wakeup.[^waker_per_task] That's not so different from a `static` flag, but in
 theory other people's futures can invoke our `Waker` without needing to know
 the private implementation details of our main loop. Here's our glorified
