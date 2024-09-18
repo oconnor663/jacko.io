@@ -638,6 +638,7 @@ It prints the correct output, but then it panics:
 
 ```
 LINK: Playground playground://async_playground/tasks_noop_waker.rs
+HIGHLIGHT: 2-6
 ...
 end 3
 end 2

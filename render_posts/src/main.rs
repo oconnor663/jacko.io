@@ -283,8 +283,17 @@ impl Output {
                 self.document_html += "<br>";
             }
         } else {
-            for line_text in &code_lines.lines {
+            for (i, line_text) in code_lines.lines.iter().enumerate() {
+                // Line numbers conventionally start with 1.
+                // TODO: There's some unfortunate duplication across branches here.
+                let line_number = i + 1;
+                if code_lines.highlighted_lines.is_faded(line_number) {
+                    self.document_html += "<span class=\"faded_code\">";
+                }
                 self.document_html += &html_escape::encode_text(line_text);
+                if code_lines.highlighted_lines.is_faded(line_number) {
+                    self.document_html += "</span>";
+                }
                 self.document_html += "<br>";
             }
         }
