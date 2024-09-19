@@ -1,8 +1,8 @@
-# Async Rust, Chapter One: Futures
+# Async Rust, Part One: Futures
 ###### \[date]
 
 - [Introduction](async_intro.html)
-- Chapter One: Futures (you are here)
+- Part One: Futures (you are here)
   - [Foo](#foo)
   - [Join](#join)
   - [Sleep](#sleep)
@@ -10,14 +10,14 @@
   - [Main](#main)
   - [Aside: Pin](#aside__pin)
   - [Aside: Superpowers](#aside__superpowers)
-- [Chapter Two: Tasks](async_tasks.html)
-- [Chapter Three: IO](async_io.html)
+- [Part Two: Tasks](async_tasks.html)
+- [Part Three: IO](async_io.html)
 
-In Chapter One we looked at [some async Rust code][part_one] without explaining
-anything about how it worked. That left us with several mysteries: What's an
-`async fn`, and what are the "futures" that they return? What is [`join_all`]
-doing? How is [`tokio::time::sleep`] different from [`thread::sleep`]? What
-does `#[tokio::main]` actually do?
+In the introduction we looked at [some async Rust code][part_one] without
+explaining anything about how it worked. That left us with several mysteries:
+What's an `async fn`, and what are the "futures" that they return? What is
+[`join_all`] doing? How is [`tokio::time::sleep`] different from
+[`thread::sleep`]? What does `#[tokio::main]` actually do?
 
 [part_one]: playground://async_playground/tokio.rs
 [`join_all`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
@@ -99,19 +99,19 @@ Ok so apparently [`Box::pin`] returns a [`Pin::<Box<T>>`][struct_pin]. We're
 about to see a lot of this `Pin` business, and we have to talk about it. `Pin`
 solves a big problem that async/await has in languages without a garbage
 collector. It's a deep topic, and we'll touch on it again at the end of this
-chapter, but _our_ code won't demonstrate the problem until much
+part, but _our_ code won't demonstrate the problem until much
 later.[^iterators] So for now, I'm going to take an…unorthodox approach. I'm
 gonna [just go on the internet and tell lies][lies].
 
 [struct_pin]: https://doc.rust-lang.org/std/pin/struct.Pin.html
 
 [^iterators]: Readers who already know about `Pin`: There was [a Tokio example
-    in Chapter One][tokio_serial] that implicitly relied on `Pin` for safety,
-    because it held a local borrow across `.await` points. Can you spot it
-    without clicking on the link? That fact didn't even occur to me when I
+    in the introduction][tokio_serial] that implicitly relied on `Pin` for
+    safety, because it held a local borrow across `.await` points. Can you spot
+    it without clicking on the link? That fact didn't even occur to me when I
     wrote the example, which I think is a testament to the success of `Pin`.
     Our implementation will do something similar when we get to `JoinHandle` in
-    Chapter Three.
+    Part Two.
 
 [tokio_serial]: playground://async_playground/tokio_serial.rs
 
@@ -191,7 +191,7 @@ compromise: `poll` does all the work that it can do right away, but as soon as
 it needs to wait or block, it returns `Pending` instead.[^timing] The caller
 gets its answer immediately, and in return it promises to call `poll` again
 later. This compromise is the key to running thousands or millions of futures
-at the same time, like we did in Chapter One.
+at the same time, like we did in the introduction.
 
 [^timing]: If you're skeptical, you can [add some timing and logging][timing]
     around `Sleep::poll` to see that it returns quickly.
@@ -222,7 +222,7 @@ after it returns `Ready` it won't be polled again.[^iterator]
 [`Iterator::next`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
 
 We're starting to see what happened with the `thread::sleep` mistake at the end
-of Chapter One. If we use that blocking sleep in `Foo::poll` instead of
+of the introduction. If we use that blocking sleep in `Foo::poll` instead of
 returning `Pending`, we get [exactly the same result][same_result]. We're
 breaking the rule about `poll` returning quickly.
 
@@ -381,7 +381,7 @@ future to be polled again.[^task]
 [possibility]: https://github.com/rust-lang/rust/pull/59119
 
 [^task]: Technically this wakes the current "task". We'll talk about tasks in
-    Chapter Three.
+    Part Two.
 
 The simplest thing we can try is immediately asking to be polled again every
 time we return `Pending`:
@@ -416,7 +416,7 @@ directly [using tools like `perf` on Linux][perf].
 We want to call `wake` later, when it's actually time to wake up. One way to do
 that is to spawn a thread to call `thread::sleep` and `wake` for us. If we did
 that in every call to `poll`, we'd run into the [too-many-threads crash from
-Chapter One][same_crash]. We could work around that by spawning one shared
+the introduction][same_crash]. We could work around that by spawning one shared
 thread and and [using a channel to send `Waker`s to it][shared_thread]. That
 would be a correct and viable implementation, but there's something
 unsatisfying about it&hellip;
@@ -489,7 +489,7 @@ waking up anyway.
 
 [^event_loop]: This is often called an "event loop", but right now all we have
     is sleeps, and those aren't really events. We'll build a proper event loop
-    when we get to IO in Chapter Four. For now I'm going to call this the "main
+    when we get to IO in Part Three. For now I'm going to call this the "main
     loop".
 
 [loop_forever_10]: playground://async_playground/loop_forever_10.rs
@@ -678,7 +678,7 @@ different direction: tasks.
 
 ## Aside: Superpowers
 
-cancellation and recursion
+TODO: cancellation and recursion
 
 [a `timeout()` example][timeout]
 
@@ -714,4 +714,4 @@ async fn factorial(n: u64) -> u64 {
 
 ---
 
-[← Chapter One: Why?](async_intro.html) — [Chapter Three: Tasks →](async_tasks.html)
+[← Introduction](async_intro.html) — [Part Two: Tasks →](async_tasks.html)

@@ -1,13 +1,13 @@
-# Async Rust, Chapter Three: IO
+# Async Rust, Part Three: IO
 ###### \[date]
 
 - [Introduction](async_intro.html)
-- [Chapter One: Futures](async_futures.html)
-- [Chapter Two: Tasks](async_tasks.html)
-- Chapter Three: IO (you are here)
+- [Part One: Futures](async_futures.html)
+- [Part Two: Tasks](async_tasks.html)
+- Part Three: IO (you are here)
 
 IO placeholder.
 
 ---
 
-[← Chapter Three: Tasks](async_tasks.html)
+[← Part Two: Tasks](async_tasks.html)

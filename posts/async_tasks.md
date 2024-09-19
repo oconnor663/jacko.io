@@ -1,19 +1,19 @@
-# Async Rust, Chapter Two: Tasks
+# Async Rust, Part Two: Tasks
 ###### \[date]
 
 - [Introduction](async_intro.html)
-- [Chapter One: Futures](async_futures.html)
-- Chapter Two: Tasks (you are here)
+- [Part One: Futures](async_futures.html)
+- Part Two: Tasks (you are here)
   - [Dyn](#dyn)
   - [Spawn](#spawn)
   - [JoinHandle](#joinhandle)
   - [Waker](#waker)
-- [Chapter Three: IO](async_io.html)
+- [Part Three: IO](async_io.html)
 
-At the start of Chapter One, we said that async/await was about futures and
-tasks. Chapter Two was firehose of details about futures, and now we can talk
-about tasks. Luckily, we've already seen one, though we didn't call it that.
-The last version of our main loop in Chapter Two looked like this:
+In the introduction we said that async/await was about futures and tasks. Part
+One was firehose of details about futures, and now we can talk about tasks.
+Luckily, we've already seen one, though we didn't call it that. The last
+version of our main loop in Part One looked like this:
 
 ```rust
 LINK: Playground playground://async_playground/wakers.rs
@@ -73,10 +73,10 @@ pattern without the performance overhead of threads.[^futures_unordered]
 [select_macro]: https://docs.rs/futures/latest/futures/macro.select.html
 [`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
 
-Building on [the main loop we wrote in Chapter Two][wakers], we can write our
-own `spawn`. We'll do it in three steps: First we'll make space for multiple
-tasks in the main loop, then we'll write the `spawn` function to add new tasks,
-and finally we'll implement [`JoinHandle`] to let one task wait for another.
+Building on [the main loop we wrote in Part One][wakers], we can write our own
+`spawn`. We'll do it in three steps: First we'll make space for multiple tasks
+in the main loop, then we'll write the `spawn` function to add new tasks, and
+finally we'll implement [`JoinHandle`] to let one task wait for another.
 
 [wakers]: playground://async_playground/wakers.rs
 [`JoinHandle`]: https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html
@@ -172,7 +172,7 @@ HIGHLIGHT: 3-16
             break;
         }
 
-        // Otherwise handle WAKERS and sleep as in Chapter Two...
+        // Otherwise handle WAKERS and sleep as in Part One...
         ...
 ```
 
@@ -383,7 +383,7 @@ loop {
         break;
     }
 
-    // Otherwise handle WAKERS and sleep as in Chapter Two...
+    // Otherwise handle WAKERS and sleep as in Part One...
     ...
 ```
 
@@ -580,7 +580,7 @@ similar to how we used Tokio tasks above:[^unwrap]
     both `task_handles` and pointers to it. That would be unsound if the future
     could move after it was polled and after the borrow was established. This
     is the first time we've relied on `Pin` like this in our own code. We'll do
-    it again in the next chapter, when our IO futures start holding references.
+    it again in Part Three, when our IO futures start holding references.
 
 [^unwrap]: The Tokio version had an extra `.unwrap()` after `handle.await`,
     because Tokio catches panics and converts them to `Result`s, again similar
@@ -611,7 +611,7 @@ exit after the main task is finished. Let's split the main task out from the
 
 [^eagle_eyed]: Eagle-eyed readers might spot that we're no longer coercing
     `main_task` to a `DynFuture`. That means that `async_main` doesn't have to
-    return `()`. We'll take advantage of that in the next chapter to return
+    return `()`. We'll take advantage of that in the Part Three to return
     `io::Result<()>`. Technically `async_main` doesn't have to be `Send`
     anymore either, but we won't mess with that.
 
@@ -662,7 +662,7 @@ This is the interesting bug we were looking forward to!
 ## Waker
 
 The panic is coming from this line, which has been in our main loop since the
-end of Chapter Two:
+end of Part One:
 
 ```rust
 LINK: Playground playground://async_playground/tasks_noop_waker.rs
@@ -692,9 +692,9 @@ can the loop know that? Do we need to hack in another `static` flag? No,
 there's already a way to tell the main loop not to sleep: `Waker`!
 
 We've been using [`futures::task::noop_waker`] to supply a dummy `Waker` since
-Chapter Two. When `Sleep` was the only source of blocking, there was nothing
-for the `Waker` to communicate, and all we needed was a placeholder to satisfy
-the compiler. But things have changed. Our `wrap_with_join_state` function is
+Part One. When `Sleep` was the only source of blocking, there was nothing for
+the `Waker` to communicate, and all we needed was a placeholder to satisfy the
+compiler. But things have changed. Our `wrap_with_join_state` function is
 already invoking `Waker`s correctly when tasks finish, and now we want those
 `Waker`s to _do something_. How do we make our own `Waker`?
 
@@ -736,8 +736,8 @@ the private implementation details of our main loop. Here's our glorified
 
 [^waker_per_task]: We could also construct a unique `Waker` for each task and
     then only poll tasks that have woken up. We saw
-    [`futures::future::JoinAll`][join_all] do something like this in Chapter
-    Two. We could even get this "for free" by replacing our tasks `Vec` with a
+    [`futures::future::JoinAll`][join_all] do something like this in Part One.
+    We could even get this "for free" by replacing our tasks `Vec` with a
     [`FuturesUnordered`]. This is left as an exercise for the reader, as they
     say.
 
@@ -802,7 +802,7 @@ loop {
 if awake_flag.check_and_clear() {
     continue;
 }
-// Otherwise handle WAKERS and sleep as in Chapter Two...
+// Otherwise handle WAKERS and sleep as in Part One...
 ```
 
 It works!
@@ -815,4 +815,4 @@ connections. Onward!
 
 ---
 
-[← Chapter Two: Futures](async_futures.html) — [Chapter Four: IO →](async_io.html)
+[← Part One: Futures](async_futures.html) — [Part Three: IO →](async_io.html)
