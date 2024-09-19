@@ -159,6 +159,14 @@ name = "tasks"
 path = "tasks.rs"
 
 [[bin]]
+name = "single_threaded_server"
+path = "single_threaded_server.rs"
+
+[[bin]]
+name = "single_threaded_client"
+path = "single_threaded_client.rs"
+
+[[bin]]
 name = "threads_server"
 path = "threads_server.rs"
 

@@ -6,7 +6,8 @@
 - [Part Two: Tasks](async_tasks.html)
 - Part Three: IO (you are here)
 
-IO placeholder.
+Of course, efficient sleeping isn't why async/await was invented. The goal
+along has been efficient IO, especially network IO. Now that we understand 
 
 ---
 
