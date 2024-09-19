@@ -159,10 +159,6 @@ name = "tasks"
 path = "tasks.rs"
 
 [[bin]]
-name = "no_pin"
-path = "no_pin.rs"
-
-[[bin]]
 name = "threads_server"
 path = "threads_server.rs"
 

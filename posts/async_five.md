@@ -42,9 +42,3 @@ async fn factorial(n: u64) -> u64 {
     }
 }
 ```
-
-## Pin
-
-[an example of writing our own `Future` trait without `Pin`][no_pin]
-
-[no_pin]: playground://async_playground/no_pin.rs
