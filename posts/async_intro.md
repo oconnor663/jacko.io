@@ -285,4 +285,7 @@ async fn main() {
 
 ---
 
-[Part One: Futures →](async_futures.html)
+<div class="prev-next-arrows">
+    <div class="space"> </div><div>
+    <div><a href="async_futures.html">Part One: Futures →</a></div>
+</div>

@@ -10,4 +10,7 @@ IO placeholder.
 
 ---
 
-[← Part Two: Tasks](async_tasks.html)
+<div class="prev-next-arrows">
+    <div><a href="async_tasks.html">← Part Two: Tasks</a></div>
+    <div class="space"> </div><div>
+</div>

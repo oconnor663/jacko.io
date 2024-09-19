@@ -714,4 +714,8 @@ async fn factorial(n: u64) -> u64 {
 
 ---
 
-[← Introduction](async_intro.html) — [Part Two: Tasks →](async_tasks.html)
+<div class="prev-next-arrows">
+    <div><a href="async_intro.html">← Introduction</a></div>
+    <div class="space"> </div><div>
+    <a href="async_tasks.html"> Part Two: Tasks →</a>
+</div>

@@ -406,6 +406,7 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
                 Tag::FootnoteDefinition(s) => {
                     output.start_footnote(s.to_string());
                 }
+                Tag::HtmlBlock => {}
                 other => unimplemented!("{:?}", other),
             },
             Event::End(tag) => match tag {
@@ -451,6 +452,7 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
                 TagEnd::FootnoteDefinition => {
                     output.finish_footnote();
                 }
+                TagEnd::HtmlBlock => {}
                 other => unimplemented!("{:?}", other),
             },
             other => unimplemented!("{:?}", other),

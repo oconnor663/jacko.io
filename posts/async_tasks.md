@@ -815,4 +815,8 @@ connections. Onward!
 
 ---
 
-[← Part One: Futures](async_futures.html) — [Part Three: IO →](async_io.html)
+<div class="prev-next-arrows">
+    <div><a href="async_futures.html">← Part One: Futures</a></div>
+    <div class="space"> </div><div>
+    <a href="async_io.html"> Part Three: IO →</a>
+</div>

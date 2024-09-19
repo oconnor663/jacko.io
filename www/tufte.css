@@ -373,6 +373,17 @@ pre.fullwidth > code {
     clear:both;
 }
 
+.prev-next-arrows {
+    display: flex;
+    flex-direction: row;
+    width: 55%;
+    font-size: 1.4rem;
+}
+
+.prev-next-arrows .space {
+    flex-grow: 1;
+}
+
 span.newthought {
     font-variant: small-caps;
     font-size: 1.2em;
@@ -432,6 +443,10 @@ label.margin-toggle:not(.sidenote-number) {
 
     figure {
         max-width: 90%;
+    }
+
+    .prev-next-arrows {
+        width: 90%;
     }
 
     figcaption,
