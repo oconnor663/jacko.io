@@ -1,5 +1,5 @@
 # Async Rust in Three Parts
-###### \[date]
+###### \[DRAFT]
 
 - Introduction (you are here)
   - [Threads](#threads)

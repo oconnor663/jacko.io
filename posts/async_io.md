@@ -1,5 +1,5 @@
 # Async Rust, Part Three: IO
-###### \[date]
+###### \[DRAFT]
 
 - [Introduction](async_intro.html)
 - [Part One: Futures](async_futures.html)

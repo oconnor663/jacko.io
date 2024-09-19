@@ -1,5 +1,5 @@
 # Async Rust, Part One: Futures
-###### \[date]
+###### \[DRAFT]
 
 - [Introduction](async_intro.html)
 - Part One: Futures (you are here)
