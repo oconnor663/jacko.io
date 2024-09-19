@@ -154,26 +154,21 @@ fn tcp_accept(listener: &TcpListener) -> TcpAccept {
     TcpAccept { listener }
 }
 
-struct TcpReadLine<'a> {
-    reader: &'a mut io::BufReader<TcpStream>,
-    line: String,
+struct Copy<'a, R, W> {
+    reader: &'a mut R,
+    writer: &'a mut W,
 }
 
-impl<'a, 'b> Future for TcpReadLine<'a> {
-    type Output = io::Result<Option<String>>;
+impl<'a, R: Read + AsRawFd, W: Write> Future for Copy<'a, R, W> {
+    type Output = io::Result<()>;
 
-    fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<Option<String>>> {
-        let Self { reader, line } = &mut *self;
-        match reader.read_line(line) {
-            Ok(n) => {
-                if n > 0 {
-                    Poll::Ready(Ok(Some(mem::take(line))))
-                } else {
-                    Poll::Ready(Ok(None))
-                }
-            }
+    fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<()>> {
+        let Copy { reader, writer } = &mut *self.as_mut();
+        match io::copy(reader, writer) {
+            Ok(_) => Poll::Ready(Ok(())),
+            // XXX: Assume that the writer will never block.
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                let raw_fd = reader.get_ref().as_raw_fd();
+                let raw_fd = self.reader.as_raw_fd();
                 let waker = context.waker().clone();
                 POLL_FDS.lock().unwrap().push((raw_fd, waker));
                 Poll::Pending
@@ -183,16 +178,19 @@ impl<'a, 'b> Future for TcpReadLine<'a> {
     }
 }
 
-fn tcp_read_line(reader: &mut io::BufReader<TcpStream>) -> TcpReadLine {
-    let line = String::new();
-    TcpReadLine { reader, line }
+fn copy<'a, R, W>(reader: &'a mut R, writer: &'a mut W) -> Copy<'a, R, W> {
+    Copy { reader, writer }
 }
 
 async fn foo_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
     // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
-    writeln!(&mut socket, "start {n}")?;
+    // Using format! instead of write! avoids breaking up lines across multiple writes. This is
+    // easier than doing line buffering on the client side.
+    let start_msg = format!("start {n}\n");
+    socket.write_all(start_msg.as_bytes())?;
     sleep(Duration::from_secs(1)).await;
-    writeln!(&mut socket, "end {n}")?;
+    let end_msg = format!("end {n}\n");
+    socket.write_all(end_msg.as_bytes())?;
     Ok(())
 }
 
@@ -206,11 +204,8 @@ async fn server_main(listener: TcpListener) -> io::Result<()> {
 }
 
 async fn foo_request() -> io::Result<()> {
-    let socket = tcp_connect("localhost:8000").await?;
-    let mut reader = io::BufReader::new(socket);
-    while let Some(line) = tcp_read_line(&mut reader).await? {
-        print!("{}", line); // `line` includes a trailing newline
-    }
+    let mut socket = tcp_connect("localhost:8000").await?;
+    copy(&mut socket, &mut io::stdout()).await?;
     Ok(())
 }
 

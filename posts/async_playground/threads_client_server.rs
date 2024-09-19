@@ -5,9 +5,13 @@ use std::thread;
 use std::time::Duration;
 
 fn foo_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
-    writeln!(&mut socket, "start {n}")?;
+    // Using format! instead of write! avoids breaking up lines across multiple writes. This is
+    // easier than doing line buffering on the client side.
+    let start_msg = format!("start {n}\n");
+    socket.write_all(start_msg.as_bytes())?;
     thread::sleep(Duration::from_secs(1));
-    writeln!(&mut socket, "end {n}")?;
+    let end_msg = format!("end {n}\n");
+    socket.write_all(end_msg.as_bytes())?;
     Ok(())
 }
 
@@ -21,12 +25,8 @@ fn server_main(listener: TcpListener) -> io::Result<()> {
 }
 
 fn foo_request() -> io::Result<()> {
-    let socket = TcpStream::connect("localhost:8000")?;
-    // io::copy(&mut socket, &mut io::stdout()) is similar, but println is more likely to keep each
-    // line intact when there are many client printing in parallel.
-    for line in io::BufReader::new(socket).lines() {
-        println!("{}", line?);
-    }
+    let mut socket = TcpStream::connect("localhost:8000")?;
+    io::copy(&mut socket, &mut io::stdout())?;
     Ok(())
 }
 

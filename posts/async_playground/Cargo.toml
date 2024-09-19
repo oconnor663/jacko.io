@@ -167,24 +167,8 @@ name = "single_threaded_client"
 path = "single_threaded_client.rs"
 
 [[bin]]
-name = "threads_server"
-path = "threads_server.rs"
-
-[[bin]]
-name = "threads_client"
-path = "threads_client.rs"
-
-[[bin]]
 name = "threads_client_server"
 path = "threads_client_server.rs"
-
-[[bin]]
-name = "tokio_server"
-path = "tokio_server.rs"
-
-[[bin]]
-name = "tokio_client"
-path = "tokio_client.rs"
 
 [[bin]]
 name = "tokio_client_server"
