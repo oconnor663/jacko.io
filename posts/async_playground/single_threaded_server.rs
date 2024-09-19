@@ -5,7 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 fn main() -> io::Result<()> {
-    let listener = TcpListener::bind("localhost:8000")?;
+    let listener = TcpListener::bind("0.0.0.0:8000")?;
     let mut n = 1;
     loop {
         let (mut socket, _) = listener.accept()?;

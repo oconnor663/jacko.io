@@ -30,7 +30,7 @@ async fn foo_request() -> io::Result<()> {
 #[tokio::main]
 async fn main() -> io::Result<()> {
     // Open the listener here, to avoid racing against the server thread.
-    let listener = TcpListener::bind("localhost:8000").await?;
+    let listener = TcpListener::bind("0.0.0.0:8000").await?;
     tokio::task::spawn(async { server_main(listener).await.unwrap() });
     let mut client_handles = Vec::new();
     for _ in 1..=10 {

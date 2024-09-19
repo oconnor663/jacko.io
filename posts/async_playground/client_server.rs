@@ -211,7 +211,7 @@ async fn foo_request() -> io::Result<()> {
 
 async fn async_main() -> io::Result<()> {
     // Open the listener here, to avoid racing against the server thread.
-    let listener = tcp_bind("localhost:8000").await?;
+    let listener = tcp_bind("0.0.0.0:8000").await?;
     spawn(async { server_main(listener).await.unwrap() });
     let mut task_handles = Vec::new();
     for _ in 1..=10 {

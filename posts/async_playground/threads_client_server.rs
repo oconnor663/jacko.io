@@ -32,7 +32,7 @@ fn foo_request() -> io::Result<()> {
 
 fn main() -> io::Result<()> {
     // Open the listener here, to avoid racing against the server thread.
-    let listener = TcpListener::bind("localhost:8000")?;
+    let listener = TcpListener::bind("0.0.0.0:8000")?;
     thread::spawn(|| server_main(listener).unwrap());
     let mut client_handles = Vec::new();
     for _ in 1..=10 {
