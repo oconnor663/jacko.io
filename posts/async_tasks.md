@@ -1,11 +1,14 @@
-# Async Rust, Chapter Three: Tasks
+# Async Rust, Chapter Two: Tasks
 ###### \[date]
 
-- [Chapter One: Why?](async_one.html)
-- [Chapter Two: Futures](async_two.html)
-- Chapter Three: Tasks (you are here)
-- [Chapter Four: IO](async_four.html)
-- [Chapter Five: More!](async_five.html)
+- [Introduction](async_intro.html)
+- [Chapter One: Futures](async_futures.html)
+- Chapter Two: Tasks (you are here)
+  - [Dyn](#dyn)
+  - [Spawn](#spawn)
+  - [JoinHandle](#joinhandle)
+  - [Waker](#waker)
+- [Chapter Three: IO](async_io.html)
 
 At the start of Chapter One, we said that async/await was about futures and
 tasks. Chapter Two was firehose of details about futures, and now we can talk
@@ -812,4 +815,4 @@ connections. Onward!
 
 ---
 
-[← Chapter Two: Futures](async_two.html) — [Chapter Four: IO →](async_four.html)
+[← Chapter Two: Futures](async_futures.html) — [Chapter Four: IO →](async_io.html)

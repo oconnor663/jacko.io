@@ -103,6 +103,8 @@ struct Output {
     in_title: bool,
     subtitle_html: String,
     in_subtitle: bool,
+    heading_html: String,
+    in_heading: bool,
     // Each footnote is parsed incrementally, just like the document is.
     current_footnote: Option<Footnote>,
     // Unfortunately code blocks are also parsed incrementally, which is kind of awkward.
@@ -122,6 +124,8 @@ impl Output {
             in_title: false,
             subtitle_html: String::new(),
             in_subtitle: false,
+            heading_html: String::new(),
+            in_heading: false,
             current_footnote: None,
             current_code_block: None,
             footnotes: HashMap::new(),
@@ -145,10 +149,16 @@ impl Output {
         );
         if self.in_title {
             assert!(!self.in_subtitle);
+            assert!(!self.in_heading);
             self.title_html += html;
         } else if self.in_subtitle {
             assert!(!self.in_title);
+            assert!(!self.in_heading);
             self.subtitle_html += html;
+        } else if self.in_heading {
+            assert!(!self.in_title);
+            assert!(!self.in_subtitle);
+            self.heading_html += html;
         } else if let Some(footnote) = &mut self.current_footnote {
             footnote.contents_html += html;
         } else {
@@ -362,7 +372,9 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
                     } else if level == HeadingLevel::H6 {
                         output.in_subtitle = true;
                     } else {
-                        output.push_html(&format!("\n</section>\n\n<section>\n<{level}>"));
+                        output.push_html(&format!("\n</section>\n\n<section>\n"));
+                        // Collect text until TagEnd::Heading, so that we can generate an id.
+                        output.in_heading = true;
                     }
                 }
                 Tag::Strong => output.push_html("<strong>"),
@@ -383,7 +395,13 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
                     };
                     output.start_code_block(language.to_string());
                 }
-                Tag::List(_) => output.push_html("\n\n<ul>"),
+                Tag::List(starting_number) => {
+                    if starting_number.is_some() {
+                        output.push_html("\n\n<ol>");
+                    } else {
+                        output.push_html("\n\n<ul>");
+                    }
+                }
                 Tag::Item => output.push_html("\n<li>"),
                 Tag::FootnoteDefinition(s) => {
                     output.start_footnote(s.to_string());
@@ -399,7 +417,21 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
                     } else if level == HeadingLevel::H6 {
                         output.in_subtitle = false;
                     } else {
-                        output.push_html(&format!("</{}>", level));
+                        let mut id = String::new();
+                        for c in output.heading_html.chars() {
+                            if c.is_alphanumeric() {
+                                id.push(c.to_ascii_lowercase());
+                            } else {
+                                id.push('_');
+                            }
+                        }
+                        output.in_heading = false;
+                        // Clear in_heading before pushing HTML, so that it goes to the document.
+                        output.push_html(&format!(
+                            r#"<{} id="{}">{}</{}>"#,
+                            level, id, output.heading_html, level,
+                        ));
+                        output.heading_html.clear();
                     }
                 }
                 TagEnd::Strong => output.push_html("</strong>"),
@@ -408,7 +440,13 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
                 TagEnd::CodeBlock => {
                     output.finish_code_block()?;
                 }
-                TagEnd::List(_) => output.push_html("\n</ul>"),
+                TagEnd::List(ordered) => {
+                    if ordered {
+                        output.push_html("\n</ol>");
+                    } else {
+                        output.push_html("\n</ul>");
+                    }
+                }
                 TagEnd::Item => output.push_html("</li>"),
                 TagEnd::FootnoteDefinition => {
                     output.finish_footnote();

@@ -1,11 +1,17 @@
-# Async Rust, Chapter Two: Futures
+# Async Rust, Chapter One: Futures
 ###### \[date]
 
-- [Chapter One: Why?](async_one.html)
-- Chapter Two: Futures (you are here)
-- [Chapter Three: Tasks](async_three.html)
-- [Chapter Four: IO](async_four.html)
-- [Chapter Five: More!](async_five.html)
+- [Introduction](async_intro.html)
+- Chapter One: Futures (you are here)
+  - [Foo](#foo)
+  - [Join](#join)
+  - [Sleep](#sleep)
+  - [Wake](#wake)
+  - [Main](#main)
+  - [Aside: Pin](#aside__pin)
+  - [Aside: Superpowers](#aside__superpowers)
+- [Chapter Two: Tasks](async_tasks.html)
+- [Chapter Three: IO](async_io.html)
 
 In Chapter One we looked at [some async Rust code][part_one] without explaining
 anything about how it worked. That left us with several mysteries: What's an
@@ -708,4 +714,4 @@ async fn factorial(n: u64) -> u64 {
 
 ---
 
-[← Chapter One: Why?](async_one.html) — [Chapter Three: Tasks →](async_three.html)
+[← Chapter One: Why?](async_intro.html) — [Chapter Three: Tasks →](async_tasks.html)

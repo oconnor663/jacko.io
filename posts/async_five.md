@@ -1,10 +1,10 @@
 # Async Rust, Part Five: More!
 ###### \[date]
 
-- [Part One: Why?](async_one.html)
-- [Part Two: Futures](async_two.html)
-- [Part Three: Tasks](async_three.html)
-- [Part Four: IO](async_four.html)
+- [Part One: Why?](async_intro.html)
+- [Part Two: Futures](async_futures.html)
+- [Part Three: Tasks](async_tasks.html)
+- [Part Four: IO](async_io.html)
 - Part Five: More! (you are here)
 
 ## Cancellation

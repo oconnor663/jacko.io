@@ -1,11 +1,13 @@
-# Async Rust, Chapter One: Why?
+# Async Rust in Three Parts
 ###### \[date]
 
-- Chapter One: Why? (you are here)
-- [Chapter Two: Futures](async_two.html)
-- [Chapter Three: Tasks](async_three.html)
-- [Chapter Four: IO](async_four.html)
-- [Chapter Five: More!](async_five.html)
+- Introduction (you are here)
+  - [Threads](#threads)
+  - [Async](#async)
+  - [Important Mistakes](#important_mistakes)
+- [Chapter One: Futures](async_futures.html)
+- [Chapter Two: Tasks](async_tasks.html)
+- [Chapter Three: IO](async_io.html)
 
 Async/await, or "async IO", is a new-ish language feature that lets us do more
 than one thing at a time. Rust has had async/await since 2019.[^new_ish] It's
@@ -283,4 +285,4 @@ async fn main() {
 
 ---
 
-[Chapter Two: Futures →](async_two.html)
+[Chapter Two: Futures →](async_futures.html)
