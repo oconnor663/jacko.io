@@ -9,9 +9,13 @@ fn main() -> io::Result<()> {
     let mut n = 1;
     loop {
         let (mut socket, _) = listener.accept()?;
-        writeln!(&mut socket, "start {n}")?;
+        // Using format! instead of write! avoids breaking up lines across multiple writes. This is
+        // easier than doing line buffering on the client side.
+        let start_msg = format!("start {n}\n");
+        socket.write_all(start_msg.as_bytes())?;
         thread::sleep(Duration::from_secs(1));
-        writeln!(&mut socket, "end {n}")?;
+        let end_msg = format!("end {n}\n");
+        socket.write_all(end_msg.as_bytes())?;
         n += 1;
     }
 }

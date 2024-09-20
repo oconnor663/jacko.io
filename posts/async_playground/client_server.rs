@@ -182,7 +182,7 @@ fn copy<'a, R, W>(reader: &'a mut R, writer: &'a mut W) -> Copy<'a, R, W> {
     Copy { reader, writer }
 }
 
-async fn foo_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
+async fn one_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
     // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
     // Using format! instead of write! avoids breaking up lines across multiple writes. This is
     // easier than doing line buffering on the client side.
@@ -198,24 +198,26 @@ async fn server_main(listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
         let socket = tcp_accept(&listener).await?;
-        spawn(async move { foo_response(n, socket).await.unwrap() });
+        spawn(async move { one_response(n, socket).await.unwrap() });
         n += 1;
     }
 }
 
-async fn foo_request() -> io::Result<()> {
+async fn client_main() -> io::Result<()> {
     let mut socket = tcp_connect("localhost:8000").await?;
     copy(&mut socket, &mut io::stdout()).await?;
     Ok(())
 }
 
 async fn async_main() -> io::Result<()> {
-    // Open the listener here, to avoid racing against the server thread.
+    // Open the listener first, to avoid racing against the server thread.
     let listener = tcp_bind("0.0.0.0:8000").await?;
+    // Start the server on a background task.
     spawn(async { server_main(listener).await.unwrap() });
+    // Run ten clients as ten different tasks.
     let mut task_handles = Vec::new();
     for _ in 1..=10 {
-        task_handles.push(spawn(foo_request()));
+        task_handles.push(spawn(client_main()));
     }
     for handle in task_handles {
         handle.await?;

@@ -167,6 +167,10 @@ name = "single_threaded_client"
 path = "single_threaded_client.rs"
 
 [[bin]]
+name = "two_threaded_client_server"
+path = "two_threaded_client_server.rs"
+
+[[bin]]
 name = "threads_client_server"
 path = "threads_client_server.rs"
 
