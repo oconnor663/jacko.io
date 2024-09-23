@@ -6,11 +6,12 @@
 - [Part Two: Tasks](async_tasks.html)
 - Part Three: IO (you are here)
 
-Of course, efficient sleeping isn't why async/await was invented. The goal all
-along has been efficient IO, especially network IO. Now that we understand
-futures and tasks, we have all the tools we need to do some real work.
+Of course, async/await wasn't invented just for sleeping. The goal all along
+has been efficient IO, especially network IO. Now that we understand futures
+and tasks, we have all the tools we need to do some real work.
 
-Here's a toy server program:
+Let's start with a pair of ordinary, non-async examples. Here's a toy server
+program:
 
 ```rust
 LINK: Playground playground://async_playground/single_threaded_server.rs
@@ -41,9 +42,9 @@ message.[^writeln] Here's a toy client for our toy server:
 
 [^writeln]: We could use `write!` or `writeln!` instead of `format!` to avoid
     allocating a `String` here, but that results in three write system calls,
-    one for the prefix, one for number, and one more for the newline. That's
-    probably slower than allocating. Separate writes would also appear as
-    separate reads on the client side, and we'd need to do line buffering to
+    one for the prefix, one for the number, and one more for the newline.
+    That's probably slower than allocating. Separate writes would also appear
+    as separate reads on the client side, and we'd need to do line buffering to
     avoid garbled output when we run multiple clients at once below. It's not
     guaranteed that the `format!` approach will come out as a single read on
     the client side, but in small examples like these it generally does.
@@ -57,16 +58,31 @@ fn main() -> io::Result<()> {
 }
 ```
 
-This client opens a connection to the server and copies all the bytes that it
+This client opens a connection to the server and copies all the bytes it
 receives to standard output. It doesn't explicitly sleep, but it still takes a
-second, because the server takes a second to finish responding.
+second, because the server takes a second to finish responding. Under the
+covers, [`io::copy`] is a convenience wrapper around the standard
+[`Read::read`] method on [`TcpStream`], which blocks until input arrives.
 
-We can run those examples locally, but they won't work as-is on the Playground,
-because different Playground examples are isolated from each other. Let's work
-around that by putting the client and the server together in the same program.
-Since they're both blocking, we'll need to run them on different threads. We'll
-rename their `main` functions to `server_main` and `client_main`, and while
-we're at it, we'll run ten clients together at the same time:
+[`io::copy`]: https://doc.rust-lang.org/stable/std/io/fn.copy.html
+[`Read::read`]: https://doc.rust-lang.org/stable/std/io/trait.Read.html#tymethod.read
+[`TcpStream`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html
+
+We can run these examples locally, but they can't talk to each on the
+Playground. Let's work around that by putting the client and the server
+together in the same program. Since they're both blocking, we need to run them
+on different threads. We'll rename their `main` functions to `server_main` and
+`client_main`, and while we're at it, we'll run ten clients together at the
+same time:[^unwrap]
+
+[^unwrap]: Note that the return type of `join` in this example is a nested
+    result, `thread::Result<io::Result<()>>`. IO errors from client threads
+    wind up in the inner `Result` and are handled with `?`. The outer `Result`
+    represents whether the client thread panicked, and we propagate those
+    panics with `.unwrap()`. The server thread normally runs forever, so we
+    can't `join` it. If it does short-circuit with an error, though, we don't
+    want that error to be silent. Unwrapping server thread IO errors case
+    prints to stderr in that case, which is better than nothing.
 
 ```rust
 LINK: Playground playground://async_playground/two_threaded_client_server.rs
@@ -90,20 +106,18 @@ fn main() -> io::Result<()> {
 This works, and we can run it on the Playground, but it takes ten seconds. Even
 though the clients are running in parallel, the server is only responding to
 one of them at a time. Let's make the server spawn a new thread for each
-incoming request:[^background]
+incoming request:[^move]
 
-[^background]: This server loop will never `join` the threads it spawns, but we
-    don't want to ignore any errors they might return. Unwrapping an error in a
-    background thread will unwind the thread and print to standard error, which
-    is better than nothing. Also, the `move` keyword is necessary here because
-    otherwise that closure would borrow `n`, which violates the `'static`
-    requirement of `thread::spawn`. Rust is right to complain about this,
-    because if `server_main` returned while response threads were still
-    running, pointers to `n` would become dangling.
+[^move]: The `move` keyword is necessary here because otherwise the closure
+    would borrow `n`, which violates the `'static` requirement of
+    `thread::spawn`. Rust is right to complain about this, because if
+    `server_main` returned while response threads were still running, pointers
+    to `n` would become dangling.
 
 ```rust
 LINK: Playground playground://async_playground/threads_client_server.rs
-fn one_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
+HIGHLIGHT: 1, 7-17
+fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     let start_msg = format!("start {n}\n");
     socket.write_all(start_msg.as_bytes())?;
     thread::sleep(Duration::from_secs(1));
@@ -116,18 +130,17 @@ fn server_main(listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
         let (socket, _) = listener.accept()?;
-        thread::spawn(move || one_response(n, socket).unwrap());
+        thread::spawn(move || one_response(socket, n).unwrap());
         n += 1;
     }
 }
 ```
 
 Great, it still works, and now it only takes one second. Threads are
-convenient, at least when the compiler is happy with them. But as we saw in the
-introduction, spawning a new thread for every request doesn't work well once
-there are thousands of requests flying around. This is why we've gone through
-all this trouble to learn async/await. So, how do we use async/await with
-sockets?
+convenient, but as we saw in the introduction, spawning a new thread for every
+request won't work when there are thousands of requests flying around. This is
+why we've gone through all this trouble to learn async/await. So, how do we use
+async/await with sockets?
 
 ## Poll
 

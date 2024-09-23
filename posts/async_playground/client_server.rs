@@ -182,7 +182,7 @@ fn copy<'a, R, W>(reader: &'a mut R, writer: &'a mut W) -> Copy<'a, R, W> {
     Copy { reader, writer }
 }
 
-async fn one_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
+async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
     // Using format! instead of write! avoids breaking up lines across multiple writes. This is
     // easier than doing line buffering on the client side.
@@ -198,7 +198,7 @@ async fn server_main(listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
         let socket = tcp_accept(&listener).await?;
-        spawn(async move { one_response(n, socket).await.unwrap() });
+        spawn(async move { one_response(socket, n).await.unwrap() });
         n += 1;
     }
 }

@@ -4,7 +4,7 @@ use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
 
-fn one_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
+fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     // Using format! instead of write! avoids breaking up lines across multiple writes. This is
     // easier than doing line buffering on the client side.
     let start_msg = format!("start {n}\n");
@@ -19,7 +19,7 @@ fn server_main(listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
         let (socket, _) = listener.accept()?;
-        thread::spawn(move || one_response(n, socket).unwrap());
+        thread::spawn(move || one_response(socket, n).unwrap());
         n += 1;
     }
 }

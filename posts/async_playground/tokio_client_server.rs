@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 
-async fn one_response(n: u64, mut socket: TcpStream) -> io::Result<()> {
+async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     let start_msg = format!("start {n}\n");
     socket.write_all(start_msg.as_bytes()).await?;
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -16,7 +16,7 @@ async fn server_main(listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
         let (socket, _) = listener.accept().await?;
-        tokio::task::spawn(async move { one_response(n, socket).await.unwrap() });
+        tokio::task::spawn(async move { one_response(socket, n).await.unwrap() });
         n += 1;
     }
 }
