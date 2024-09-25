@@ -5,6 +5,8 @@
 - [Part One: Futures](async_futures.html)
 - [Part Two: Tasks](async_tasks.html)
 - Part Three: IO (you are here)
+  - [Nonblocking](#nonblocking)
+  - [Poll](#poll)
 
 Of course, async/await wasn't invented just for sleeping. The goal all along
 has been efficient IO, especially network IO. Now that we understand futures
@@ -142,7 +144,42 @@ request won't work when there are thousands of requests flying around. This is
 why we've gone through all this trouble to learn async/await. So, how do we use
 async/await with sockets?
 
+## Nonblocking
+
+There are two changes we need to make. First, we need to stop our reads from
+blocking when no input is available. [`TcpListener`] and [`TcpStream`] both
+support [`set_nonblocking`], which makes `accept` or `read` return
+[`ErrorKind::WouldBlock`][error_kind] instead. Great! This change by itself is
+technically enough for us to implement some async IO, if we didn't mind burning
+100% CPU calling `accept` and `read` non-stop. But of course that's not what we
+want, so the second thing we'll need is some way to sleep the main loop until
+input arrives.
+
+[`TcpListener`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html
+[`set_nonblocking`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_nonblocking
+[error_kind]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
+
 ## Poll
+
+We're going to use the [`poll`] system call for this, which is available on all
+Unix-like OSs, including Linux and macOS.[^other_apis] We'll do it by calling a
+C standard library function, [`libc::poll`]. 
+
+[`poll`]: https://man7.org/linux/man-pages/man2/poll.2.html
+[`libc::poll`]: https://docs.rs/libc/latest/libc/fn.poll.html
+
+[^other_apis]: There are _many_ APIs we could use for this. The oldest is
+    [`select`], which is similar to `poll` but kind of deprecated. More modern
+    options include [`epoll`] and [`io_uring`] on Linux, [`kqueue`] on macOS
+    and BSD, and IOCP on Windows. For a low-ish-level, cross-platform Rust
+    library that abstracts over several of these, see [`mio`].
+
+[`select`]: https://man7.org/linux/man-pages/man2/select.2.html
+[`epoll`]: https://man7.org/linux/man-pages/man7/epoll.7.html
+[`io_uring`]: https://man7.org/linux/man-pages/man7/io_uring.7.html
+[`kqueue`]: https://man.freebsd.org/cgi/man.cgi?query=kqueue&sektion=2
+[IOCP]: https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports
+[`mio`]: https://github.com/tokio-rs/mio
 
 [TODO: poll-based IO example](playground://async_playground/client_server.rs)
 
