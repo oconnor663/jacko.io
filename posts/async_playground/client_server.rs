@@ -110,10 +110,7 @@ impl Wake for AwakeFlag {
     }
 }
 
-static POLL_FDS: Mutex<Vec<(RawFd, Waker)>> = Mutex::new(Vec::new());
-
 async fn tcp_bind(address: &str) -> io::Result<TcpListener> {
-    // XXX: This is technically blocking. Assume it returns quickly.
     let listener = TcpListener::bind(address)?;
     listener.set_nonblocking(true)?;
     Ok(listener)
@@ -125,6 +122,8 @@ async fn tcp_connect(address: &str) -> io::Result<TcpStream> {
     socket.set_nonblocking(true)?;
     Ok(socket)
 }
+
+static POLL_FDS: Mutex<Vec<(RawFd, Waker)>> = Mutex::new(Vec::new());
 
 struct TcpAccept<'a> {
     listener: &'a TcpListener,
@@ -262,9 +261,9 @@ fn main() -> io::Result<()> {
         // the POLL_FDS. If there are any WAKE_TIMES, use the earliest as a timeout.
         let mut poll_fds = POLL_FDS.lock().unwrap();
         let mut poll_structs = Vec::new();
-        for &(raw_fd, _) in poll_fds.iter() {
+        for (raw_fd, _waker) in poll_fds.iter() {
             poll_structs.push(libc::pollfd {
-                fd: raw_fd,
+                fd: *raw_fd,
                 events: libc::POLLIN, // "poll input": wake when readable
                 revents: 0,           // return field, unused
             });
@@ -296,6 +295,8 @@ fn main() -> io::Result<()> {
         }
         // Invoke all Wakers from POLL_FDS. This might wake futures that aren't ready yet, but if
         // so they'll register another wakeup. It's inefficient but allowed.
-        poll_fds.drain(..).map(|pair| pair.1).for_each(Waker::wake);
+        for (_raw_fd, waker) in poll_fds.drain(..) {
+            waker.wake();
+        }
     }
 }
