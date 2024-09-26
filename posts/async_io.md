@@ -5,7 +5,8 @@
 - [Part One: Futures](async_futures.html)
 - [Part Two: Tasks](async_tasks.html)
 - Part Three: IO (you are here)
-  - [Nonblocking](#nonblocking)
+  - [Threads](#threads)
+  - [Non-blocking](#non_blocking)
   - [Poll](#poll)
 
 Of course, async/await wasn't invented just for sleeping. The goal all along
@@ -69,6 +70,8 @@ covers, [`io::copy`] is a convenience wrapper around the standard
 [`io::copy`]: https://doc.rust-lang.org/stable/std/io/fn.copy.html
 [`Read::read`]: https://doc.rust-lang.org/stable/std/io/trait.Read.html#tymethod.read
 [`TcpStream`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html
+
+## Threads
 
 We can run these examples locally, but they can't talk to each on the
 Playground. Let's work around that by putting the client and the server
@@ -144,13 +147,27 @@ request won't work when there are thousands of requests flying around. This is
 why we've gone through all this trouble to learn async/await. So, how do we use
 async/await with sockets?
 
-## Nonblocking
+There are two problems we need to solve. First, we need a way to do reads that
+don't block when no input is available. And second, when all of our tasks are
+waiting for input, we need a way to sleep until some input arrives instead of
+busy looping.
 
-There are two problems we need to solve. First, we need to stop our reads from
-blocking when no input is available. [`TcpListener`] and [`TcpStream`] both
-support [`set_nonblocking`], which makes `accept` or `read` return
-[`ErrorKind::WouldBlock`][error_kind] instead. Great! Let's start with a couple
-of helper functions for this:[^dns]
+## Non-blocking
+
+The first problem is easier, because Rust has a solution in the standard
+library. [`TcpListener`] and [`TcpStream`] both support [`set_nonblocking`],
+which makes `accept` or `read` return [`ErrorKind::WouldBlock`][error_kind]
+instead. Great!
+
+[`TcpListener`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html
+[`set_nonblocking`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_nonblocking
+[error_kind]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
+
+This is already enough to get an async example working. We haven't solved the
+second problem yet, so it's going to busy loop and burn 100% CPU until it
+exits, but this lets us lay the groundwork before we get to the more
+complicated part. Let's start with a couple of helper functions to create
+non-blocking listeners and streams:[^dns]
 
 [^dns]: The `XXX` comment here marks the biggest shortcut we're going to take
     in these examples: assuming that [`TcpStream::connect`] doesn't block.
@@ -166,9 +183,12 @@ of helper functions for this:[^dns]
     pool][tokio_dns]. For comparison, the `net` module in the Golang standard
     library [contains two DNS implementations][golang_fallback], an async
     resolver for simple cases, and a fallback resolver that also calls
-    `getaddrinfo` on a thread pool.
+    `getaddrinfo` on a thread pool. That said, if you're connecting directly to
+    an IP address and you don't need to do DNS, you can do a non-blocking
+    `connect` using the [`socket2`] crate.
 
 [golang_fallback]: https://pkg.go.dev/net#hdr-Name_Resolution
+[`socket2`]: https://docs.rs/socket2
 
 ```rust
 async fn tcp_bind(address: &str) -> io::Result<TcpListener> {
@@ -185,13 +205,7 @@ async fn tcp_connect(address: &str) -> io::Result<TcpStream> {
 }
 ```
 
-Nonblocking sockets are technically enough for us to implement async IO, if
-we're ok with a busy loop calling `accept` and `read` non-stop, but of course
-that's not what we want.
-
-[`TcpListener`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html
-[`set_nonblocking`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_nonblocking
-[error_kind]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
+TODO: FUTURES HERE
 
 ## Poll
 
@@ -240,11 +254,11 @@ struct pollfd {
 }
 ```
 
-That `fd` field is a "file desriptor", or what Rust calls a "raw" file
-descriptor. This is an identifier that Unix-like OSs use to track open
-resources like files and sockets. We can get a descriptor directly from a
-`TcpListener` or a `TcpStream` by calling [`.as_raw_fd()`][as_raw_fd], which
-returns [`RawFd`], a type alias for `c_int`.[^windows]
+That `fd` field is a "file descriptor", or what Rust calls a "raw" file
+descriptor. It's an identifier that Unix-like OSs use to track open resources
+like files and sockets. We can get the descriptor from a `TcpListener` or a
+`TcpStream` by calling [`.as_raw_fd()`][as_raw_fd], which returns [`RawFd`], a
+type alias for `c_int`.[^windows]
 
 [as_raw_fd]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.as_raw_fd
 [`RawFd`]: https://doc.rust-lang.org/std/os/fd/type.RawFd.html
@@ -282,7 +296,7 @@ corresponding descriptor was one of the ones that caused the wakeup. We could
 use this to poll only the specific tasks that the wakeup is for, but for
 simplicity we'll ignore this field and poll every task every time we wake up.
 
-[TODO: poll-based IO example](playground://async_playground/client_server.rs)
+[TODO: poll-based IO example](playground://async_playground/client_server_poll.rs)
 
 ---
 
