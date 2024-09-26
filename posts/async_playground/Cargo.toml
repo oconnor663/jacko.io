@@ -179,5 +179,9 @@ name = "tokio_client_server"
 path = "tokio_client_server.rs"
 
 [[bin]]
-name = "client_server"
-path = "client_server.rs"
+name = "client_server_busy"
+path = "client_server_busy.rs"
+
+[[bin]]
+name = "client_server_poll"
+path = "client_server_poll.rs"
