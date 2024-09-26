@@ -133,6 +133,7 @@ impl<'a> Future for TcpAccept<'a> {
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<TcpStream>> {
         match self.listener.accept() {
             Ok((stream, _)) => {
+                // TODO: This causes a busy loop.
                 let result = stream.set_nonblocking(true);
                 Poll::Ready(result.and(Ok(stream)))
             }
@@ -162,6 +163,7 @@ impl<'a, R: Read, W: Write> Future for Copy<'a, R, W> {
         match io::copy(reader, writer) {
             Ok(_) => Poll::Ready(Ok(())),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                // TODO: This causes a busy loop.
                 context.waker().wake_by_ref();
                 Poll::Pending
             }

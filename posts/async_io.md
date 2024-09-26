@@ -144,13 +144,13 @@ fn server_main(listener: TcpListener) -> io::Result<()> {
 Great, it still works, and now it only takes one second. Threads are
 convenient, but as we saw in the introduction, spawning a new thread for every
 request won't work when there are thousands of requests flying around. This is
-why we've gone through all this trouble to learn async/await. So, how do we use
-async/await with sockets?
+why we've gone through all this trouble to learn async/await. So, how do we get
+this working under our async/await implementation from Part Two?
 
 There are two problems we need to solve. First, we need a way to do reads that
-don't block when no input is available. And second, when all of our tasks are
-waiting for input, we need a way to sleep until some input arrives instead of
-busy looping.
+don't block when they're waiting for input. And second, when all our tasks are
+waiting for input, we need a way to sleep until input arrives instead of busy
+looping.
 
 ## Non-blocking
 
@@ -165,7 +165,7 @@ instead. Great!
 
 This is already enough to get an async example working. We haven't solved the
 second problem yet, so it's going to busy loop and burn 100% CPU until it
-exits, but this lets us lay the groundwork before we get to the more
+quits, but this lets us lay the groundwork before we get to the more
 complicated part. Let's start with a couple of helper functions to create
 non-blocking listeners and streams:[^dns]
 
@@ -191,6 +191,7 @@ non-blocking listeners and streams:[^dns]
 [`socket2`]: https://docs.rs/socket2
 
 ```rust
+LINK: Playground playground://async_playground/client_server_busy.rs
 async fn tcp_bind(address: &str) -> io::Result<TcpListener> {
     let listener = TcpListener::bind(address)?;
     listener.set_nonblocking(true)?;
@@ -205,7 +206,130 @@ async fn tcp_connect(address: &str) -> io::Result<TcpStream> {
 }
 ```
 
-TODO: FUTURES HERE
+Next, the async version of [`TcpListener::accept`]:
+
+[`TcpListener::accept`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html#method.accept
+
+```rust
+LINK: Playground playground://async_playground/client_server_busy.rs
+struct TcpAccept<'a> {
+    listener: &'a TcpListener,
+}
+
+impl<'a> Future for TcpAccept<'a> {
+    type Output = io::Result<TcpStream>;
+
+    fn poll(
+        self: Pin<&mut Self>,
+        context: &mut Context,
+    ) -> Poll<io::Result<TcpStream>> {
+        match self.listener.accept() {
+            Ok((stream, _)) => {
+                let result = stream.set_nonblocking(true);
+                Poll::Ready(result.and(Ok(stream)))
+            }
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                // TODO: This causes a busy loop.
+                context.waker().wake_by_ref();
+                Poll::Pending
+            }
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
+}
+
+fn tcp_accept(listener: &TcpListener) -> TcpAccept {
+    TcpAccept { listener }
+}
+```
+
+This is enough for us to write `server_main`:
+
+```rust
+LINK: Playground playground://async_playground/client_server_busy.rs
+async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
+    let start_msg = format!("start {n}\n");
+    socket.write_all(start_msg.as_bytes())?;
+    sleep(Duration::from_secs(1)).await;
+    let end_msg = format!("end {n}\n");
+    socket.write_all(end_msg.as_bytes())?;
+    Ok(())
+}
+
+async fn server_main(listener: TcpListener) -> io::Result<()> {
+    let mut n = 1;
+    loop {
+        let socket = tcp_accept(&listener).await?;
+        spawn(async move { one_response(socket, n).await.unwrap() });
+        n += 1;
+    }
+}
+```
+
+And an async version of [`std::io::copy`]:
+
+[`std::io::copy`]: https://doc.rust-lang.org/stable/std/io/fn.copy.html
+
+```rust
+LINK: Playground playground://async_playground/client_server_busy.rs
+struct Copy<'a, R, W> {
+    reader: &'a mut R,
+    writer: &'a mut W,
+}
+
+impl<'a, R: Read, W: Write> Future for Copy<'a, R, W> {
+    type Output = io::Result<()>;
+
+    fn poll(
+        mut self: Pin<&mut Self>,
+        context: &mut Context,
+    ) -> Poll<io::Result<()>> {
+        let Copy { reader, writer } = &mut *self.as_mut();
+        match io::copy(reader, writer) {
+            Ok(_) => Poll::Ready(Ok(())),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                // TODO: This causes a busy loop.
+                context.waker().wake_by_ref();
+                Poll::Pending
+            }
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
+}
+
+fn copy<'a, R, W>(reader: &'a mut R, writer: &'a mut W) -> Copy<'a, R, W> {
+    Copy { reader, writer }
+}
+```
+
+Now we can write `client_main` and `async_main`:
+
+```rust
+LINK: Playground playground://async_playground/client_server_busy.rs
+async fn client_main() -> io::Result<()> {
+    let mut socket = tcp_connect("localhost:8000").await?;
+    copy(&mut socket, &mut io::stdout()).await?;
+    Ok(())
+}
+
+async fn async_main() -> io::Result<()> {
+    // Open the listener first, to avoid racing against the server thread.
+    let listener = tcp_bind("0.0.0.0:8000").await?;
+    // Start the server on a background task.
+    spawn(async { server_main(listener).await.unwrap() });
+    // Run ten clients as ten different tasks.
+    let mut task_handles = Vec::new();
+    for _ in 1..=10 {
+        task_handles.push(spawn(client_main()));
+    }
+    for handle in task_handles {
+        handle.await?;
+    }
+    Ok(())
+}
+```
+
+It works!
 
 ## Poll
 
