@@ -585,8 +585,8 @@ This works, and it does everything on one thread.
 
 ## Aside: Pin
 
-Now that we have some intuition about how `async` functions turn into `Future`
-structs, we can say a bit more about the problem that `Pin` solves. Imagine our
+Now that we know how to transform an `async fn` into a `Future` struct, we
+can say a bit more about `Pin` and the problem that it solves. Imagine our
 `async fn foo` took a reference internally for some reason:
 
 ```rust
@@ -601,7 +601,7 @@ async fn foo(n: u64) {
 ```
 
 That compiles and runs just fine, and it looks like perfectly ordinary Rust
-code. But what would the same change look like in our `Foo` future?
+code. But what would the same change look like on our `Foo` future?
 
 ```rust
 LINK: Playground playground://async_playground/compiler_errors/foo_ref.rs
@@ -625,11 +625,11 @@ error[E0106]: missing lifetime specifier
   |            ^ expected named lifetime parameter
 ```
 
-What's the lifetime of `n_ref` supposed to be? The short answer is, there's no
-good answer.[^longer] Self-referential borrows are generally illegal in Rust
-structs, and there's no syntax for what `n_ref` is trying to do. Without this
-rule, we'd have to ask tricky questions about when we're allowed to mutate `n`
-and when we're allowed to move `Foo`.[^quote]
+What's the lifetime of `n_ref` supposed to be? The short answer is, there's
+no good answer.[^longer] Self-referential borrows are generally illegal in
+Rust structs, and there's no syntax for what `n_ref` is trying to do. If
+there were, we'd have to answer tricky questions about when we're allowed
+to mutate `n` and when we're allowed to move `Foo`.[^quote]
 
 [^longer]: The longer answer is that we can hack a lifetime parameter onto
     `Foo`, but that makes it [impossible to do anything useful after we've
@@ -648,30 +648,56 @@ and when we're allowed to move `Foo`.[^quote]
     express that an object is no longer allowed to be moved; in other words,
     that it is ‘pinned in place.'" - [without.boats/blog/pin][pin_post]
 
-But then, how did we get away with `async fn foo` above? What `Future` struct
-did the compiler generate for us?[^smart] It turns out that Rust does [some
-very unsafe things][erase] internally to erase invalid
-lifetimes.[^unsafe_pinned] The job of the `Pin` type is then to encapsulate all
-that unsafety, so that we can write custom futures like `JoinAll` in safe code,
-without the risk of dangling pointers or memory corruption.
-
-[^smart]: A "sufficiently smart compiler" might optimize `n_ref` away in this
-    simple case, but that won't work when we have complex iterators or when we
-    share references with other futures.
+But then, what sort of `Future` did the compiler generate for `async fn
+foo` above? Why did that work? It turns out that Rust does [some very
+unsafe things][erase] internally to erase inexpressible lifetimes like the
+one on `n_ref`.[^unsafe_pinned] The job of the `Pin` pointer-wrapper-type
+is to encapsulate that unsafety, so that we can write custom futures like
+`JoinAll` in safe code. The `Pin` struct works with the [`Unpin`] auto
+trait,[^auto_traits] which is implemented for most concrete types but not
+for the compiler-generated futures returned by `async` functions.
+Operations that might let us move pinned objects are either gated by
+`Unpin` ([`DerefMut`][pin_deref_mut]) or marked `unsafe`
+([`get_unchecked_mut`]).
 
 [erase]: https://tmandry.gitlab.io/blog/posts/optimizing-await-1/#generators-as-data-structures
 
-[^unsafe_pinned]: In fact, this transformation is [so wildly unsafe][transmute]
-    that some of the compiler magic necessary to make it formally sound [hasn't
-    been written yet][unsafe_pinned].
+[^unsafe_pinned]: In fact, what the compiler is doing is so wildly unsafe
+    that some of the machinery to make it formally sound [hasn't been
+    implemented yet][unsafe_pinned].
 
-[transmute]: https://doc.rust-lang.org/nomicon/transmutes.html
 [unsafe_pinned]: https://rust-lang.github.io/rfcs/3467-unsafe-pinned.html
 
-We won't go any further into the details of the `Pin` API, but if you want the
-whole story, start with [this post by the inventor of `Pin`][pin_post] and then
-read through [the official `Pin` docs][pin_docs]. We're going to march off in a
-different direction: tasks.
+[`Unpin`]: https://doc.rust-lang.org/std/marker/trait.Unpin.html
+
+[^auto_traits]: ["Auto traits"] are implemented automatically by the
+    compiler for types that qualify. The most familiar auto traits are the
+    thread safety markers, `Send` and `Sync`. However, note that those two
+    are `unsafe` traits, because implementing them inappropriately can lead
+    to data races and other UB. In contrast, `Unpin` is _safe_, and types
+    that don't implement it automatically (usually because they have
+    generic type parameters that aren't required to be `Unpin`) can still
+    safely opt into it. That's sound for two reasons: First, the main
+    reason a type shouldn't implement `Unpin` is if it contains
+    self-references and can't be moved, but we can't create types like that
+    in safe code anyway. Second, even though `Unpin` lets us go from
+    `Pin<&mut T>` to `&mut T`, we can't construct a pinned pointer to one
+    of `T`'s fields ("pin projection") without either requiring that field
+    to be `Unpin` ([`Pin::new`]) or writing `unsafe` code
+    ([`Pin::new_unchecked`]).
+
+["Auto traits"]: https://doc.rust-lang.org/reference/special-types-and-traits.html#auto-traits
+[`Pin::new_unchecked`]: https://doc.rust-lang.org/std/pin/struct.Pin.html#method.new_unchecked
+[`Pin::new`]: https://doc.rust-lang.org/std/pin/struct.Pin.html#method.new
+
+[`get_unchecked_mut`]: https://doc.rust-lang.org/core/pin/struct.Pin.html#method.get_unchecked_mut
+[pin_deref_mut]: https://doc.rust-lang.org/core/pin/struct.Pin.html#impl-DerefMut-for-Pin%3CPtr%3E
+
+This is all we're going to say about `Pin`, because we're going to move on
+to tasks (Part Two) and IO (Part Three), and the nitty gritty details of
+pinning aren't critical for those topics. When you're ready for the whole
+story, start with [this post by the inventor of `Pin`][pin_post] and then
+read through [the official `Pin` docs][pin_docs].
 
 [pin_post]: https://without.boats/blog/pin
 [pin_docs]: https://doc.rust-lang.org/std/pin
