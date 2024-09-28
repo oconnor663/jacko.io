@@ -213,11 +213,16 @@ after it returns `Ready` it won't be polled again.[^iterator]
     tricky and annoying for us humans but "easy" for a compiler. This is why
     async IO is usually a language feature and not just a library.
 
-[^iterator]: Technically it's a "logic error" to call `poll` again after it's
-    returned `Ready`. It could do anything, including blocking or panicking.
-    But because `poll` isn't `unsafe`, it's not allowed to corrupt memory or
-    commit other undefined behavior. This is similar to calling
-    [`Iterator::next`] again after it's returned `None`.
+[^iterator]: Technically it's a "logic error" to call `poll` again after it
+    returns `Ready`. It could do anything, including blocking or panicking. But
+    because `poll` isn't `unsafe`, it's not allowed to corrupt memory or commit
+    other undefined behavior. This is similar to calling [`Iterator::next`]
+    again after it returns `None`. Above I said that `Foo` does "exactly the
+    same thing" as the future returned by `async fn foo`, but for completeness,
+    it handles this logic error differently. Futures returned by `async fn`
+    currently panic when over-polled, buy our `Foo` will print the end message
+    again and return `Ready` again. Correct callers don't need to care about
+    this difference.
 
 [`Iterator::next`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
 

@@ -273,7 +273,7 @@ And an async version of [`std::io::copy`]:[^unpin]
 [^unpin]: Two comments about the `Copy` struct. First, it might've been
     more flexible to hold `R` and `W` by value instead of by mutable
     reference. `Read` and `Write` have ["blanket implementations"][blanket]
-    for mutable reference to any `Read` or `Write` type, so callers using
+    for mutable references to any `Read` or `Write` type, so callers using
     references would still work. But if we did that, then `Copy` wouldn't
     automatically be `Unpin`, and we'd need to `impl Unpin for Copy` to
     access its fields. (Alternatively we could require `R` and `W` to be
