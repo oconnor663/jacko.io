@@ -266,9 +266,38 @@ async fn server_main(listener: TcpListener) -> io::Result<()> {
 }
 ```
 
-And an async version of [`std::io::copy`]:
+And an async version of [`std::io::copy`]:[^unpin]
 
 [`std::io::copy`]: https://doc.rust-lang.org/stable/std/io/fn.copy.html
+
+[^unpin]: Two comments about the `Copy` struct. First, it might've been
+    more flexible to hold `R` and `W` by value instead of by mutable
+    reference. `Read` and `Write` have ["blanket implementations"][blanket]
+    for mutable reference to any `Read` or `Write` type, so callers using
+    references would still work. But if we did that, then `Copy` wouldn't
+    automatically be `Unpin`, and we'd need to `impl Unpin for Copy` to
+    access its fields. (Alternatively we could require `R` and `W` to be
+    `Unpin`, but that would be unnecessarily restrictive for callers.)
+    There's nothing wrong with doing that, and it's perfectly safe, but
+    we're trying to avoid talking about `Unpin`. Shared and mutable
+    references to any type are always `Unpin`, so holding references
+    internally makes `Copy` automatically `Unpin` and lets us dodge this
+    topic.
+    <br>
+    &emsp;&emsp;Second, note that we explicitly destructure references to
+    `reader` and `writer` from a single call to `self.as_mut()`. With
+    regular mutable references we can ["split borrows"][split] without any
+    extra steps, but `Pin::as_mut` gets in the way of that. Similarly, the
+    automatic ["reborrowing"][reborrowing] we get when we use mutable
+    references as function arguments doesn't work with pinned references.
+    It's possible that a future version of Rust might fix these papercuts
+    by making ["pinned places"][pinned_places] a language feature on par
+    with shared and mutable references.
+
+[blanket]: https://doc.rust-lang.org/std/io/trait.Read.html#impl-Read-for-%26mut+R
+[split]: https://doc.rust-lang.org/nomicon/borrow-splitting.html
+[pinned_places]: https://without.boats/blog/pinned-places/
+[reborrowing]: https://github.com/rust-lang/reference/issues/788
 
 ```rust
 LINK: Playground playground://async_playground/client_server_busy.rs
