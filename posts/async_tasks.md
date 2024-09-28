@@ -215,7 +215,7 @@ where it is, local to the main loop, and we'll add a global called
 LINK: Playground playground://async_playground/compiler_errors/tasks_no_send_no_static.rs
 static NEW_TASKS: Mutex<Vec<DynFuture>> = Mutex::new(Vec::new());
 
-fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) {
+fn spawn<F: Future<Output = ()>>(future: F) {
     NEW_TASKS.lock().unwrap().push(Box::pin(future));
 }
 ```
@@ -286,7 +286,18 @@ error[E0310]: the parameter type `F` may not live long enough
 Global variables have the `'static` lifetime, meaning they don't hold pointers
 to anything that could go away. Trait objects like `DynFuture` are `'static` by
 default, but type parameters like `F` are not. If `spawn` wants to put `F` in a
-global, it also has to promise that `F` is `'static`:
+global, it also has to promise that `F` is `'static`:[^spawn_vs_join]
+
+[^spawn_vs_join]: Note that `join_all` in Part One did not have this `'static`
+    requirement. We can have multiple concurrent futures borrowing local
+    variables, but we can't do the same with tasks. On the other hand, it's
+    possible to run different tasks on different threads, as Tokio does by
+    default, but we can't do that with non-`'static` futures. It would be nice
+    if there was some task equivalent of [`std::thread::scope`], but that turns
+    out to be an [open research question].
+
+[`std::thread::scope`]: https://doc.rust-lang.org/stable/std/thread/fn.scope.html
+[open research question]: https://without.boats/blog/the-scoped-task-trilemma/
 
 ```rust
 fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) { ... }
