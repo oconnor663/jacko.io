@@ -9,48 +9,57 @@
 - [Part Two: Tasks](async_tasks.html)
 - [Part Three: IO](async_io.html)
 
-Async/await, or "async IO", is a new-ish language feature that lets us do more
-than one thing at a time. Rust has had async/await since 2019.[^new_ish] It's
+Async/await, or "async IO", is a new-ish[^new_ish] language feature that lets
+our programs do more than one thing at a time. It's kind of an alternative to
+multithreading,[^threads] though Rust programs often use both. Async is
 especially popular with websites and network services that handle many
 connections at once,[^lots] because running lots of async "futures" or "tasks"
-is more efficient than running lots of threads. This series of articles is
-about what futures and tasks are and how they work.
+is more efficient than running lots of threads. This series will be an
+introduction to futures, tasks, and async IO.
 
-[^new_ish]: For comparison C# added async/await in 2012, Python added it in
-    2015, JS in 2017, and C++ in 2020.
+[^new_ish]: Rust has had async/await since 2019. For comparison, C# added
+    async/await in 2012, Python added it in 2015, JS in 2017, and C++ in 2020.
 
-[^lots]: "Many" here usually means ten thousand or more. This is sometimes
-    called the ["C10K problem"][c10k], short for 10k clients or connections.
+[^threads]: Throughout this series we'll compare examples using threads to
+    examples that accomplish the same thing using async. If this is your first
+    time using threads in any language, though, this approach might be more
+    confusing than helpful, because you'll have to learn two things at once.
+    For an introduction to threads, see [Chapter&nbsp;16][ch16] and
+    [Chapter&nbsp;20][ch20] of [The Book].
+
+[The Book]: https://doc.rust-lang.org/book
+[ch16]: https://doc.rust-lang.org/book/ch16-00-concurrency.html
+[ch20]: https://doc.rust-lang.org/book/ch20-00-final-project-a-web-server.html
+
+[^lots]: "Many" here conventionally means ten thousand or more. This is
+    sometimes called the ["C10K problem"][c10k], short for 10k clients or
+    connections.
 
 [c10k]: https://en.wikipedia.org/wiki/C10k_problem
 
-At a high level, using threads means asking your OS and your hardware to do
-things in parallel for you, but using async/await means reorganizing your own
-code to do it yourself.[^concurrency] That's where the efficiency comes from,
-but it also means the details of async tend to "leak" into your code, and that
-makes it harder to learn. This series will be a details-first introduction to
-async Rust, focused on translating async examples into ordinary Rust code that
-we can execute and understand.
+If we think of threads as asking the OS and the hardware to do things in
+parallel for us, then we can think of async/await as reorganizing our own code
+to do that ourselves. This requires both new high-level concepts and also new
+low-level machinery, and that combination tends to make async difficult to
+teach and difficult to learn. Rather than trying to do everything at once, this
+series will focus on the machinery.[^concurrency] We'll translate ("desugar")
+lots of async examples into ordinary Rust that we can run and understand.
 
-[^concurrency]: The famously confusing technical terms for this distinction are
-    "parallelism" and "concurrency". They're important in programming language
-    theory, because they abstract over many different languages and OSs. But
-    since we're talking specifically about Rust, we can say "threads" and
-    "futures".
+[^concurrency]: For example, we're not going to talk about "parallelism" vs
+    "concurrency". Different people learn differently, but I think it's easier
+    to understand those abstractions after you've written the code.
 
-Our examples will use lots of traits, generics, closures, and threads. I'll
-assume that you've written some Rust before and that you've read [The Rust
-Programming Language] or similar.[^ch_20] If not, this will be a bit of a
-firehose, and you might want to refer to [Rust By Example] whenever you see
-something new.[^books]
+In Rust maybe more than in other languages, async/await pulls out out all the
+tools in the language toolbox. In Part One alone we'll run into enums, traits,
+generics, closures, iterators, and smart pointers. I'll assume that you've
+written some Rust before and that you've read [The Rust Programming
+Language][The Book] ("The Book") or similar.[^ch20] If not, you might want to
+refer to [Rust By Example] whenever you see something new.[^books]
 
-[The Rust Programming Language]: https://doc.rust-lang.org/book/
+[^ch20]: Again, the multithreaded web server project in [Chapter&nbsp;20][ch20]
+    is especially relevant.
+
 [Rust By Example]: https://doc.rust-lang.org/rust-by-example/
-
-[^ch_20]: The multithreaded web server project in [Chapter 20] is particularly
-    relevant.
-
-[Chapter 20]: https://doc.rust-lang.org/book/ch20-00-final-project-a-web-server.html
 
 [^books]: If you're the sort of programmer who doesn't like learning languages
     from books, consider [this advice from Bryan Cantrill][advice], who's just
@@ -61,8 +70,8 @@ something new.[^books]
 
 Most of our async examples will use the [Tokio] async
 "runtime".[^more_than_one] Building our own futures and tasks will help us
-understand what a runtime is and what it does. For now, it's a library we use
-to write async programs.
+understand what a runtime does, but for now we can just think of it as a
+library or framework that we use to write async programs.
 
 [Tokio]: https://tokio.rs/
 
