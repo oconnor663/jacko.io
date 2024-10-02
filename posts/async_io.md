@@ -46,11 +46,11 @@ message.[^writeln] Here's a toy client for our toy server:
 [^writeln]: We could use `write!` or `writeln!` instead of `format!` to avoid
     allocating a `String` here, but that results in three writes to the
     `TcpStream`, one for the prefix, one for the number, and one more for the
-    newline. That's probably slower than allocating. Separate writes would also
-    appear as separate reads on the client side, so we'd need to do line
+    newline. That's probably slower than allocating. Separate writes also tend
+    to appear as separate reads on the client side, so we'd need to do line
     buffering to avoid garbled output when running multiple clients at once.
-    It's not guaranteed that the `format!` approach will come out as one read
-    on the client side, but in small examples like these it generally does.
+    It's not guaranteed that the `format!` approach will come out as one read,
+    but in small examples like these it generally does.
 
 ```rust
 LINK: Playground playground://async_playground/single_threaded_client.rs
