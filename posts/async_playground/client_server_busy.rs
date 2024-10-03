@@ -110,19 +110,6 @@ impl Wake for AwakeFlag {
     }
 }
 
-async fn tcp_bind(address: &str) -> io::Result<TcpListener> {
-    let listener = TcpListener::bind(address)?;
-    listener.set_nonblocking(true)?;
-    Ok(listener)
-}
-
-async fn tcp_connect(address: &str) -> io::Result<TcpStream> {
-    // XXX: This is technically blocking. Assume it returns quickly.
-    let socket = TcpStream::connect(address)?;
-    socket.set_nonblocking(true)?;
-    Ok(socket)
-}
-
 struct TcpAccept<'a> {
     listener: &'a TcpListener,
 }
@@ -133,11 +120,11 @@ impl<'a> Future for TcpAccept<'a> {
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<TcpStream>> {
         match self.listener.accept() {
             Ok((stream, _)) => {
-                // TODO: This causes a busy loop.
                 let result = stream.set_nonblocking(true);
                 Poll::Ready(result.and(Ok(stream)))
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                // TODO: This is a busy loop.
                 context.waker().wake_by_ref();
                 Poll::Pending
             }
@@ -163,7 +150,7 @@ impl<'a, R: Read, W: Write> Future for Copy<'a, R, W> {
         match io::copy(reader, writer) {
             Ok(_) => Poll::Ready(Ok(())),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                // TODO: This causes a busy loop.
+                // TODO: This is a busy loop.
                 context.waker().wake_by_ref();
                 Poll::Pending
             }
@@ -177,10 +164,10 @@ fn copy<'a, R, W>(reader: &'a mut R, writer: &'a mut W) -> Copy<'a, R, W> {
 }
 
 async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
-    // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
     // Using format! instead of write! avoids breaking up lines across multiple writes. This is
     // easier than doing line buffering on the client side.
     let start_msg = format!("start {n}\n");
+    // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
     socket.write_all(start_msg.as_bytes())?;
     sleep(Duration::from_secs(1)).await;
     let end_msg = format!("end {n}\n");
@@ -198,14 +185,17 @@ async fn server_main(listener: TcpListener) -> io::Result<()> {
 }
 
 async fn client_main() -> io::Result<()> {
-    let mut socket = tcp_connect("localhost:8000").await?;
+    // XXX: Assume that connect() returns quickly.
+    let mut socket = TcpStream::connect("localhost:8000")?;
+    socket.set_nonblocking(true)?;
     copy(&mut socket, &mut io::stdout()).await?;
     Ok(())
 }
 
 async fn async_main() -> io::Result<()> {
-    // Open the listener first, to avoid racing against the server thread.
-    let listener = tcp_bind("0.0.0.0:8000").await?;
+    // Avoid a race between bind and connect by binding first.
+    let listener = TcpListener::bind("0.0.0.0:8000")?;
+    listener.set_nonblocking(true)?;
     // Start the server on a background task.
     spawn(async { server_main(listener).await.unwrap() });
     // Run ten clients as ten different tasks.
