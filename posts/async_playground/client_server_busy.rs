@@ -120,8 +120,8 @@ impl<'a> Future for TcpAccept<'a> {
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<TcpStream>> {
         match self.listener.accept() {
             Ok((stream, _)) => {
-                let result = stream.set_nonblocking(true);
-                Poll::Ready(result.and(Ok(stream)))
+                stream.set_nonblocking(true)?;
+                Poll::Ready(Ok(stream))
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                 // TODO: This is a busy loop.
