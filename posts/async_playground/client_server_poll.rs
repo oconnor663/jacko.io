@@ -152,7 +152,6 @@ impl<'a, R: Read + AsRawFd, W: Write> Future for Copy<'a, R, W> {
         let Copy { reader, writer } = &mut *self.as_mut();
         match io::copy(reader, writer) {
             Ok(_) => Poll::Ready(Ok(())),
-            // XXX: Assume that the writer will never block.
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                 let raw_fd = self.reader.as_raw_fd();
                 let waker = context.waker().clone();
@@ -254,8 +253,8 @@ fn main() -> io::Result<()> {
         for (raw_fd, _waker) in poll_fds.iter() {
             poll_structs.push(libc::pollfd {
                 fd: *raw_fd,
-                events: libc::POLLIN, // "poll input": wake when readable
-                revents: 0,           // return field, unused
+                events: libc::POLLIN | libc::POLLOUT,
+                revents: 0,
             });
         }
         let mut wake_times = WAKE_TIMES.lock().unwrap();
