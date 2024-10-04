@@ -4,7 +4,7 @@ use std::io;
 use std::io::prelude::*;
 use std::mem;
 use std::net::{TcpListener, TcpStream};
-use std::os::fd::{AsRawFd, RawFd};
+use std::os::fd::AsRawFd;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake, Waker};
@@ -110,80 +110,86 @@ impl Wake for AwakeFlag {
     }
 }
 
-static POLL_FDS: Mutex<Vec<(RawFd, Waker)>> = Mutex::new(Vec::new());
+static POLL_FDS: Mutex<Vec<libc::pollfd>> = Mutex::new(Vec::new());
+static POLL_WAKERS: Mutex<Vec<Waker>> = Mutex::new(Vec::new());
 
-struct TcpAccept<'a> {
-    listener: &'a TcpListener,
+fn register_pollfd(context: &mut Context, fd: &impl AsRawFd, events: libc::c_short) {
+    POLL_FDS.lock().unwrap().push(libc::pollfd {
+        fd: fd.as_raw_fd(),
+        events,
+        revents: 0,
+    });
+    POLL_WAKERS.lock().unwrap().push(context.waker().clone());
 }
 
-impl<'a> Future for TcpAccept<'a> {
-    type Output = io::Result<TcpStream>;
-
-    fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<TcpStream>> {
-        match self.listener.accept() {
-            Ok((stream, _)) => {
-                stream.set_nonblocking(true)?;
-                Poll::Ready(Ok(stream))
-            }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                let raw_fd = self.listener.as_raw_fd();
-                let waker = context.waker().clone();
-                POLL_FDS.lock().unwrap().push((raw_fd, waker));
-                Poll::Pending
-            }
-            Err(e) => Poll::Ready(Err(e)),
+fn accept<'a>(listener: &'a mut TcpListener) -> impl Future<Output = io::Result<TcpStream>> + 'a {
+    std::future::poll_fn(|context| match listener.accept() {
+        Ok((stream, _)) => Poll::Ready(Ok(stream)),
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+            register_pollfd(context, listener, libc::POLLIN);
+            Poll::Pending
         }
-    }
+        Err(e) => Poll::Ready(Err(e)),
+    })
 }
 
-fn tcp_accept(listener: &TcpListener) -> TcpAccept {
-    TcpAccept { listener }
-}
-
-struct Copy<'a, R, W> {
-    reader: &'a mut R,
-    writer: &'a mut W,
-}
-
-impl<'a, R: Read + AsRawFd, W: Write> Future for Copy<'a, R, W> {
-    type Output = io::Result<()>;
-
-    fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<()>> {
-        let Copy { reader, writer } = &mut *self.as_mut();
-        match io::copy(reader, writer) {
-            Ok(_) => Poll::Ready(Ok(())),
-            // XXX: Assume that the writer will never block.
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                let raw_fd = self.reader.as_raw_fd();
-                let waker = context.waker().clone();
-                POLL_FDS.lock().unwrap().push((raw_fd, waker));
-                Poll::Pending
+fn write_all<'a>(
+    buf: &'a [u8],
+    stream: &'a mut TcpStream,
+) -> impl Future<Output = io::Result<()>> + 'a {
+    std::future::poll_fn(|context| {
+        let mut position = 0;
+        while position < buf.len() {
+            match stream.write(&buf[position..]) {
+                Ok(n) if n == 0 => {
+                    let e = io::Error::from(io::ErrorKind::WriteZero);
+                    return Poll::Ready(Err(e));
+                }
+                Ok(n) => position += n,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    register_pollfd(context, stream, libc::POLLOUT);
+                    return Poll::Pending;
+                }
+                Err(e) => return Poll::Ready(Err(e)),
             }
-            Err(e) => Poll::Ready(Err(e)),
         }
-    }
+        Poll::Ready(Ok(()))
+    })
 }
 
-fn copy<'a, R, W>(reader: &'a mut R, writer: &'a mut W) -> Copy<'a, R, W> {
-    Copy { reader, writer }
+fn print_all<'a>(stream: &'a mut TcpStream) -> impl Future<Output = io::Result<()>> + 'a {
+    std::future::poll_fn(|context| {
+        let mut buf = [0; 1024];
+        loop {
+            match stream.read(&mut buf) {
+                Ok(n) if n == 0 => return Poll::Ready(Ok(())),
+                // Assume that writing to stdout doesn't block.
+                Ok(n) => io::stdout().write_all(&buf[..n])?,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    register_pollfd(context, stream, libc::POLLIN);
+                    return Poll::Pending;
+                }
+                Err(e) => return Poll::Ready(Err(e)),
+            }
+        }
+    })
 }
 
 async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     // Using format! instead of write! avoids breaking up lines across multiple writes. This is
     // easier than doing line buffering on the client side.
     let start_msg = format!("start {n}\n");
-    // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
-    socket.write_all(start_msg.as_bytes())?;
+    write_all(start_msg.as_bytes(), &mut socket).await?;
     sleep(Duration::from_secs(1)).await;
     let end_msg = format!("end {n}\n");
-    socket.write_all(end_msg.as_bytes())?;
+    write_all(end_msg.as_bytes(), &mut socket).await?;
     Ok(())
 }
 
-async fn server_main(listener: TcpListener) -> io::Result<()> {
+async fn server_main(mut listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
-        let socket = tcp_accept(&listener).await?;
+        let socket = accept(&mut listener).await?;
         spawn(async move { one_response(socket, n).await.unwrap() });
         n += 1;
     }
@@ -193,7 +199,7 @@ async fn client_main() -> io::Result<()> {
     // XXX: Assume that connect() returns quickly.
     let mut socket = TcpStream::connect("localhost:8000")?;
     socket.set_nonblocking(true)?;
-    copy(&mut socket, &mut io::stdout()).await?;
+    print_all(&mut socket).await?;
     Ok(())
 }
 
@@ -250,14 +256,7 @@ fn main() -> io::Result<()> {
         // All tasks are either sleeping or blocked on IO. Use libc::poll to wait for IO on any of
         // the POLL_FDS. If there are any WAKE_TIMES, use the earliest as a timeout.
         let mut poll_fds = POLL_FDS.lock().unwrap();
-        let mut poll_structs = Vec::new();
-        for (raw_fd, _waker) in poll_fds.iter() {
-            poll_structs.push(libc::pollfd {
-                fd: *raw_fd,
-                events: libc::POLLIN, // "poll input": wake when readable
-                revents: 0,           // return field, unused
-            });
-        }
+        let mut poll_wakers = POLL_WAKERS.lock().unwrap();
         let mut wake_times = WAKE_TIMES.lock().unwrap();
         let timeout_ms = if let Some(time) = wake_times.keys().next() {
             let duration = time.saturating_duration_since(Instant::now());
@@ -267,13 +266,18 @@ fn main() -> io::Result<()> {
         };
         let poll_error_code = unsafe {
             libc::poll(
-                poll_structs.as_mut_ptr(),
-                poll_structs.len() as libc::nfds_t,
+                poll_fds.as_mut_ptr(),
+                poll_fds.len() as libc::nfds_t,
                 timeout_ms,
             )
         };
         if poll_error_code == -1 {
-            panic!("libc::poll failed: {}", io::Error::last_os_error());
+            return Err(io::Error::last_os_error());
+        }
+        // Invoke all Wakers from POLL_FDS. This might wake futures that aren't ready yet, but if
+        // so they'll register another wakeup. It's inefficient but allowed.
+        for waker in poll_wakers.drain(..) {
+            waker.wake();
         }
         // Invoke Wakers from WAKE_TIMES if their time has come.
         while let Some(entry) = wake_times.first_entry() {
@@ -282,11 +286,6 @@ fn main() -> io::Result<()> {
             } else {
                 break;
             }
-        }
-        // Invoke all Wakers from POLL_FDS. This might wake futures that aren't ready yet, but if
-        // so they'll register another wakeup. It's inefficient but allowed.
-        for (_raw_fd, waker) in poll_fds.drain(..) {
-            waker.wake();
         }
     }
 }

@@ -110,75 +110,77 @@ impl Wake for AwakeFlag {
     }
 }
 
-struct TcpAccept<'a> {
-    listener: &'a TcpListener,
-}
-
-impl<'a> Future for TcpAccept<'a> {
-    type Output = io::Result<TcpStream>;
-
-    fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<TcpStream>> {
-        match self.listener.accept() {
-            Ok((stream, _)) => {
-                stream.set_nonblocking(true)?;
-                Poll::Ready(Ok(stream))
-            }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                // TODO: This is a busy loop.
-                context.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Err(e) => Poll::Ready(Err(e)),
+fn accept<'a>(listener: &'a mut TcpListener) -> impl Future<Output = io::Result<TcpStream>> + 'a {
+    std::future::poll_fn(|context| match listener.accept() {
+        Ok((stream, _)) => Poll::Ready(Ok(stream)),
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+            // TODO: This is a busy loop.
+            context.waker().wake_by_ref();
+            Poll::Pending
         }
-    }
+        Err(e) => Poll::Ready(Err(e)),
+    })
 }
 
-fn tcp_accept(listener: &TcpListener) -> TcpAccept {
-    TcpAccept { listener }
-}
-
-struct Copy<'a, R, W> {
-    reader: &'a mut R,
-    writer: &'a mut W,
-}
-
-impl<'a, R: Read, W: Write> Future for Copy<'a, R, W> {
-    type Output = io::Result<()>;
-
-    fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<()>> {
-        let Copy { reader, writer } = &mut *self.as_mut();
-        match io::copy(reader, writer) {
-            Ok(_) => Poll::Ready(Ok(())),
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                // TODO: This is a busy loop.
-                context.waker().wake_by_ref();
-                Poll::Pending
+fn write_all<'a>(
+    buf: &'a [u8],
+    stream: &'a mut TcpStream,
+) -> impl Future<Output = io::Result<()>> + 'a {
+    std::future::poll_fn(|context| {
+        let mut position = 0;
+        while position < buf.len() {
+            match stream.write(&buf[position..]) {
+                Ok(n) if n == 0 => {
+                    let e = io::Error::from(io::ErrorKind::WriteZero);
+                    return Poll::Ready(Err(e));
+                }
+                Ok(n) => position += n,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    // TODO: This is a busy loop.
+                    context.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Err(e) => return Poll::Ready(Err(e)),
             }
-            Err(e) => Poll::Ready(Err(e)),
         }
-    }
+        Poll::Ready(Ok(()))
+    })
 }
 
-fn copy<'a, R, W>(reader: &'a mut R, writer: &'a mut W) -> Copy<'a, R, W> {
-    Copy { reader, writer }
+fn print_all<'a>(stream: &'a mut TcpStream) -> impl Future<Output = io::Result<()>> + 'a {
+    std::future::poll_fn(|context| {
+        let mut buf = [0; 1024];
+        loop {
+            match stream.read(&mut buf) {
+                Ok(n) if n == 0 => return Poll::Ready(Ok(())),
+                // Assume that writing to stdout doesn't block.
+                Ok(n) => io::stdout().write_all(&buf[..n])?,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    // TODO: This is a busy loop.
+                    context.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Err(e) => return Poll::Ready(Err(e)),
+            }
+        }
+    })
 }
 
 async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     // Using format! instead of write! avoids breaking up lines across multiple writes. This is
     // easier than doing line buffering on the client side.
     let start_msg = format!("start {n}\n");
-    // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
-    socket.write_all(start_msg.as_bytes())?;
+    write_all(start_msg.as_bytes(), &mut socket).await?;
     sleep(Duration::from_secs(1)).await;
     let end_msg = format!("end {n}\n");
-    socket.write_all(end_msg.as_bytes())?;
+    write_all(end_msg.as_bytes(), &mut socket).await?;
     Ok(())
 }
 
-async fn server_main(listener: TcpListener) -> io::Result<()> {
+async fn server_main(mut listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
-        let socket = tcp_accept(&listener).await?;
+        let socket = accept(&mut listener).await?;
         spawn(async move { one_response(socket, n).await.unwrap() });
         n += 1;
     }
@@ -188,7 +190,7 @@ async fn client_main() -> io::Result<()> {
     // XXX: Assume that connect() returns quickly.
     let mut socket = TcpStream::connect("localhost:8000")?;
     socket.set_nonblocking(true)?;
-    copy(&mut socket, &mut io::stdout()).await?;
+    print_all(&mut socket).await?;
     Ok(())
 }
 
