@@ -141,33 +141,81 @@ fn server_main(listener: TcpListener) -> io::Result<()> {
 }
 ```
 
-Great, it still works, and now it only takes one second. Threads are
-convenient, but as we saw in the introduction, spawning a new thread for every
-request won't work when there are thousands of requests flying around. This is
-why we've gone through all this trouble to learn async/await. So, how do we get
-this working under our async/await implementation from Part Two?
+It still works, and now it only takes one second. This is exactly the behavior
+we want, but using async IO we can run it on one thread instead of eleven.
+We'll expand [our async/await implementation from Part Two][part_two_impl].
 
-There are two problems we need to solve. First, we need a way to do reads that
-don't block when they're waiting for input. And second, when all our tasks are
-waiting for input, we need a way to sleep until input arrives instead of busy
-looping.
+[part_two_impl]: playground://async_playground/tasks.rs
+
+There are two problems we need to solve. First, we need [`TcpListener::accept`]
+and [`TcpStream::read`] to return immediately instead of blocking, even when
+there's no input yet, so that we can call them in `poll`.[^remember] Second,
+when all tasks are pending, we want to sleep instead of busy looping, and we
+need a way to wake up when any input arrives.
+
+[`TcpListener::accept`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html#method.accept
+[`TcpStream::read`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.read
+
+[^remember]: Remember that blocking in `poll` holds up the entire main loop,
+    which in our single-threaded implementation blocks _all_ tasks. That's a
+    performance issue, but it's also a correctness issue. Once we get this
+    example working, we'll have ten client tasks waiting to read input from a
+    server task. If anything blocks the server task, that input will never
+    arrive, and the program will deadlock.
 
 ## Non-blocking
 
 The first problem is easier, because Rust has a solution in the standard
-library. [`TcpListener`] and [`TcpStream`] both support [`set_nonblocking`],
-which makes `accept` or `read` return [`ErrorKind::WouldBlock`][error_kind]
-instead. Great!
+library. [`TcpListener`] and [`TcpStream`] both have [`set_nonblocking`]
+methods, which make `accept` and `read` return
+[`ErrorKind::WouldBlock`][error_kind] instead of blocking.
 
 [`TcpListener`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html
 [`set_nonblocking`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_nonblocking
 [error_kind]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
 
-This is already enough to get an async example working. We haven't solved the
-second problem yet, so it's going to busy loop and burn 100% CPU until it
-quits, but this lets us lay the groundwork before we get to the more
-complicated part. Let's start with a couple of helper functions to create
-non-blocking listeners and streams:[^dns]
+Technically this is already enough to get async IO working. Without solving the
+second problem, we'll burn 100% CPU busy looping until exit, but our output
+will still be correct, and we can lay as much groundwork as possible before we
+get to the most complicated part. Let's start with `accept`:
+
+```rust
+struct TcpAccept<'a> {
+    listener: &'a TcpListener,
+}
+
+impl<'a> Future for TcpAccept<'a> {
+    type Output = io::Result<TcpStream>;
+
+    fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<TcpStream>> {
+        match self.listener.accept() {
+            Ok((stream, _)) => {
+                stream.set_nonblocking(true)?;
+                Poll::Ready(Ok(stream))
+            }
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                // TODO: This is a busy loop.
+                context.waker().wake_by_ref();
+                Poll::Pending
+            }
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
+}
+
+fn tcp_accept(listener: &TcpListener) -> TcpAccept {
+    TcpAccept { listener }
+}
+```
+
+Calling `wake_by_ref` every time we return `Pending`, like we did in [one of
+our early `Sleep` examples in Part One][sleep_busy], makes this a busy loop.
+We're also calling `set_nonblocking` on the `TcpStream` that `accept` returns.
+Apart from that, there's not much to see here.
+
+TODO[^dns]
+
+[sleep_busy]: playground://async_playground/sleep_busy.rs
 
 [^dns]: The `XXX` comment here marks the biggest shortcut we're going to take
     in these examples: assuming that [`TcpStream::connect`] doesn't block.
@@ -207,8 +255,6 @@ async fn tcp_connect(address: &str) -> io::Result<TcpStream> {
 ```
 
 Next, the async version of [`TcpListener::accept`]:
-
-[`TcpListener::accept`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html#method.accept
 
 ```rust
 LINK: Playground playground://async_playground/client_server_busy.rs
