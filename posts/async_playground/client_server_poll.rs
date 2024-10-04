@@ -132,7 +132,10 @@ fn register_pollfd(context: &mut Context, fd: &impl AsRawFd, events: libc::c_sho
 
 async fn accept(listener: &mut TcpListener) -> io::Result<(TcpStream, SocketAddr)> {
     std::future::poll_fn(|context| match listener.accept() {
-        Ok((stream, addr)) => Poll::Ready(Ok((stream, addr))),
+        Ok((stream, addr)) => {
+            stream.set_nonblocking(true)?;
+            Poll::Ready(Ok((stream, addr)))
+        }
         Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
             register_pollfd(context, listener, libc::POLLIN);
             Poll::Pending
