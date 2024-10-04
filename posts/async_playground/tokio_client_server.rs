@@ -4,6 +4,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 
 async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
+    // Using format! instead of write! avoids breaking up lines across multiple writes. This is
+    // easier than doing line buffering on the client side.
     let start_msg = format!("start {n}\n");
     socket.write_all(start_msg.as_bytes()).await?;
     tokio::time::sleep(Duration::from_secs(1)).await;

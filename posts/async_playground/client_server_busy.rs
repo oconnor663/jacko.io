@@ -3,7 +3,7 @@ use std::future::Future;
 use std::io;
 use std::io::prelude::*;
 use std::mem;
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake, Waker};
@@ -110,9 +110,11 @@ impl Wake for AwakeFlag {
     }
 }
 
-fn accept<'a>(listener: &'a mut TcpListener) -> impl Future<Output = io::Result<TcpStream>> + 'a {
+fn accept<'a>(
+    listener: &'a mut TcpListener,
+) -> impl Future<Output = io::Result<(TcpStream, SocketAddr)>> + 'a {
     std::future::poll_fn(|context| match listener.accept() {
-        Ok((stream, _)) => Poll::Ready(Ok(stream)),
+        Ok((stream, addr)) => Poll::Ready(Ok((stream, addr))),
         Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
             // TODO: This is a busy loop.
             context.waker().wake_by_ref();
@@ -180,7 +182,7 @@ async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
 async fn server_main(mut listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
-        let socket = accept(&mut listener).await?;
+        let (socket, _) = accept(&mut listener).await?;
         spawn(async move { one_response(socket, n).await.unwrap() });
         n += 1;
     }

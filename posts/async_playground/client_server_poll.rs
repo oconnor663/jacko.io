@@ -3,7 +3,7 @@ use std::future::Future;
 use std::io;
 use std::io::prelude::*;
 use std::mem;
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::fd::AsRawFd;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -130,9 +130,11 @@ fn register_pollfd(context: &mut Context, fd: &impl AsRawFd, events: libc::c_sho
     poll_fds.wakers.push(context.waker().clone());
 }
 
-fn accept<'a>(listener: &'a mut TcpListener) -> impl Future<Output = io::Result<TcpStream>> + 'a {
+fn accept<'a>(
+    listener: &'a mut TcpListener,
+) -> impl Future<Output = io::Result<(TcpStream, SocketAddr)>> + 'a {
     std::future::poll_fn(|context| match listener.accept() {
-        Ok((stream, _)) => Poll::Ready(Ok(stream)),
+        Ok((stream, addr)) => Poll::Ready(Ok((stream, addr))),
         Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
             register_pollfd(context, listener, libc::POLLIN);
             Poll::Pending
@@ -197,7 +199,7 @@ async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
 async fn server_main(mut listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
-        let socket = accept(&mut listener).await?;
+        let (socket, _) = accept(&mut listener).await?;
         spawn(async move { one_response(socket, n).await.unwrap() });
         n += 1;
     }
