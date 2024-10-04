@@ -167,10 +167,11 @@ async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     // Using format! instead of write! avoids breaking up lines across multiple writes. This is
     // easier than doing line buffering on the client side.
     let start_msg = format!("start {n}\n");
-    copy(&mut start_msg.as_bytes(), &mut socket).await?;
+    // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
+    socket.write_all(start_msg.as_bytes())?;
     sleep(Duration::from_secs(1)).await;
     let end_msg = format!("end {n}\n");
-    copy(&mut end_msg.as_bytes(), &mut socket).await?;
+    socket.write_all(end_msg.as_bytes())?;
     Ok(())
 }
 

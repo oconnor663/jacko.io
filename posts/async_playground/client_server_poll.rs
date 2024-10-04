@@ -140,50 +140,23 @@ fn tcp_accept(listener: &TcpListener) -> TcpAccept {
     TcpAccept { listener }
 }
 
-trait MaybeFd {
-    fn maybe_fd(&self) -> Option<RawFd>;
-}
-
-impl MaybeFd for TcpStream {
-    fn maybe_fd(&self) -> Option<RawFd> {
-        Some(self.as_raw_fd())
-    }
-}
-
-impl<'a> MaybeFd for &'a [u8] {
-    fn maybe_fd(&self) -> Option<RawFd> {
-        None
-    }
-}
-
-impl MaybeFd for io::Stdout {
-    fn maybe_fd(&self) -> Option<RawFd> {
-        // Technically stdout does have a file descriptor (fd 1), but we're going to assume it
-        // never blocks, so we won't bother polling it.
-        None
-    }
-}
-
 struct Copy<'a, R, W> {
     reader: &'a mut R,
     writer: &'a mut W,
 }
 
-impl<'a, R: Read + MaybeFd, W: Write + MaybeFd> Future for Copy<'a, R, W> {
+impl<'a, R: Read + AsRawFd, W: Write> Future for Copy<'a, R, W> {
     type Output = io::Result<()>;
 
     fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<()>> {
         let Copy { reader, writer } = &mut *self.as_mut();
         match io::copy(reader, writer) {
             Ok(_) => Poll::Ready(Ok(())),
+            // XXX: Assume that the writer will never block.
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                let mut poll_fds = POLL_FDS.lock().unwrap();
-                if let Some(raw_fd) = reader.maybe_fd() {
-                    poll_fds.push((raw_fd, context.waker().clone()));
-                }
-                if let Some(raw_fd) = writer.maybe_fd() {
-                    poll_fds.push((raw_fd, context.waker().clone()));
-                }
+                let raw_fd = self.reader.as_raw_fd();
+                let waker = context.waker().clone();
+                POLL_FDS.lock().unwrap().push((raw_fd, waker));
                 Poll::Pending
             }
             Err(e) => Poll::Ready(Err(e)),
@@ -199,10 +172,11 @@ async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     // Using format! instead of write! avoids breaking up lines across multiple writes. This is
     // easier than doing line buffering on the client side.
     let start_msg = format!("start {n}\n");
-    copy(&mut start_msg.as_bytes(), &mut socket).await?;
+    // XXX: Assume the write buffer is large enough that we don't need to handle WouldBlock.
+    socket.write_all(start_msg.as_bytes())?;
     sleep(Duration::from_secs(1)).await;
     let end_msg = format!("end {n}\n");
-    copy(&mut end_msg.as_bytes(), &mut socket).await?;
+    socket.write_all(end_msg.as_bytes())?;
     Ok(())
 }
 
@@ -280,8 +254,8 @@ fn main() -> io::Result<()> {
         for (raw_fd, _waker) in poll_fds.iter() {
             poll_structs.push(libc::pollfd {
                 fd: *raw_fd,
-                events: libc::POLLIN | libc::POLLOUT,
-                revents: 0,
+                events: libc::POLLIN, // "poll input": wake when readable
+                revents: 0,           // return field, unused
             });
         }
         let mut wake_times = WAKE_TIMES.lock().unwrap();
