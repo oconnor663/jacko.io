@@ -110,9 +110,7 @@ impl Wake for AwakeFlag {
     }
 }
 
-fn accept<'a>(
-    listener: &'a mut TcpListener,
-) -> impl Future<Output = io::Result<(TcpStream, SocketAddr)>> + 'a {
+async fn accept(listener: &mut TcpListener) -> io::Result<(TcpStream, SocketAddr)> {
     std::future::poll_fn(|context| match listener.accept() {
         Ok((stream, addr)) => Poll::Ready(Ok((stream, addr))),
         Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -122,12 +120,10 @@ fn accept<'a>(
         }
         Err(e) => Poll::Ready(Err(e)),
     })
+    .await
 }
 
-fn write_all<'a>(
-    buf: &'a [u8],
-    stream: &'a mut TcpStream,
-) -> impl Future<Output = io::Result<()>> + 'a {
+async fn write_all(buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
     std::future::poll_fn(|context| {
         let mut position = 0;
         while position < buf.len() {
@@ -147,9 +143,10 @@ fn write_all<'a>(
         }
         Poll::Ready(Ok(()))
     })
+    .await
 }
 
-fn print_all<'a>(stream: &'a mut TcpStream) -> impl Future<Output = io::Result<()>> + 'a {
+async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
     std::future::poll_fn(|context| {
         let mut buf = [0; 1024];
         loop {
@@ -166,6 +163,7 @@ fn print_all<'a>(stream: &'a mut TcpStream) -> impl Future<Output = io::Result<(
             }
         }
     })
+    .await
 }
 
 async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
