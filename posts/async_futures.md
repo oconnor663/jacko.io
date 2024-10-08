@@ -133,10 +133,11 @@ ignore it.
     something: it puts `T` "on the heap". I'm using `Box::pin` as shortcut to
     avoid talking about ["pin projection"][projection]. But note that most
     futures in Rust are _not_ heap allocated, at least not individually. This
-    is different from coroutines in C++20, which are automatically heap
-    allocated.
+    is different from coroutines in C++20, which are [heap allocated by
+    default][cpp_coroutines].
 
 [projection]: https://doc.rust-lang.org/std/pin/index.html#projections-and-structural-pinning
+[cpp_coroutines]: https://pigweed.dev/docs/blog/05-coroutines.html
 
 …
 
