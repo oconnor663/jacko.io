@@ -166,52 +166,103 @@ need a way to wake up when any input arrives.
 ## Non-blocking
 
 The first problem is easier, because Rust has a solution in the standard
-library. [`TcpListener`] and [`TcpStream`] both have [`set_nonblocking`]
-methods, which make `accept` and `read` return
+library. [`TcpListener`] and [`TcpStream`] both have a [`set_nonblocking`]
+method, which makes `accept` and `read` return
 [`ErrorKind::WouldBlock`][error_kind] instead of blocking.
 
 [`TcpListener`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html
 [`set_nonblocking`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_nonblocking
 [error_kind]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
 
-Technically this is already enough to get async IO working. Without solving the
-second problem, we'll burn 100% CPU busy looping until exit, but our output
-will still be correct, and we can lay as much groundwork as possible before we
-get to the most complicated part. Let's start with `accept`:
+Technically, `set_nonblocking` by itself is enough to get async IO working.
+Without solving the second problem, we'll burn 100% CPU busy looping until we
+exit, but our output will still be correct, and we can lay a lot of groundwork
+before we get to the more complicated part.
+
+When we wrote `Foo`, `JoinAll`, and `Sleep` in Part One, each of them required
+a struct definition, a `poll` function, and a constructor function. To cut down
+on boilerplate this time around, we'll use [`std::future::poll_fn`], which
+takes a standalone `poll` function and generates the rest of the future.
+
+[`std::future::poll_fn`]: https://doc.rust-lang.org/stable/std/future/fn.poll_fn.html
+
+There are four potentially blocking operations that we need async versions of.
+There's `accept` and `write` on the server side, and there's `connect` and
+`read` on the client side. Let's start with accept:[^async_wrapper]
+
+[^async_wrapper]: We're writing this as an async function that creates a future
+    and then immediately awaits it, but we could also have written it as a
+    non-async function that returns that future. That would be cleaner, but
+    we'd need lifetimes in the function signature, and [the "obvious" way to
+    write them turns out to be subtly incorrect][outlives_trick]. Rust 2024
+    Edition will fix this by changing the way that "return position `impl
+    Trait`" types "capture" lifetime parameters.
+
+[outlives_trick]: https://rust-lang.github.io/rfcs/3498-lifetime-capture-rules-2024.html#the-outlives-trick
 
 ```rust
-struct TcpAccept<'a> {
-    listener: &'a TcpListener,
-}
-
-impl<'a> Future for TcpAccept<'a> {
-    type Output = io::Result<TcpStream>;
-
-    fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<io::Result<TcpStream>> {
-        match self.listener.accept() {
-            Ok((stream, _)) => {
-                stream.set_nonblocking(true)?;
-                Poll::Ready(Ok(stream))
-            }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                // TODO: This is a busy loop.
-                context.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Err(e) => Poll::Ready(Err(e)),
+LINK: Playground playground://async_playground/client_server_busy.rs
+async fn accept(
+    listener: &mut TcpListener,
+) -> io::Result<(TcpStream, SocketAddr)> {
+    std::future::poll_fn(|context| match listener.accept() {
+        Ok((stream, addr)) => {
+            stream.set_nonblocking(true)?;
+            Poll::Ready(Ok((stream, addr)))
         }
-    }
-}
-
-fn tcp_accept(listener: &TcpListener) -> TcpAccept {
-    TcpAccept { listener }
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+            // TODO: This is a busy loop.
+            context.waker().wake_by_ref();
+            Poll::Pending
+        }
+        Err(e) => Poll::Ready(Err(e)),
+    }).await
 }
 ```
 
-Calling `wake_by_ref` every time we return `Pending`, like we did in [one of
-our early `Sleep` examples in Part One][sleep_busy], makes this a busy loop.
-We're also calling `set_nonblocking` on the `TcpStream` that `accept` returns.
-Apart from that, there's not much to see here.
+Calling `wake_by_ref` whenever we return `Pending`, like we did in [the second
+version of `Sleep` from Part One][sleep_busy], makes this a busy loop. We'll
+fix that in the next section. We're assuming that the `TcpListener` is already
+in non-blocking mode, and we're putting the returned `TcpStream` into
+non-blocking mode too, to get ready for async writes.[^io_result] Now let's
+implement the writes:
+
+[^io_result]: Eagle-eyed readers might spot that our `poll_fn` closure is using
+    the `?` operator with `set_nonblocking`, even though the closure itself
+    returns `Poll`. This works because there's [a `Try` implementation for
+    `Poll<Result<...>>`][try_poll_result] that uses the same associated
+    `Residual` type as [the `Try` implementation for
+    `Result<...>`][try_result]. See [RFC 3058] for the details of the `Try`
+    trait, which are still unstable as of Rust&nbsp;1.81.
+
+[try_poll_result]: https://doc.rust-lang.org/stable/std/ops/trait.Try.html#impl-Try-for-Poll%3CResult%3CT,+E%3E%3E
+[try_result]: https://doc.rust-lang.org/stable/std/ops/trait.Try.html#impl-Try-for-Result%3CT,+E%3E
+[RFC 3058]: https://rust-lang.github.io/rfcs/3058-try-trait-v2.html
+
+```rust
+LINK: Playground playground://async_playground/client_server_busy.rs
+async fn write_all(buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
+    std::future::poll_fn(|context| {
+        let mut position = 0;
+        while position < buf.len() {
+            match stream.write(&buf[position..]) {
+                Ok(n) if n == 0 => {
+                    let e = io::Error::from(io::ErrorKind::WriteZero);
+                    return Poll::Ready(Err(e));
+                }
+                Ok(n) => position += n,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    // TODO: This is a busy loop.
+                    context.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Err(e) => return Poll::Ready(Err(e)),
+            }
+        }
+        Poll::Ready(Ok(()))
+    }).await
+}
+```
 
 TODO[^dns]
 
