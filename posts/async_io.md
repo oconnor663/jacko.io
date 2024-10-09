@@ -222,10 +222,10 @@ async fn accept(
 
 Calling `wake_by_ref` whenever we return `Pending`, like we did in [the second
 version of `Sleep` from Part One][sleep_busy], makes this a busy loop. We'll
-fix that in the next section. We're assuming that the `TcpListener` is already
-in non-blocking mode,[^eintr] and we're putting the returned `TcpStream` into
-non-blocking mode too,[^io_result] to get ready for async writes. Now let's
-implement those writes:
+fix that in the next section. We're also assuming that the `TcpListener` is
+already in non-blocking mode,[^eintr] and we're putting the returned
+`TcpStream` into non-blocking mode too,[^io_result] to get ready for async
+writes. Now let's implement those writes:
 
 [^eintr]: And we're going to [assume that non-blocking calls never return
     `ErrorKind::Interrupted`/`EINTR`][eintr], so we don't need an extra line of
@@ -273,13 +273,14 @@ async fn write_all(
 ```
 
 `TcpStream::write` isn't guaranteed to consume the entire buffer, so we call it
-in a loop.[^chunks] The loop condition also means we won't call `write` at all
-when `buf` is empty, matching the default behavior of [`Write::write_all`].
+in a loop.[^chunks] The loop condition also means we won't make any calls to
+`write` if `buf` is initially empty, matching the default behavior of
+[`Write::write_all`], which is nice.
 
 [`Write::write_all`]: https://doc.rust-lang.org/std/io/trait.Write.html#method.write_all
 
 [^chunks]: If a writer doesn't consume the entire `write` buffer, that doesn't
-    necessarily mean the next `write` is going to block. For example, the
+    necessarily mean the next `write` is likely to block. For example, the
     writer might be doing compression or encryption internally using a
     fixed-size array. In a case like that, writing again in a loop is more
     efficient than returning `Pending` and writing again later.
