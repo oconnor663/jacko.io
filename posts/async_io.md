@@ -370,142 +370,26 @@ doesn't block.[^huge_cheat]
 
 [`tokio::net::TcpStream::connect`]: https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html#method.connect
 
-```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
-async fn tcp_bind(address: &str) -> io::Result<TcpListener> {
-    let listener = TcpListener::bind(address)?;
-    listener.set_nonblocking(true)?;
-    Ok(listener)
-}
-
-async fn tcp_connect(address: &str) -> io::Result<TcpStream> {
-    // XXX: This is technically blocking. Assume it returns quickly.
-    let socket = TcpStream::connect(address)?;
-    socket.set_nonblocking(true)?;
-    Ok(socket)
-}
-```
-
-Next, the async version of [`TcpListener::accept`]:
-
-```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
-struct TcpAccept<'a> {
-    listener: &'a TcpListener,
-}
-
-impl<'a> Future for TcpAccept<'a> {
-    type Output = io::Result<TcpStream>;
-
-    fn poll(
-        self: Pin<&mut Self>,
-        context: &mut Context,
-    ) -> Poll<io::Result<TcpStream>> {
-        match self.listener.accept() {
-            Ok((stream, _)) => {
-                let result = stream.set_nonblocking(true);
-                Poll::Ready(result.and(Ok(stream)))
-            }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                // TODO: This causes a busy loop.
-                context.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Err(e) => Poll::Ready(Err(e)),
-        }
-    }
-}
-
-fn tcp_accept(listener: &TcpListener) -> TcpAccept {
-    TcpAccept { listener }
-}
-```
-
 This is enough for us to write `server_main`:
 
 ```rust
 LINK: Playground playground://async_playground/client_server_busy.rs
 async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     let start_msg = format!("start {n}\n");
-    socket.write_all(start_msg.as_bytes())?;
+    write_all(start_msg.as_bytes(), &mut socket).await?;
     sleep(Duration::from_secs(1)).await;
     let end_msg = format!("end {n}\n");
-    socket.write_all(end_msg.as_bytes())?;
+    write_all(end_msg.as_bytes(), &mut socket).await?;
     Ok(())
 }
 
-async fn server_main(listener: TcpListener) -> io::Result<()> {
+async fn server_main(mut listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
-        let socket = tcp_accept(&listener).await?;
+        let (socket, _) = accept(&mut listener).await?;
         spawn(async move { one_response(socket, n).await.unwrap() });
         n += 1;
     }
-}
-```
-
-And an async version of [`std::io::copy`]:[^unpin]
-
-[`std::io::copy`]: https://doc.rust-lang.org/stable/std/io/fn.copy.html
-
-[^unpin]: Two comments about the `Copy` struct. First, it might've been
-    more flexible to hold `R` and `W` by value instead of by mutable
-    reference. `Read` and `Write` have ["blanket implementations"][blanket]
-    for mutable references to any `Read` or `Write` type, so callers using
-    references would still work. But if we did that, then `Copy` wouldn't
-    automatically be `Unpin`, and we'd need to `impl Unpin for Copy` to
-    access its fields. (Alternatively we could require `R` and `W` to be
-    `Unpin`, but that would be unnecessarily restrictive for callers.)
-    There's nothing wrong with doing that, and it's perfectly safe, but
-    we're trying to avoid talking about `Unpin`. Shared and mutable
-    references to any type are always `Unpin`, so holding references
-    internally makes `Copy` automatically `Unpin` and lets us dodge this
-    topic.
-    <br>
-    &emsp;&emsp;Second, note that we explicitly destructure references to
-    `reader` and `writer` from a single call to `self.as_mut()`. With
-    regular mutable references we can ["split borrows"][split] without any
-    extra steps, but `Pin::as_mut` gets in the way of that. Similarly, the
-    automatic ["reborrowing"][reborrowing] we get when we use mutable
-    references as function arguments doesn't work with pinned references.
-    It's possible that a future version of Rust might fix these papercuts
-    by making ["pinned places"][pinned_places] a language feature on par
-    with shared and mutable references.
-
-[blanket]: https://doc.rust-lang.org/std/io/trait.Read.html#impl-Read-for-%26mut+R
-[split]: https://doc.rust-lang.org/nomicon/borrow-splitting.html
-[pinned_places]: https://without.boats/blog/pinned-places/
-[reborrowing]: https://github.com/rust-lang/reference/issues/788
-
-```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
-struct Copy<'a, R, W> {
-    reader: &'a mut R,
-    writer: &'a mut W,
-}
-
-impl<'a, R: Read, W: Write> Future for Copy<'a, R, W> {
-    type Output = io::Result<()>;
-
-    fn poll(
-        mut self: Pin<&mut Self>,
-        context: &mut Context,
-    ) -> Poll<io::Result<()>> {
-        let Copy { reader, writer } = &mut *self.as_mut();
-        match io::copy(reader, writer) {
-            Ok(_) => Poll::Ready(Ok(())),
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                // TODO: This causes a busy loop.
-                context.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Err(e) => Poll::Ready(Err(e)),
-        }
-    }
-}
-
-fn copy<'a, R, W>(reader: &'a mut R, writer: &'a mut W) -> Copy<'a, R, W> {
-    Copy { reader, writer }
 }
 ```
 
@@ -514,14 +398,17 @@ Now we can write `client_main` and `async_main`:
 ```rust
 LINK: Playground playground://async_playground/client_server_busy.rs
 async fn client_main() -> io::Result<()> {
-    let mut socket = tcp_connect("localhost:8000").await?;
-    copy(&mut socket, &mut io::stdout()).await?;
+    // XXX: Assume that connect() returns quickly.
+    let mut socket = TcpStream::connect("localhost:8000")?;
+    socket.set_nonblocking(true)?;
+    print_all(&mut socket).await?;
     Ok(())
 }
 
 async fn async_main() -> io::Result<()> {
-    // Open the listener first, to avoid racing against the server thread.
-    let listener = tcp_bind("0.0.0.0:8000").await?;
+    // Avoid a race between bind and connect by binding first.
+    let listener = TcpListener::bind("0.0.0.0:8000")?;
+    listener.set_nonblocking(true)?;
     // Start the server on a background task.
     spawn(async { server_main(listener).await.unwrap() });
     // Run ten clients as ten different tasks.
