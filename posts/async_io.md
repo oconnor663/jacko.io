@@ -73,7 +73,7 @@ covers, [`io::copy`] is a convenience wrapper around the standard
 
 ## Threads
 
-We can run these examples locally, but they can't talk to each on the
+We can run those examples locally, but they can't talk to each on the
 Playground. Let's work around that by putting the client and the server
 together in the same program. Since they're both blocking, we need to run them
 on different threads. We'll rename their `main` functions to `server_main` and
@@ -86,13 +86,13 @@ same time:[^unwrap]
     represents whether the client thread panicked, and we propagate those
     panics with `.unwrap()`. The server thread normally runs forever, so we
     can't `join` it. If it does short-circuit with an error, though, we don't
-    want that error to be silent. Unwrapping server thread IO errors case
-    prints to stderr in that case, which is better than nothing.
+    want that error to be silent. Unwrapping server thread IO errors prints to
+    stderr in that case, which is better than nothing.
 
 ```rust
 LINK: Playground playground://async_playground/two_threaded_client_server.rs
 fn main() -> io::Result<()> {
-    // Open the listener first, to avoid racing against the server thread.
+    // Avoid a race between bind and connect by binding first.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
     // Start the server on a background thread.
     thread::spawn(|| server_main(listener).unwrap());
@@ -296,14 +296,54 @@ an infinite loop. The loop condition also means that we won't make any calls to
 
 [`Write::write_all`]: https://doc.rust-lang.org/std/io/trait.Write.html#method.write_all
 
-Those are the async building blocks we need for our server. Now let's implement
-client reading, which is similar to server writing. The counterpart of
+Those are the async building blocks we need for our server, and we're ready to
+write the async version of `server_main`:
+
+```rust
+LINK: Playground playground://async_playground/client_server_busy.rs
+HIGHLIGHT: 1, 3-4, 6, 10, 13-14
+async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
+    let start_msg = format!("start {n}\n");
+    write_all(start_msg.as_bytes(), &mut socket).await?;
+    sleep(Duration::from_secs(1)).await;
+    let end_msg = format!("end {n}\n");
+    write_all(end_msg.as_bytes(), &mut socket).await?;
+    Ok(())
+}
+
+async fn server_main(mut listener: TcpListener) -> io::Result<()> {
+    let mut n = 1;
+    loop {
+        let (socket, _) = accept(&mut listener).await?;
+        spawn(async move { one_response(socket, n).await.unwrap() });
+        n += 1;
+    }
+}
+```
+
+Similar to [the threads example we started with](#threads), we'll never join
+server tasks, so we use `unwrap` to print to stderr if they fail. Previously we
+did that inside a closure, and here we do it inside an `async` block, which
+works like an anonymous `async fn` that takes no arguments.
+
+Hopefully all that works! Now for the client.
+
+We just did async writes, and so let's do async reads. The counterpart of
 `Write::write_all` is [`Read::read_to_end`], but that's not quite what we want
-here. We want to print the output we get as soon as it arrives, so rather than
-collecting it in a `Vec` and printing at all at once. Let's keep it short again
-and hardcode that we're printing. We'll call it `print_all`:
+here. We want to print output as soon as it arrives, rather than collecting it
+all in a `Vec` and printing it at the end. Let's call it `print_all`:[^copy]
 
 [`Read::read_to_end`]: https://doc.rust-lang.org/std/io/trait.Read.html#method.read_to_end
+
+[^copy]: In Tokio we'd probably use [`tokio::io::copy`] for this, similar to
+    [`std::io::copy`] from the standard library. Writing our own generic `copy`
+    would mean we'd need our own [`AsyncRead`] and [`AsyncWrite`] traits,
+    though, and that's a lot more code.
+
+[`tokio::io::copy`]: https://docs.rs/tokio/latest/tokio/io/fn.copy.html
+[`std::io::copy`]: https://doc.rust-lang.org/std/io/fn.copy.html
+[`AsyncRead`]: https://docs.rs/tokio/latest/tokio/io/trait.AsyncRead.html
+[`AsyncWrite`]: https://docs.rs/tokio/latest/tokio/io/trait.AsyncWrite.html
 
 ```rust
 LINK: Playground playground://async_playground/client_server_busy.rs
@@ -323,8 +363,7 @@ async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
                 Err(e) => return Poll::Ready(Err(e)),
             }
         }
-    })
-    .await
+    }).await
 }
 ```
 
@@ -333,16 +372,16 @@ cheating by assuming that printing doesn't block.[^little_cheat] Otherwise,
 this is similar to `write_all` above.
 
 [^little_cheat]: This is only a little bit of cheating. Our examples definitely
-    won't print enough to fill the stdout pipe buffer. And programs that do
-    print that much usually can't make progress when printing is blocked
-    anyway.
+    won't print enough to fill the stdout pipe buffer, and programs that do
+    print that much usually can't make progress when printing is blocked in any
+    case.
 
-The other async building block we need for our client is `connect`, but that's
-difficult for two reasons. First, `TcpStream::connect` returns a new stream,
-and we can't call `set_nonblocking` on that stream before `connect` is
-done.[^socket2] Second, `connect` also does DNS, and async DNS is a can of
-worms.[^dns] So we're going to cheat again and just assume that `connect`
-doesn't block.[^huge_cheat]
+The other async building block we need for our client is `connect`, but it
+turns out that's difficult, for two reasons. First, `TcpStream::connect`
+returns a new stream, and we can't call `set_nonblocking` on that stream before
+`connect` is done.[^socket2] Second, `connect` also does DNS, and async DNS is
+a can of worms.[^dns] So we're going to cheat again and just assume that
+`connect` doesn't block.[^huge_cheat]
 
 [^socket2]: We could solve this with the [`socket2`] crate, which separates
     [`Socket::new`] from [`Socket::connect`].
@@ -370,41 +409,25 @@ doesn't block.[^huge_cheat]
 
 [`tokio::net::TcpStream::connect`]: https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html#method.connect
 
-This is enough for us to write `server_main`:
+So with one real async building block and one cheaty assumption, we can write
+`client_main`:
 
 ```rust
 LINK: Playground playground://async_playground/client_server_busy.rs
-async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
-    let start_msg = format!("start {n}\n");
-    write_all(start_msg.as_bytes(), &mut socket).await?;
-    sleep(Duration::from_secs(1)).await;
-    let end_msg = format!("end {n}\n");
-    write_all(end_msg.as_bytes(), &mut socket).await?;
-    Ok(())
-}
-
-async fn server_main(mut listener: TcpListener) -> io::Result<()> {
-    let mut n = 1;
-    loop {
-        let (socket, _) = accept(&mut listener).await?;
-        spawn(async move { one_response(socket, n).await.unwrap() });
-        n += 1;
-    }
-}
-```
-
-Now we can write `client_main` and `async_main`:
-
-```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
+HIGHLIGHT: 1, 3-4
 async fn client_main() -> io::Result<()> {
-    // XXX: Assume that connect() returns quickly.
     let mut socket = TcpStream::connect("localhost:8000")?;
     socket.set_nonblocking(true)?;
     print_all(&mut socket).await?;
     Ok(())
 }
+```
 
+And finally `async_main`:
+
+```rust
+LINK: Playground playground://async_playground/client_server_busy.rs
+HIGHLIGHT: 1, 4-8, 10, 12-14
 async fn async_main() -> io::Result<()> {
     // Avoid a race between bind and connect by binding first.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
@@ -423,11 +446,12 @@ async fn async_main() -> io::Result<()> {
 }
 ```
 
-It works!
+It works! Its busy looping and burning 100% CPU, but it really does work!
+That's a lot of groundwork laid.
 
 ## Poll
 
-The second thing we need is a way for our main loop to sleep until input
+The last problem we need to solve is making our main loop to sleep until input
 arrives. We're going to use the [`poll`] "system call" for this, which is
 available on all Unix-like OSs, including Linux and macOS.[^syscall] We'll call
 it using the C standard library function [`libc::poll`].[^name] This function
