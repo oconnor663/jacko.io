@@ -225,7 +225,13 @@ version of `Sleep` from Part One][sleep_busy], makes this a busy loop. We'll
 fix that in the next section. We're also assuming that the `TcpListener` is
 already in non-blocking mode,[^eintr] and we're putting the returned
 `TcpStream` into non-blocking mode too,[^io_result] to get ready for async
-writes. Now let's implement those writes:
+writes.
+
+[sleep_busy]: playground://async_playground/sleep_busy.rs
+
+Now let's implement those writes. We could define an `AsyncWrite` trait and
+make everything generic, but instead let's keep it short and hardcode that
+we're writing to a `TcpStream`:
 
 [^eintr]: And we're going to [assume that non-blocking calls never return
     `ErrorKind::Interrupted`/`EINTR`][eintr], so we don't need an extra line of
@@ -272,43 +278,97 @@ async fn write_all(
 }
 ```
 
-`TcpStream::write` isn't guaranteed to consume the entire buffer, so we call it
-in a loop.[^chunks] The loop condition also means we won't make any calls to
-`write` if `buf` is initially empty, matching the default behavior of
-[`Write::write_all`], which is nice.
+`TcpStream::write` isn't guaranteed to consume the entire buffer, so we need to
+call it in a loop, bumping `buf` forward each time through. It's unlikely that
+we'll ever see a zero-length write, but if we do we make it an error instead of
+an infinite loop. The loop condition also means that we won't make any calls to
+`write` if `buf` is initially empty, which matches the behavior of
+[`Write::write_all`].[^write_all]
 
 [`Write::write_all`]: https://doc.rust-lang.org/std/io/trait.Write.html#method.write_all
 
-[^chunks]: If a writer doesn't consume the entire `write` buffer, that doesn't
-    necessarily mean the next `write` is likely to block. For example, the
-    writer might be doing compression or encryption internally using a
-    fixed-size array. In a case like that, writing again in a loop is more
-    efficient than returning `Pending` and writing again later.
+[^write_all]: It would be nice to use `Write::write_all` directly here and get
+    the loop and `WriteZero` handling for free. But unfortunately, when
+    `Write::write_all` returns `WouldBlock`, it doesn't tell us how many bytes
+    it wrote before that, and we need that number to update `buf`. In contrast,
+    when `Write::write` needs to block after it's already written some bytes,
+    it returns `Ok(n)`, and then the _next_ call returns `WouldBlock`.
 
-TODO[^dns]
+[`Write::write_all`]: https://doc.rust-lang.org/std/io/trait.Write.html#method.write_all
 
-[sleep_busy]: playground://async_playground/sleep_busy.rs
+Those are the async building blocks we need for our server. Now let's implement
+client reading, which is similar to server writing. The counterpart of
+`Write::write_all` is [`Read::read_to_end`], but that's not quite what we want
+here. We want to print the output we get as soon as it arrives, so rather than
+collecting it in a `Vec` and printing at all at once. Let's keep it short again
+and hardcode that we're printing. We'll call it `print_all`:
 
-[^dns]: The `XXX` comment here marks the biggest shortcut we're going to take
-    in these examples: assuming that [`TcpStream::connect`] doesn't block.
-    We'll get away with that because we're just one process connecting to
-    ourselves, but in the real world `connect` would make one or more DNS
-    requests and then do a TCP handshake, and all of that is blocking.
-    Non-blocking DNS is surprisingly difficult, because the implementation
-    needs to read config files like `/etc/resolv.conf`, which means it's in
-    libc rather than in the kernel, and libc only exposes blocking interfaces
-    like [`getaddrinfo`]. Those configs are unstandardized and
-    platform-specific, so implementing them is a pain, and even Tokio punts on
-    this and [makes a blocking call to `getaddrinfo` on a thread
-    pool][tokio_dns]. For comparison, the `net` module in the Golang standard
-    library [contains two DNS implementations][golang_fallback], an async
-    resolver for simple cases, and a fallback resolver that also calls
-    `getaddrinfo` on a thread pool. That said, if you're connecting directly to
-    an IP address and you don't need to do DNS, you can do a non-blocking
-    `connect` using the [`socket2`] crate.
+[`Read::read_to_end`]: https://doc.rust-lang.org/std/io/trait.Read.html#method.read_to_end
+
+```rust
+LINK: Playground playground://async_playground/client_server_busy.rs
+async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
+    let mut buf = [0; 1024];
+    std::future::poll_fn(|context| {
+        loop {
+            match stream.read(&mut buf) {
+                Ok(n) if n == 0 => return Poll::Ready(Ok(())), // EOF
+                // Assume that printing doesn't block.
+                Ok(n) => io::stdout().write_all(&buf[..n])?,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    // TODO: This is a busy loop.
+                    context.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Err(e) => return Poll::Ready(Err(e)),
+            }
+        }
+    })
+    .await
+}
+```
+
+On the reading side, a successful return of 0 indicates end-of-file. We're also
+cheating by assuming that printing doesn't block.[^little_cheat] Otherwise,
+this is similar to `write_all` above.
+
+[^little_cheat]: This is only a little bit of cheating. Our examples definitely
+    won't print enough to fill the stdout pipe buffer. And programs that do
+    print that much usually can't make progress when printing is blocked
+    anyway.
+
+The other async building block we need for our client is `connect`, but that's
+difficult for two reasons. First, `TcpStream::connect` returns a new stream,
+and we can't call `set_nonblocking` on that stream before `connect` is
+done.[^socket2] Second, `connect` also does DNS, and async DNS is a can of
+worms.[^dns] So we're going to cheat again and just assume that `connect`
+doesn't block.[^huge_cheat]
+
+[^socket2]: We could solve this with the [`socket2`] crate, which separates
+    [`Socket::new`] from [`Socket::connect`].
+
+[`socket2`]: https://docs.rs/socket2
+[`Socket::new`]: https://docs.rs/socket2/latest/socket2/struct.Socket.html#method.new
+[`Socket::connect`]: https://docs.rs/socket2/latest/socket2/struct.Socket.html#method.connect
+
+[^dns]: A DNS implementation needs to read config files like
+    `/etc/resolv.conf`, so the standard one is in libc rather than in the
+    kernel, and libc only exposes blocking interfaces like [`getaddrinfo`].
+    Those configs are unstandardized and platform-specific, and reading them is
+    a pain. Even Tokio punts on this and [makes a blocking call to
+    `getaddrinfo` on a thread pool][tokio_dns]. For comparison, the `net`
+    module in the Golang standard library [contains two DNS
+    implementations][golang_fallback], an async resolver for simple cases, and
+    a fallback resolver that calls `getaddrinfo` on a thread pool.
 
 [golang_fallback]: https://pkg.go.dev/net#hdr-Name_Resolution
-[`socket2`]: https://docs.rs/socket2
+
+[^huge_cheat]: This is big-time cheating, because `connect` absolutely does
+    block when it talks to the network. Our example only connects to itself, so
+    we'll get away with this, but in the real world we'd need a proper async
+    implementation like [`tokio::net::TcpStream::connect`].
+
+[`tokio::net::TcpStream::connect`]: https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html#method.connect
 
 ```rust
 LINK: Playground playground://async_playground/client_server_busy.rs

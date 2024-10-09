@@ -171,8 +171,8 @@ async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
     std::future::poll_fn(|context| {
         loop {
             match stream.read(&mut buf) {
-                Ok(n) if n == 0 => return Poll::Ready(Ok(())),
-                // Assume that writing to stdout doesn't block.
+                Ok(n) if n == 0 => return Poll::Ready(Ok(())), // EOF
+                // Assume that printing doesn't block.
                 Ok(n) => io::stdout().write_all(&buf[..n])?,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                     register_pollfd(context, stream, libc::POLLIN);
