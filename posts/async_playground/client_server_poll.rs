@@ -146,8 +146,8 @@ async fn accept(listener: &mut TcpListener) -> io::Result<(TcpStream, SocketAddr
 }
 
 async fn write_all(buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
+    let mut position = 0;
     std::future::poll_fn(|context| {
-        let mut position = 0;
         while position < buf.len() {
             match stream.write(&buf[position..]) {
                 Ok(n) if n == 0 => {
@@ -168,8 +168,8 @@ async fn write_all(buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
 }
 
 async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
+    let mut buf = [0; 1024];
     std::future::poll_fn(|context| {
-        let mut buf = [0; 1024];
         loop {
             match stream.read(&mut buf) {
                 Ok(n) if n == 0 => return Poll::Ready(Ok(())),
