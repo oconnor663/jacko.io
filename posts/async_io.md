@@ -223,9 +223,15 @@ async fn accept(
 Calling `wake_by_ref` whenever we return `Pending`, like we did in [the second
 version of `Sleep` from Part One][sleep_busy], makes this a busy loop. We'll
 fix that in the next section. We're assuming that the `TcpListener` is already
-in non-blocking mode, and we're putting the returned `TcpStream` into
-non-blocking mode too, to get ready for async writes.[^io_result] Now let's
-implement the writes:
+in non-blocking mode,[^eintr] and we're putting the returned `TcpStream` into
+non-blocking mode too,[^io_result] to get ready for async writes. Now let's
+implement those writes:
+
+[^eintr]: And we're going to [assume that non-blocking calls never return
+    `ErrorKind::Interrupted`/`EINTR`][eintr], so we don't need an extra line of
+    code in each example retrying that case.
+
+[eintr]: https://stackoverflow.com/a/14485305/823869
 
 [^io_result]: Eagle-eyed readers might spot that our `poll_fn` closure is using
     the `?` operator with `set_nonblocking`, even though the closure itself
@@ -241,16 +247,18 @@ implement the writes:
 
 ```rust
 LINK: Playground playground://async_playground/client_server_busy.rs
-async fn write_all(buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
+async fn write_all(
+    mut buf: &[u8],
+    stream: &mut TcpStream,
+) -> io::Result<()> {
     std::future::poll_fn(|context| {
-        let mut position = 0;
-        while position < buf.len() {
-            match stream.write(&buf[position..]) {
+        while !buf.is_empty() {
+            match stream.write(&buf) {
                 Ok(n) if n == 0 => {
                     let e = io::Error::from(io::ErrorKind::WriteZero);
                     return Poll::Ready(Err(e));
                 }
-                Ok(n) => position += n,
+                Ok(n) => buf = &buf[n..],
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                     // TODO: This is a busy loop.
                     context.waker().wake_by_ref();
@@ -263,6 +271,18 @@ async fn write_all(buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
     }).await
 }
 ```
+
+`TcpStream::write` isn't guaranteed to consume the entire buffer, so we call it
+in a loop.[^chunks] The loop condition also means we won't call `write` at all
+when `buf` is empty, matching the default behavior of [`Write::write_all`].
+
+[`Write::write_all`]: https://doc.rust-lang.org/std/io/trait.Write.html#method.write_all
+
+[^chunks]: If a writer doesn't consume the entire `write` buffer, that doesn't
+    necessarily mean the next `write` is going to block. For example, the
+    writer might be doing compression or encryption internally using a
+    fixed-size array. In a case like that, writing again in a loop is more
+    efficient than returning `Pending` and writing again later.
 
 TODO[^dns]
 
