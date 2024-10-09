@@ -126,16 +126,15 @@ async fn accept(listener: &mut TcpListener) -> io::Result<(TcpStream, SocketAddr
     .await
 }
 
-async fn write_all(buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
-    let mut position = 0;
+async fn write_all(mut buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
     std::future::poll_fn(|context| {
-        while position < buf.len() {
-            match stream.write(&buf[position..]) {
+        while !buf.is_empty() {
+            match stream.write(&buf) {
                 Ok(n) if n == 0 => {
                     let e = io::Error::from(io::ErrorKind::WriteZero);
                     return Poll::Ready(Err(e));
                 }
-                Ok(n) => position += n,
+                Ok(n) => buf = &buf[n..],
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                     // TODO: This is a busy loop.
                     context.waker().wake_by_ref();
