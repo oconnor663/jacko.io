@@ -96,11 +96,11 @@ fn foo(n: u64) {
 
 If we want to make several calls to `foo` at the same time, we can spawn a
 thread for each one. Click on the Playground button to see that this takes one
-second instead of ten:[^order]
+second instead of ten:[^threads_order]
 
-[^order]: You'll probably also see the "start" and "end" prints appear out of
-    order. One of the tricky things about threads is that we don't which one
-    will finish first.
+[^threads_order]: You'll probably also see the "start" and "end" prints appear
+    out of order. One of the tricky things about threads is that we don't which
+    one will finish first.
 
 ```rust
 LINK: Playground playground://async_playground/threads.rs
@@ -197,7 +197,15 @@ async fn main() {
 }
 ```
 
-Making several calls at the same time looks like this:
+Making several calls at the same time looks like this:[^async_order]
+
+[^async_order]: Unlike the version with threads above, you'll always see this
+    version print its start messages in order, and you'll _usually_ see it
+    print the end messages in order too. However, it's possible for the end
+    messages to appear out of order, because [Tokio's timer implementation is
+    complicated][new_tokio_timer].
+
+[new_tokio_timer]: https://tokio.rs/blog/2018-03-timers
 
 ```rust
 LINK: Playground playground://async_playground/tokio_10.rs
