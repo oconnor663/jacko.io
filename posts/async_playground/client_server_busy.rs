@@ -130,7 +130,7 @@ async fn write_all(mut buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
     std::future::poll_fn(|context| {
         while !buf.is_empty() {
             match stream.write(&buf) {
-                Ok(n) if n == 0 => {
+                Ok(0) => {
                     let e = io::Error::from(io::ErrorKind::WriteZero);
                     return Poll::Ready(Err(e));
                 }
@@ -153,7 +153,7 @@ async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
     std::future::poll_fn(|context| {
         loop {
             match stream.read(&mut buf) {
-                Ok(n) if n == 0 => return Poll::Ready(Ok(())), // EOF
+                Ok(0) => return Poll::Ready(Ok(())), // EOF
                 // Assume that printing doesn't block.
                 Ok(n) => io::stdout().write_all(&buf[..n])?,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
