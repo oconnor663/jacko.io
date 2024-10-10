@@ -253,6 +253,7 @@ div.code_link a {
     position: absolute;
     top: 4px;
     right: 4px;
+    z-index: 1; /* appear on top of code if there's any overlapping */
     background-color: #fdf6e3;
     padding: 5px;
     border-radius: 5px;
