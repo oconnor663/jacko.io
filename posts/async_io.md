@@ -400,6 +400,8 @@ a can of worms.[^dns] So we're going to cheat again and just assume that
     implementations][golang_fallback], an async resolver for simple cases, and
     a fallback resolver that calls `getaddrinfo` on a thread pool.
 
+[`getaddrinfo`]: https://man7.org/linux/man-pages/man3/getaddrinfo.3.html
+[tokio_dns]: https://github.com/tokio-rs/tokio/blob/tokio-1.40.0/tokio/src/net/addr.rs#L182-L184
 [golang_fallback]: https://pkg.go.dev/net#hdr-Name_Resolution
 
 [^huge_cheat]: This is big-time cheating, because `connect` absolutely does
@@ -454,10 +456,7 @@ That's a lot of groundwork laid.
 The last problem we need to solve is making our main loop to sleep until input
 arrives. We're going to use the [`poll`] "system call" for this, which is
 available on all Unix-like OSs, including Linux and macOS.[^syscall] We'll call
-it using the C standard library function [`libc::poll`].[^name] This function
-takes a list of "poll file descriptors" and a timeout. The timeout will let us
-wake up for sleeps in addition to IO, replacing `thread::sleep` in our main
-loop. Each poll file descriptor looks like this:
+it using the C standard library function [`libc::poll`].[^name] It looks like this:
 
 [`poll`]: https://man7.org/linux/man-pages/man2/poll.2.html
 
@@ -489,6 +488,22 @@ loop. Each poll file descriptor looks like this:
     operations at the same time without a busy loop.
 
 ```rust
+pub unsafe extern "C" fn poll(
+    fds: *mut pollfd,
+    nfds: nfds_t,
+    timeout: c_int,
+) -> c_int
+```
+
+That function takes a list[^c_style] of "poll file descriptors" and a timeout
+in milliseconds. The timeout will let us wake up for sleeps in addition to IO,
+replacing `thread::sleep` in our main loop. Each poll file descriptor looks
+like this:
+
+[^c_style]: As usual with C functions, the list is split into two arguments, a
+    pointer to the first element and a count of elements.
+
+```rust
 struct pollfd {
     fd: c_int,
     events: c_short,
@@ -496,7 +511,7 @@ struct pollfd {
 }
 ```
 
-That `fd` field is a "file descriptor", or what Rust calls a "raw" file
+The `fd` field is a "file descriptor", or in Rust terms a "raw" file
 descriptor. It's an identifier that Unix-like OSs use to track open resources
 like files and sockets. We can get the descriptor from a `TcpListener` or a
 `TcpStream` by calling [`.as_raw_fd()`][as_raw_fd], which returns [`RawFd`], a
@@ -512,25 +527,14 @@ type alias for `c_int`.[^windows]
     least twice, using `#[cfg(unix)]` and `#[cfg(windows)]` to gate each
     implementation to a specific platform.
 
-The `events` field is a collection of bitflags listing the events we want to
+The `events` field is a collection of bitflags describing the events we want to
 wait for. The most common events are [`POLLIN`], meaning input is available,
-and [`POLLOUT`], meaning space is available in output buffers. For simplicity,
-we'll assume that we only need to worry about blocking when reading from a
-`TcpStream` or listening for new connections, so we'll set `events` to just
-`POLLIN`.[^blocking_writes]
+and [`POLLOUT`], meaning space is available in output buffers. We'll wait for
+`POLLIN` when we get `WouldBlock` from a read and `POLLOUT` when we get it from
+a write.
 
 [`POLLIN`]: https://docs.rs/libc/latest/libc/constant.POLLIN.html
 [`POLLOUT`]: https://docs.rs/libc/latest/libc/constant.POLLOUT.html
-
-[^blocking_writes]: The size of the kernel write buffer for a `TcpStream` is
-    measured in kilobytes, and our examples only write a handful of bytes, so
-    realistically our writes will never block. This is another shortcut, but
-    not quite as big of a shortcut as our treatment of `TcpStream::connect`
-    above.
-
-[`TcpStream::connect`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
-[`getaddrinfo`]: https://man7.org/linux/man-pages/man3/getaddrinfo.3.html
-[tokio_dns]: https://github.com/tokio-rs/tokio/blob/tokio-1.40.0/tokio/src/net/addr.rs#L182-L184
 
 The `revents` field ("returned events") is similar but used for output rather
 than input. After `poll` returns, the bits in this field indicate whether the
@@ -538,43 +542,80 @@ corresponding descriptor was one of the ones that caused the wakeup. We could
 use this to poll only the specific tasks that the wakeup is for, but for
 simplicity we'll ignore this field and poll every task every time we wake up.
 
-To get file descriptors from the futures that own them to the main loop, we
-need another global `Vec`:
+Our async IO functions, `accept`, `write_all`, and `print_all`, need a way to
+send `pollfd`s and `Waker`s back to `main`, so that `main` can call
+`libc::poll`. We'll add a couple more global `Vec`s for this along with a
+helper function to populate them:[^lock_order]
 
-```rust
-static POLL_FDS: Mutex<Vec<(RawFd, Waker)>> = Mutex::new(Vec::new());
-```
-
-Now our `TcpAccept` and `Copy` futures can push into that `Vec`. Here's the
-change in `TcpAccept`:
+[^lock_order]: Whenever we hold more than one lock at a time, we need to make
+    sure that all callers lock them in the same order. We're locking `POLL_FDS`
+    before `POLL_WAKERS` here, so we'll need to do the same in `main`.
 
 ```rust
 LINK: Playground playground://async_playground/client_server_poll.rs
-HIGHLIGHT: 2-4
-Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-    let raw_fd = self.listener.as_raw_fd();
-    let waker = context.waker().clone();
-    POLL_FDS.lock().unwrap().push((raw_fd, waker));
-    Poll::Pending
+static POLL_FDS: Mutex<Vec<libc::pollfd>> = Mutex::new(Vec::new());
+static POLL_WAKERS: Mutex<Vec<Waker>> = Mutex::new(Vec::new());
+
+fn register_pollfd(
+    context: &mut Context,
+    fd: &impl AsRawFd,
+    events: libc::c_short,
+) {
+    let mut poll_fds = POLL_FDS.lock().unwrap();
+    let mut poll_wakers = POLL_WAKERS.lock().unwrap();
+    poll_fds.push(libc::pollfd {
+        fd: fd.as_raw_fd(),
+        events,
+        revents: 0,
+    });
+    poll_wakers.push(context.waker().clone());
 }
 ```
 
-Finally, we can call `poll` in the main loop. TODO: Say so much more.
+Now our async IO functions can call `register_pollfd` instead of calling
+`wake_by_ref` immediately and busy looping. `accept` and `print_all` are reads,
+so they handle `WouldBlock` by setting `POLLIN`:
 
 ```rust
 LINK: Playground playground://async_playground/client_server_poll.rs
+HIGHLIGHT: 2
+Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+    register_pollfd(context, stream, libc::POLLIN);
+    return Poll::Pending;
+}
+```
+
+`write_all` on the other hand is a write, and it handles `WouldBlock` by
+setting `POLLOUT`:
+
+```rust
+LINK: Playground playground://async_playground/client_server_poll.rs
+HIGHLIGHT: 2
+Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+    register_pollfd(context, stream, libc::POLLOUT);
+    return Poll::Pending;
+}
+```
+
+Finally, `main`. We'll start by preparing the `timeout` argument for
+`libc::poll`. This is similar to how we've been computing the next wake time
+all along, except now we're not guaranteed to have one,[^no_wake] and we need
+to convert it to milliseconds:
+
+[^no_wake]: Previously, sleeping forever could only be a bug. But now that
+    we can wait on IO in addition to sleeping, waiting forever is valid.
+
+```rust
+LINK: Playground playground://async_playground/client_server_poll.rs
+HIGHLIGHT: 6-15
+// Some tasks might wake other tasks. Re-poll if the AwakeFlag has been
+// set. Polling futures that aren't ready yet is inefficient but allowed.
+if awake_flag.check_and_clear() {
+    continue;
+}
 // All tasks are either sleeping or blocked on IO. Use libc::poll to wait
 // for IO on any of the POLL_FDS. If there are any WAKE_TIMES, use the
 // earliest as a timeout.
-let mut poll_fds = POLL_FDS.lock().unwrap();
-let mut poll_structs = Vec::new();
-for (raw_fd, _waker) in poll_fds.iter() {
-    poll_structs.push(libc::pollfd {
-        fd: *raw_fd,
-        events: libc::POLLIN, // "poll input": wake when readable
-        revents: 0,           // return field, unused
-    });
-}
 let mut wake_times = WAKE_TIMES.lock().unwrap();
 let timeout_ms = if let Some(time) = wake_times.keys().next() {
     let duration = time.saturating_duration_since(Instant::now());
@@ -582,33 +623,58 @@ let timeout_ms = if let Some(time) = wake_times.keys().next() {
 } else {
     -1 // infinite timeout
 };
+```
+
+Now we can make the call to `libc::poll` that we've been preparing for.
+It's an FFI call, so it's `unsafe`, but the raw pointer we're giving it is
+definitely valid, and it won't retain that pointer after it
+returns.[^fd_ub]
+
+[^fd_ub]: We might also worry about what happens if one of the descriptors
+    in `POLL_FDS` came from a socket that's since been closed. In that case
+    the descriptor might refer to nothing, or it might've been reused by
+    the kernel to refer to an unrelated file or socket. But since
+    `libc::poll` doesn't modify any of its arguments (including for example
+    reading from a file, which would advance its cursor), the worst that
+    can happen here is a "spurious wakeup", where some event for an
+    unrelated file wakes us up early. Our code already handles busy loop
+    polling, so spurious wakeups aren't a correctness issue, much less
+    undefined behavior.
+
+```rust
+LINK: Playground playground://async_playground/client_server_poll.rs
+let mut poll_fds = POLL_FDS.lock().unwrap();
+let mut poll_wakers = POLL_WAKERS.lock().unwrap();
 let poll_error_code = unsafe {
     libc::poll(
-        poll_structs.as_mut_ptr(),
-        poll_structs.len() as libc::nfds_t,
+        poll_fds.as_mut_ptr(),
+        poll_fds.len() as libc::nfds_t,
         timeout_ms,
     )
 };
-if poll_error_code == -1 {
-    panic!("libc::poll failed: {}", io::Error::last_os_error());
-}
-// Invoke Wakers from WAKE_TIMES if their time has come.
-while let Some(entry) = wake_times.first_entry() {
-    if *entry.key() <= Instant::now() {
-        entry.remove().into_iter().for_each(Waker::wake);
-    } else {
-        break;
-    }
-}
-// Invoke all Wakers from POLL_FDS. This might wake futures that aren't
-// ready yet, but if so they'll register another wakeup. It's inefficient
-// but allowed.
-for (_raw_fd, waker) in poll_fds.drain(..) {
-    waker.wake();
+if poll_error_code < 0 {
+    return Err(io::Error::last_os_error());
 }
 ```
 
-Done?
+Last of all, we need to clear `POLL_FDS` invoke all the `POLL_WAKERS`.
+Tasks that are still `Pending` will re-register themselves when the main
+loop polls them again. Or as we can now officially call it, the _event
+loop_:
+
+```rust
+LINK: Playground playground://async_playground/client_server_poll.rs
+HIGHLIGHT: 1-4
+poll_fds.clear();
+for waker in poll_wakers.drain(..) {
+    waker.wake();
+}
+// Invoke Wakers from WAKE_TIMES if their time has come.
+while let Some(entry) = wake_times.first_entry() {
+    ...
+```
+
+It works!
 
 ---
 

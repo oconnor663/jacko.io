@@ -275,11 +275,12 @@ fn main() -> io::Result<()> {
                 timeout_ms,
             )
         };
-        if poll_error_code == -1 {
+        if poll_error_code < 0 {
             return Err(io::Error::last_os_error());
         }
-        // Invoke all Wakers from POLL_FDS. This might wake futures that aren't ready yet, but if
-        // so they'll register another wakeup. It's inefficient but allowed.
+        // Clear POLL_FDS and invoke all the Wakers from POLL_WAKERS. This might wake futures that
+        // aren't ready yet, but if so they'll register another wakeup.
+        poll_fds.clear();
         for waker in poll_wakers.drain(..) {
             waker.wake();
         }
