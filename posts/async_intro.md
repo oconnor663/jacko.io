@@ -188,7 +188,6 @@ Making a few calls to `foo` one at a time looks like this:[^tokio_main]
 
 ```rust
 LINK: Playground playground://async_playground/tokio.rs
-HIGHLIGHT: 3-5
 #[tokio::main]
 async fn main() {
     foo(1).await;
@@ -209,7 +208,6 @@ Making several calls at the same time looks like this:[^async_order]
 
 ```rust
 LINK: Playground playground://async_playground/tokio_10.rs
-HIGHLIGHT: 3-8
 #[tokio::main]
 async fn main() {
     let mut futures = Vec::new();
