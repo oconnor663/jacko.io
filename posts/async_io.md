@@ -188,7 +188,7 @@ library.[^three_quarters] [`TcpListener`] and [`TcpStream`] both have
 [`ErrorKind::WouldBlock`][error_kind] instead of blocking.
 
 [^three_quarters]: Well, it has three quarters of a solution. For the rest
-    we'll have to cheat&hellip;
+    we're gonna cheat&hellip;
 
 [`TcpListener`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html
 [`set_nonblocking`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_nonblocking
@@ -388,16 +388,22 @@ async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
 }
 ```
 
-On the reading side `Ok(0)` means end-of-file, but otherwise this is similar to
-`write_all` above. We're cheating a bit by assuming that printing doesn't
-block, but that's not so bad.
+`Ok(0)` means end-of-file for a read, but otherwise this is similar to
+`write_all` above.[^println]
+
+[^println]: We're cheating a little bit by assuming that printing doesn't
+    block, but that's not really any different from using `println!` in an
+    async function, which we've been doing the whole time. Realistically,
+    programs that write enough to stdout to fill their pipe buffer (`tar` or
+    `gzip` for example) can't make progress when their output is blocked
+    anyway, and it's common to ignore this.
 
 The other async building block we need for our client is `connect`, but that
 turns out to be much more difficult, for two reasons. First,
 `TcpStream::connect` creates a new stream, and there's no way for us to call
 `set_nonblocking` on that stream before `connect` talks to the
 network.[^socket2] Second, `connect` can include a DNS lookup, and async DNS is
-a whole can of worms.[^dns] So we're going to cheat again and just assume that
+a whole can of worms.[^dns] So we're going to cheat and just assume that
 `connect` doesn't block.[^huge_cheat]
 
 [^socket2]: We would need to solve this with the [`socket2`] crate, which
