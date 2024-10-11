@@ -198,9 +198,9 @@ after it's finished polling, but if we made `TASKS` global, then the main loop
 would lock it _during_ polling, and any task that called `spawn` would
 deadlock.
 
-We'll work around that with two separate lists. We'll keep the `tasks` list
-where it is, local to the main loop, and we'll add a global called
-`NEW_TASKS`:[^vec_deque]
+We'll work around that by maintaining two separate lists. We'll keep the
+`tasks` list where it is, local to the main loop, and we'll add a global list
+called `NEW_TASKS`. The `spawn` function can append to `NEW_TASKS`:[^vec_deque]
 
 [^vec_deque]: We could use a `VecDeque` instead of a `Vec` if we wanted to poll
     tasks in FIFO order instead of LIFO order. We could also use a [channel],
@@ -531,7 +531,7 @@ impl<T> Future for JoinHandle<T> {
 }
 ```
 
-At the other end of the communication, futures passed to `spawn` won't know
+At the other end of the communication, futures passed to `spawn` don't know
 anything about `JoinState`, so we need a wrapper function to handle their
 return values and invoke the `Waker` if there is one:[^async_block]
 
@@ -555,8 +555,8 @@ async fn wrap_with_join_state<F: Future>(
 }
 ```
 
-Now we'll use that wrapper in our `spawn` function, so that it accepts any
-`Output` type and returns a `JoinHandle`:[^send_bound]
+Now we can biuld a `JoinState` and apply that wrapper in `spawn`, so that it
+accepts any `Output` type and returns a `JoinHandle`:[^send_bound]
 
 [^send_bound]: `T` will need to be `Send` and `'static` just like `F`.
     Concretely, the future returned by `wrap_with_join_state` needs to be
@@ -616,9 +616,10 @@ async fn async_main() {
 }
 ```
 
-Now that we can control which tasks we're waiting on, we want our main loop to
-exit after the main task is finished. Let's split the main task out from the
-`tasks` list, which we can rename to `other_tasks`:[^eagle_eyed]
+Now that we can explicitly wait on a task, we don't need to wait for all of
+them automatically, and we want our main loop to exit after the main task is
+finished. Let's split the main task out from the `tasks` list, which we can
+rename to `other_tasks`:[^eagle_eyed]
 
 [^eagle_eyed]: Eagle-eyed readers might spot that we're no longer coercing
     `main_task` to a `DynFuture`. That means that `async_main` doesn't have to
@@ -749,8 +750,7 @@ the private implementation details of our main loop. Here's our glorified
     then only poll tasks that have woken up. We saw
     [`futures::future::JoinAll`][join_all] do something like this in Part One.
     We could even get this "for free" by replacing our tasks `Vec` with a
-    [`FuturesUnordered`]. This is left as an exercise for the reader, as they
-    say.
+    [`FuturesUnordered`].
 
 [join_all]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
 [`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
@@ -791,7 +791,7 @@ Now we can finally add the check in the main loop that started this whole
 discussion:[^another_deadlock]
 
 [^another_deadlock]: The reason I defined `.check_and_clear()` above, instead
-    of taking the `MutexGuard` here, is that we can create another deadlock if
+    of acquiring a `MutexGuard` here, is that we can create another deadlock if
     we forget to drop that guard. The last thing our main loop does is invoke
     `Wakers`, and `AwakeFlag::wake` takes the same lock.
 

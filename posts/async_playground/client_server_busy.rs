@@ -206,7 +206,7 @@ async fn client_main() -> io::Result<()> {
 }
 
 async fn async_main() -> io::Result<()> {
-    // Avoid a race between bind and connect by binding first.
+    // Avoid a race between bind and connect by binding before spawn.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
     listener.set_nonblocking(true)?;
     // Start the server on a background task.

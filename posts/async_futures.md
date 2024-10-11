@@ -49,6 +49,8 @@ async fn foo(n: u64) {
 
 We can rewrite it as a regular, non-async function that returns a struct:
 
+TODO: PUT ALL THE CODE UP FRONT HERE, THEN BREAK IT DOWN
+
 ```rust
 LINK: Playground playground://async_playground/foo.rs
 fn foo(n: u64) -> Foo {
@@ -305,7 +307,8 @@ knows that if it returns `Pending` we'll call it again later.
 Note that we're taking a shortcut by ignoring the outputs of child
 futures.[^payload] We're getting away with this because we only use our version
 of `join_all` with `foo`, which has no output. The real `join_all` returns
-`Vec<F::Output>`, which requires some more bookkeeping.
+`Vec<F::Output>`, which requires some more bookkeeping. This is left as an
+exercise for the reader, as they say.
 
 [^payload]: Specifically, when we call `.is_pending()` on the result of `poll`,
     we ignore any value that `Poll::Ready` might be carrying.
@@ -371,8 +374,9 @@ are no other futures below it,[^upside_down] and it needs to wake itself.
 
 It's finally time to make use of `poll`'s [`Context`] argument. If we call
 `context.waker()`, we get something called a [`Waker`].[^only_method] Calling
-either `waker.wake()` or `waker.wake_by_ref()` is how we ask for the current
-future to be polled again.[^task]
+either `waker.wake()` or `waker.wake_by_ref()` is how we ask to be polled
+again. Those two methods do the same thing, and we'll use whichever one is more
+convenient.[^efficiency]
 
 [`Context`]: https://doc.rust-lang.org/std/task/struct.Context.html
 [`Waker`]: https://doc.rust-lang.org/std/task/struct.Waker.html
@@ -386,8 +390,7 @@ future to be polled again.[^task]
 
 [possibility]: https://github.com/rust-lang/rust/pull/59119
 
-[^task]: Technically this wakes the current "task". We'll talk about tasks in
-    Part Two.
+[^efficiency]: TODO: FIND AN EXAMPLE CASE WHERE CONSUMING A WAKER BY VALUE IS MORE EFFICIENT
 
 The simplest thing we can try is immediately asking to be polled again every
 time we return `Pending`:
@@ -631,11 +634,11 @@ error[E0106]: missing lifetime specifier
   |            ^ expected named lifetime parameter
 ```
 
-What's the lifetime of `n_ref` supposed to be? The short answer is, there's
-no good answer.[^longer] Self-referential borrows are generally illegal in
-Rust structs, and there's no syntax for what `n_ref` is trying to do. If
-there were, we'd have to answer tricky questions about when we're allowed
-to mutate `n` and when we're allowed to move `Foo`.[^quote]
+What's the lifetime of `n_ref` supposed to be? The short answer is, there's no
+good answer.[^longer] Self-referential borrows are generally illegal in Rust
+structs, and there's no syntax for what `n_ref` is trying to do. If there were,
+we'd have to answer some tricky questions about when we're allowed to mutate
+`n` and when we're allowed to move `Foo`.[^quote]
 
 [^longer]: The longer answer is that we can hack a lifetime parameter onto
     `Foo`, but that makes it [impossible to do anything useful after we've
@@ -654,17 +657,16 @@ to mutate `n` and when we're allowed to move `Foo`.[^quote]
     express that an object is no longer allowed to be moved; in other words,
     that it is ‘pinned in place.'" - [without.boats/blog/pin][pin_post]
 
-But then, what sort of `Future` did the compiler generate for `async fn
-foo` above? Why did that work? It turns out that Rust does [some very
-unsafe things][erase] internally to erase inexpressible lifetimes like the
-one on `n_ref`.[^unsafe_pinned] The job of the `Pin` pointer-wrapper-type
-is to encapsulate that unsafety, so that we can write custom futures like
-`JoinAll` in safe code. The `Pin` struct works with the [`Unpin`] auto
-trait,[^auto_traits] which is implemented for most concrete types but not
-for the compiler-generated futures returned by `async` functions.
-Operations that might let us move pinned objects are either gated by
-`Unpin` ([`DerefMut`][pin_deref_mut]) or marked `unsafe`
-([`get_unchecked_mut`]).
+But then, what sort of `Future` did the compiler generate for `async fn foo`
+above? Why did that work? It turns out that Rust does [some very unsafe
+things][erase] internally to erase inexpressible lifetimes like the one on
+`n_ref`.[^unsafe_pinned] The job of the `Pin` pointer-wrapper-type is then to
+encapsulate that unsafety, so that we can write custom futures like `JoinAll`
+in safe code. The `Pin` struct works with the [`Unpin`] auto
+trait,[^auto_traits] which is implemented for most concrete types but not for
+the compiler-generated futures returned by `async` functions. Operations that
+might let us move pinned objects are either gated by `Unpin`
+([`DerefMut`][pin_deref_mut]) or marked `unsafe` ([`get_unchecked_mut`]).
 
 [erase]: https://tmandry.gitlab.io/blog/posts/optimizing-await-1/#generators-as-data-structures
 
@@ -699,11 +701,11 @@ Operations that might let us move pinned objects are either gated by
 [`get_unchecked_mut`]: https://doc.rust-lang.org/core/pin/struct.Pin.html#method.get_unchecked_mut
 [pin_deref_mut]: https://doc.rust-lang.org/core/pin/struct.Pin.html#impl-DerefMut-for-Pin%3CPtr%3E
 
-This is all we're going to say about `Pin`, because we're going to move on
-to tasks (Part Two) and IO (Part Three), and the nitty gritty details of
-pinning aren't critical for those topics. When you're ready for the whole
-story, start with [this post by the inventor of `Pin`][pin_post] and then
-read through [the official `Pin` docs][pin_docs].
+This is all we're going to say about `Pin`, because we're going to move on to
+tasks (Part Two) and IO (Part Three), and the nitty gritty details of pinning
+aren't going to come up. But if you want the whole story, start with [this post
+by the inventor of `Pin`][pin_post] and then read through [the official `Pin`
+docs][pin_docs].
 
 [pin_post]: https://without.boats/blog/pin
 [pin_docs]: https://doc.rust-lang.org/std/pin

@@ -31,7 +31,7 @@ fn client_main() -> io::Result<()> {
 }
 
 fn main() -> io::Result<()> {
-    // Avoid a race between bind and connect by binding first.
+    // Avoid a race between bind and connect by binding before spawn.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
     // Start the server on a background thread.
     thread::spawn(|| server_main(listener).unwrap());

@@ -13,12 +13,11 @@ Of course async/await wasn't invented just for efficient sleeping. Our goal all
 along has been IO, especially network IO. Now that we can build futures and
 tasks, we have all the tools we need to get some real work done.
 
-We're going to start with a toy server program and a client that talks to it.
-At first these will be ordinary, single-threaded, non-async examples. Then
-we'll use threads to combine the server and several clients into one example
-that we can run on the Playground. Once that combination is working, our main
-project will be to translate it into async, building on [the main loop we wrote
-in Part Two][part_two_impl].
+Let's go back to ordinary, non-async Rust for a moment. We'll start with a toy
+server program and a client that talks to it. Then we'll use threads to combine
+the server and several clients into one example that we can run on the
+Playground. Once that combination is working, we'll translate it into async,
+building on [the main loop we wrote in Part Two][part_two_impl].
 
 Here's our toy server:
 
@@ -80,7 +79,7 @@ input arrives.
 [`Write::write`]: https://doc.rust-lang.org/std/io/trait.Write.html#tymethod.write
 [`TcpStream`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html
 
-These programs can't talk to each other on the Playgroud, but if this is your
+These programs can't talk to each other on the Playgroud, so if this is your
 first time working with TCP in code, you might want to take some time to run
 them together on your computer, or even better on two different computers on
 your WiFi network.[^localhost] Seeing this work for the first time on a real
@@ -95,7 +94,7 @@ of The Book][ch20] might be helpful too.
 
 ## Threads
 
-Let's get this working on the playground by putting the client and server
+Let's get this working on the Playground by putting the client and server
 together in one program. Since they're both blocking, we'll have to run them on
 separate threads. We'll rename their `main` functions to `client_main` and
 `server_main`, and while we're at it we'll run ten clients together at the same
@@ -114,7 +113,7 @@ time:[^unwrap]
 ```rust
 LINK: Playground playground://async_playground/two_threaded_client_server.rs
 fn main() -> io::Result<()> {
-    // Avoid a race between bind and connect by binding first.
+    // Avoid a race between bind and connect by binding before spawn.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
     // Start the server on a background thread.
     thread::spawn(|| server_main(listener).unwrap());
@@ -184,7 +183,7 @@ to wake up when any input arrives.
 
 The first problem is easier, because Rust has a solution in the standard
 library.[^three_quarters] [`TcpListener`] and [`TcpStream`] both have
-[`set_nonblocking`] methods, which makes `accept`, `read`, and `write` return
+[`set_nonblocking`] methods, which make `accept`, `read`, and `write` return
 [`ErrorKind::WouldBlock`][error_kind] instead of blocking.
 
 [^three_quarters]: Well, it has three quarters of a solution. For the rest
@@ -248,9 +247,9 @@ non-blocking mode too,[^io_result] to get ready for async writes.
 
 [sleep_busy]: playground://async_playground/sleep_busy.rs
 
-Next let's implement those writes. If we were building our own Tokio, we'd
+Next let's implement those writes. If we were rebuilding all of Tokio, we'd
 define an [`AsyncWrite`] trait and make everything generic, but that's a lot of
-work. Instead, let's keep it short and hardcode that we're writing to a
+code. Instead, let's keep it short and hardcode that we're writing to a
 `TcpStream`:
 
 [^eintr]: And we're going to [assume that non-blocking calls never return
@@ -300,11 +299,19 @@ async fn write_all(
 
 `TcpStream::write` isn't guaranteed to consume the entire buffer, so we need to
 call it in a loop, bumping `buf` forward each time through. It's unlikely that
-we'll see a zero-length write with `TcpStream`, but if we do it's better for
-that to be an error than an infinite loop. The loop condition also means that
-we won't make any calls to `write` if `buf` is initially empty, which matches
-the default behavior of [`Write::write_all`].[^write_all]
+we'll see `Ok(0)` from `TcpStream`,[^ok_0] but if we do it's better for that to
+be an error than an infinite loop. The loop condition also means that we won't
+make any calls to `write` if `buf` is initially empty, which matches the
+default behavior of [`Write::write_all`].[^write_all]
 
+[^ok_0]: `Ok(0)` from a write means that either the input `buf` was empty,
+    which is ruled out by our `while` condition, or that the writer can't
+    accept more bytes. The latter mostly applies to not-real-IO writers like
+    [`&mut [u8]`][mut_u8_writer]. When real-IO writers like `TcpStream` or
+    `File` can't accept more bytes (because the other end is closed or the disk
+    is full) they usually indicate that with `Err` rather than `Ok(0)`.
+
+[mut_u8_writer]: https://doc.rust-lang.org/std/io/trait.Write.html#impl-Write-for-%26mut+%5Bu8%5D
 [`Write::write_all`]: https://doc.rust-lang.org/std/io/trait.Write.html#method.write_all
 
 [^write_all]: It would be nice to use `Write::write_all` directly here and get
@@ -346,7 +353,7 @@ server tasks, so we use `unwrap` to at least print to stderr if they fail.
 Previously we did that inside a closure, and here we do it inside an `async`
 block, which works like an anonymous `async fn` that takes no arguments.
 
-Fingers crossed that the server works! Now for the client.
+Hopefully that works. Now we need to translate the client so we can test it.
 
 We just did async writes, so let's do async reads. The counterpart of
 `Write::write_all` is [`Read::read_to_end`], but that's not quite what we want.
@@ -398,13 +405,13 @@ async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
     `gzip` for example) can't make progress when their output is blocked
     anyway, and it's common to ignore this.
 
-The other async building block we need for our client is `connect`, but that
-turns out to be much more difficult, for two reasons. First,
-`TcpStream::connect` creates a new stream, and there's no way for us to call
-`set_nonblocking` on that stream before `connect` talks to the
-network.[^socket2] Second, `connect` can include a DNS lookup, and async DNS is
-a whole can of worms.[^dns] So we're going to cheat and just assume that
-`connect` doesn't block.[^huge_cheat]
+The other async building block we need for our client is `connect`, but there
+are a couple of problems with that. First, `TcpStream::connect` creates a new
+stream, and there's no way for us to call `set_nonblocking` on that stream
+before `connect` talks to the network.[^socket2] Second, `connect` can include
+a DNS lookup, and async DNS is a whole can of worms.[^dns] Solving those
+problems here would be a lot of trouble without much benefit&hellip;so we're
+going to cheat and just assume that `connect` doesn't block.[^huge_cheat]
 
 [^socket2]: We would need to solve this with the [`socket2`] crate, which
     separates [`Socket::new`] from [`Socket::connect`].
@@ -451,7 +458,7 @@ And finally `async_main`:
 ```rust
 LINK: Playground playground://async_playground/client_server_busy.rs
 async fn async_main() -> io::Result<()> {
-    // Avoid a race between bind and connect by binding first.
+    // Avoid a race between bind and connect by binding before spawn.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
     listener.set_nonblocking(true)?;
     // Start the server on a background task.
