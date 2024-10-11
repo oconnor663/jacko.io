@@ -10,12 +10,12 @@
 - [Part Three: IO](async_io.html)
 
 Async/await, or "async IO", is a new-ish[^new_ish] language feature that lets
-our programs do more than one thing at a time. It's kind of an alternative to
-multithreading,[^threads] though Rust programs often use both. Async is
-especially popular with websites and network services that handle many
-connections at once,[^lots] because running lots of async "futures" or "tasks"
-is more efficient than running lots of threads. This series will be an
-introduction to futures, tasks, and async IO.
+our programs do more than one thing at a time. It's sort of an alternative to
+multithreading,[^threads] though Rust programs often use both. Async is popular
+with websites and network services that handle many connections at once,[^lots]
+because running lots of "futures" or "tasks" is more efficient than running
+lots of threads. This series will be an introduction to futures, tasks, and
+async IO.
 
 [^new_ish]: Rust has had async/await since 2019. For comparison, C# added
     async/await in 2012, Python added it in 2015, JS in 2017, and C++ in 2020.
@@ -37,20 +37,32 @@ introduction to futures, tasks, and async IO.
 
 [c10k]: https://en.wikipedia.org/wiki/C10k_problem
 
-If we think of threads as asking the OS and the hardware to do things in
+If we think of threads as asking our OS and our hardware to do things in
 parallel for us, then we can think of async/await as reorganizing our own code
 to do that ourselves. This requires both new high-level concepts and also new
-low-level machinery, and that combination tends to make async difficult to
-teach and difficult to learn. Rather than trying to do everything at once, this
-series will focus on the machinery.[^concurrency] We'll translate ("desugar")
-lots of async examples into ordinary Rust that we can run and understand.
+low-level machinery, and that combination can be overwhelming. This series will
+mostly skip the concepts and jump straight into the machinery.[^concurrency]
+We'll start by translating ("desugaring") async examples into ordinary Rust
+that we can run and understand, and gradually we'll build our own async
+"runtime".[^runtime]
 
-[^concurrency]: For example, we're not going to talk about "parallelism" vs
-    "concurrency". Different people learn differently, but I think it's easier
-    to understand those abstractions after you've written the code.
+[^concurrency]: For example, we're not going to talk about ["parallelism" vs
+    "concurrency"][parallelism_vs_concurrency] at all.
 
-In Rust maybe more than in other languages, async/await pulls out out all the
-tools in the language toolbox. In Part One alone we'll run into enums, traits,
+[parallelism_vs_concurrency]: https://en.wikipedia.org/wiki/Concurrency_(computer_science)#/media/File:Parallelism_vs_concurrency.png
+
+[^runtime]: For now, a "runtime" is a library or framework that we use to write
+    async programs. Building our own futures, tasks, and IO will gradually make
+    it clear what a runtime does for us. The async examples in this
+    introduction and in Part One will use the [Tokio] runtime. There are
+    several async runtimes available in Rust, but the differences between them
+    aren't important for this series. Tokio is the most popular and the most
+    widely supported.
+
+[Tokio]: https://tokio.rs/
+
+In Rust maybe more than in other languages, async/await pulls together all the
+tools in the language toolbox. In Part One alone we'll need enums, traits,
 generics, closures, iterators, and smart pointers. I'll assume that you've
 written some Rust before and that you've read [The Rust Programming
 Language][The Book] ("The Book") or similar.[^ch20] If not, you might want to
@@ -68,19 +80,8 @@ refer to [Rust By Example] whenever you see something new.[^books]
 
 [advice]: https://youtu.be/HgtRAbE1nBM?t=3913
 
-Most of our async examples will use the [Tokio] async
-"runtime".[^more_than_one] Building our own futures and tasks will help us
-understand what a runtime does, but for now we can just think of it as a
-library or framework that we use to write async programs.
-
-[Tokio]: https://tokio.rs/
-
-[^more_than_one]: There are several async runtimes available in Rust, but the
-    differences between them aren't important for this series. Tokio is the
-    most popular and the most widely supported, and it's a good default.
-
 Let's get started by doing more than one thing at a time with threads. This
-will go smoothly at first, but soon we'll run into trouble.
+will go smoothly at first, but then we'll run into trouble.
 
 ## Threads
 
