@@ -139,14 +139,14 @@ failed to spawn thread: Os { code: 11, kind: WouldBlock, message:
 ```
 
 Each thread uses a lot of memory,[^stack_space] so there's a limit on how many
-threads we can run at once. It's harder to see on the Playground, but we can
-also cause performance problems by [switching between lots of threads at
+threads we can spawn. It's harder to see on the Playground, but we can also
+cause performance problems by [switching between lots of threads at
 once][basketball_threads].[^basketball_demo] Threads are a fine way to run a
 few jobs in parallel, or even a few hundred, but for various reasons they don't
 scale well beyond that.[^thread_pool] If we want to run thousands of jobs at
 once, we need something different.
 
-[^stack_space]: Specifically, each thread allocates space for its "stack",
+[^stack_space]: In particular, each thread allocates space for its "stack",
     which is 8&nbsp;MiB by default on Linux. The OS uses fancy tricks to
     allocate this space "lazily", but it's still a lot if we spawn thousands of
     threads.
