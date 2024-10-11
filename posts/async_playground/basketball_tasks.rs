@@ -12,7 +12,8 @@ use tokio::sync::Barrier;
 const TASK_NUMS: &[usize] = &[1, 2, 4, 8, 16, 32, 64, 128, 256];
 const TARGET_BENCH_DURATION: Duration = Duration::from_millis(100);
 const BALLS_PER_CPU: usize = 8;
-const TOTAL_PASSES: u64 = (TARGET_BENCH_DURATION.as_nanos() / BUSY_TIME.as_nanos()) as u64;
+const TOTAL_PASSES: u64 =
+    (TARGET_BENCH_DURATION.as_nanos() / BUSY_TIME.as_nanos()) as u64;
 const BUSY_TIME: Duration = Duration::from_micros(1);
 
 struct Ball {

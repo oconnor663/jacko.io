@@ -19,7 +19,9 @@ impl Future for Sleep {
             let wake_time = self.wake_time;
             let waker = context.waker().clone();
             thread::spawn(move || {
-                thread::sleep(wake_time.saturating_duration_since(Instant::now()));
+                thread::sleep(
+                    wake_time.saturating_duration_since(Instant::now()),
+                );
                 waker.wake();
             });
             Poll::Pending

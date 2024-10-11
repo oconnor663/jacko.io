@@ -7,7 +7,8 @@ use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
 
-static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
+static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> =
+    Mutex::new(BTreeMap::new());
 
 struct Sleep {
     wake_time: Instant,
@@ -66,7 +67,10 @@ impl<T> Future for JoinHandle<T> {
     }
 }
 
-async fn wrap_with_join_state<F: Future>(future: F, join_state: Arc<Mutex<JoinState<F::Output>>>) {
+async fn wrap_with_join_state<F: Future>(
+    future: F,
+    join_state: Arc<Mutex<JoinState<F::Output>>>,
+) {
     let value = future.await;
     let mut guard = join_state.lock().unwrap();
     if let JoinState::Awaited(waker) = &*guard {
@@ -116,7 +120,9 @@ fn main() {
             return;
         }
         // Poll other tasks and remove any that are Ready.
-        let is_pending = |task: &mut DynFuture| task.as_mut().poll(&mut context).is_pending();
+        let is_pending = |task: &mut DynFuture| {
+            task.as_mut().poll(&mut context).is_pending()
+        };
         other_tasks.retain_mut(is_pending);
         // Some tasks might have spawned new tasks. Pop from NEW_TASKS until it's empty. Note that
         // we can't use while-let here, because that would keep NEW_TASKS locked in the loop body.

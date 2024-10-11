@@ -10,7 +10,8 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake, Waker};
 use std::time::{Duration, Instant};
 
-static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
+static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> =
+    Mutex::new(BTreeMap::new());
 
 struct Sleep {
     wake_time: Instant,
@@ -69,7 +70,10 @@ impl<T> Future for JoinHandle<T> {
     }
 }
 
-async fn wrap_with_join_state<F: Future>(future: F, join_state: Arc<Mutex<JoinState<F::Output>>>) {
+async fn wrap_with_join_state<F: Future>(
+    future: F,
+    join_state: Arc<Mutex<JoinState<F::Output>>>,
+) {
     let value = future.await;
     let mut guard = join_state.lock().unwrap();
     if let JoinState::Awaited(waker) = &*guard {
@@ -113,7 +117,11 @@ impl Wake for AwakeFlag {
 static POLL_FDS: Mutex<Vec<libc::pollfd>> = Mutex::new(Vec::new());
 static POLL_WAKERS: Mutex<Vec<Waker>> = Mutex::new(Vec::new());
 
-fn register_pollfd(context: &mut Context, fd: &impl AsRawFd, events: libc::c_short) {
+fn register_pollfd(
+    context: &mut Context,
+    fd: &impl AsRawFd,
+    events: libc::c_short,
+) {
     let mut poll_fds = POLL_FDS.lock().unwrap();
     let mut poll_wakers = POLL_WAKERS.lock().unwrap();
     poll_fds.push(libc::pollfd {
@@ -124,7 +132,9 @@ fn register_pollfd(context: &mut Context, fd: &impl AsRawFd, events: libc::c_sho
     poll_wakers.push(context.waker().clone());
 }
 
-async fn accept(listener: &mut TcpListener) -> io::Result<(TcpStream, SocketAddr)> {
+async fn accept(
+    listener: &mut TcpListener,
+) -> io::Result<(TcpStream, SocketAddr)> {
     std::future::poll_fn(|context| match listener.accept() {
         Ok((stream, addr)) => {
             stream.set_nonblocking(true)?;
@@ -139,7 +149,10 @@ async fn accept(listener: &mut TcpListener) -> io::Result<(TcpStream, SocketAddr
     .await
 }
 
-async fn write_all(mut buf: &[u8], stream: &mut TcpStream) -> io::Result<()> {
+async fn write_all(
+    mut buf: &[u8],
+    stream: &mut TcpStream,
+) -> io::Result<()> {
     std::future::poll_fn(|context| {
         while !buf.is_empty() {
             match stream.write(&buf) {
@@ -232,11 +245,14 @@ fn main() -> io::Result<()> {
     let mut other_tasks: Vec<DynFuture> = Vec::new();
     loop {
         // Poll the main task and exit immediately if it's done.
-        if let Poll::Ready(result) = main_task.as_mut().poll(&mut context) {
+        if let Poll::Ready(result) = main_task.as_mut().poll(&mut context)
+        {
             return result;
         }
         // Poll other tasks and remove any that are Ready.
-        let is_pending = |task: &mut DynFuture| task.as_mut().poll(&mut context).is_pending();
+        let is_pending = |task: &mut DynFuture| {
+            task.as_mut().poll(&mut context).is_pending()
+        };
         other_tasks.retain_mut(is_pending);
         // Some tasks might have spawned new tasks. Pop from NEW_TASKS until it's empty. Note that
         // we can't use while-let here, because that would keep NEW_TASKS locked in the loop body.

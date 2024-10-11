@@ -7,7 +7,8 @@ use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
 
-static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> = Mutex::new(BTreeMap::new());
+static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> =
+    Mutex::new(BTreeMap::new());
 
 struct Sleep {
     wake_time: Instant,

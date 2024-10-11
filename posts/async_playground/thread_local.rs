@@ -23,7 +23,8 @@ impl Future for Sleep {
             Poll::Ready(())
         } else {
             WAKE_TIMES.with_borrow_mut(|wake_times| {
-                let wakers_vec = wake_times.entry(self.wake_time).or_default();
+                let wakers_vec =
+                    wake_times.entry(self.wake_time).or_default();
                 wakers_vec.push(context.waker().clone());
                 Poll::Pending
             })
@@ -52,8 +53,11 @@ fn main() {
     let mut context = Context::from_waker(&waker);
     while joined_future.as_mut().poll(&mut context).is_pending() {
         WAKE_TIMES.with_borrow_mut(|wake_times| {
-            let next_wake = wake_times.keys().next().expect("sleep forever?");
-            thread::sleep(next_wake.saturating_duration_since(Instant::now()));
+            let next_wake =
+                wake_times.keys().next().expect("sleep forever?");
+            thread::sleep(
+                next_wake.saturating_duration_since(Instant::now()),
+            );
             while let Some(entry) = wake_times.first_entry() {
                 if *entry.key() <= Instant::now() {
                     entry.remove().into_iter().for_each(Waker::wake);

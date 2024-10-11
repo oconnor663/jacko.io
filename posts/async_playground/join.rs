@@ -17,7 +17,9 @@ impl<F: Future> Future for JoinAll<F> {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
-        let is_pending = |future: &mut Pin<Box<F>>| future.as_mut().poll(context).is_pending();
+        let is_pending = |future: &mut Pin<Box<F>>| {
+            future.as_mut().poll(context).is_pending()
+        };
         self.futures.retain_mut(is_pending);
         if self.futures.is_empty() {
             Poll::Ready(())

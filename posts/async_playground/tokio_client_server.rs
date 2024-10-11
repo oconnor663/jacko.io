@@ -18,7 +18,9 @@ async fn server_main(listener: TcpListener) -> io::Result<()> {
     let mut n = 1;
     loop {
         let (socket, _) = listener.accept().await?;
-        tokio::task::spawn(async move { one_response(socket, n).await.unwrap() });
+        tokio::task::spawn(async move {
+            one_response(socket, n).await.unwrap()
+        });
         n += 1;
     }
 }

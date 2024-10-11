@@ -15,7 +15,8 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 const FUTURE_NUMS: &[usize] = &[1, 2, 4, 8, 16, 32, 64, 128, 256];
 const TARGET_BENCH_DURATION: Duration = Duration::from_millis(100);
 const BALLS_PER_CPU: usize = 8;
-const TOTAL_PASSES: u64 = (TARGET_BENCH_DURATION.as_nanos() / BUSY_TIME.as_nanos()) as u64;
+const TOTAL_PASSES: u64 =
+    (TARGET_BENCH_DURATION.as_nanos() / BUSY_TIME.as_nanos()) as u64;
 const BUSY_TIME: Duration = Duration::from_micros(1);
 
 struct Ball {
@@ -85,9 +86,15 @@ async fn bench(num_futures: usize) -> Duration {
     let (trash_sender, mut trash_receiver) = channel(balls_in_flight());
     let passes_per_ball = TOTAL_PASSES / balls_in_flight() as u64;
     // Construct all the worker/passer futures.
-    let worker_futures = future::join_all(ball_receivers.into_iter().map(|receiver| {
-        pass_basketballs_around(receiver, &ball_senders, &trash_sender, passes_per_ball)
-    }));
+    let worker_futures =
+        future::join_all(ball_receivers.into_iter().map(|receiver| {
+            pass_basketballs_around(
+                receiver,
+                &ball_senders,
+                &trash_sender,
+                passes_per_ball,
+            )
+        }));
     // Construct the future that waits for all the balls to end up in the trash, i.e. what the main
     // thread was doing in the non-async version. This needs to run concurrently with the workers.
     let game_over_future = pin!(async {

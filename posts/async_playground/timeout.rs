@@ -20,7 +20,10 @@ struct Timeout<F> {
 impl<F: Future> Future for Timeout<F> {
     type Output = Option<F::Output>;
 
-    fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<Self::Output> {
+    fn poll(
+        mut self: Pin<&mut Self>,
+        context: &mut Context,
+    ) -> Poll<Self::Output> {
         if self.sleep.as_mut().poll(context).is_ready() {
             Poll::Ready(None)
         } else {
