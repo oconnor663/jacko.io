@@ -56,7 +56,7 @@ async fn main() {
 the same thing with threads][threads]. Like threads, but unlike ordinary
 futures, tasks start running in the background as soon as we `spawn` them. It's
 common in network services to have a main loop that listens for new connections
-and spawns a thread to handle each connection. Async tasks let us use this
+and spawns a thread to handle each connection. Async tasks let us use the same
 pattern without the performance overhead of threads.[^futures_unordered]
 
 [threads]: playground://async_playground/threads.rs
@@ -125,7 +125,7 @@ have to write this more than once:[^box]
 type DynFuture = Pin<Box<dyn Future<Output = ()>>>;
 ```
 
-Note that `DynFuture` doesn't have any type parameters. We can fit _any_ boxed
+Note that `DynFuture` doesn't have type parameters. We can fit _any_ boxed
 future into this _one_ type, as long as its `Output` is `()`. Now instead of
 building a `join_future` in our `main` function, we'll build a
 `Vec<DynFuture>`, and we'll start calling these futures "tasks":[^coercion]
@@ -181,7 +181,7 @@ we just copy/pasted from `JoinAll` and tweaked the types. But we've laid some
 important groundwork.
 
 Note that the behavior of this loop is somewhat different from how tasks work
-in Tokio. The same way a regular Rust program exits when the main thread is
+in Tokio. The same way a regular Rust program exits when the main _thread_ is
 done without waiting for background threads, a Tokio program also exits when
 the main _task_ is done without waiting for background tasks. However, this
 version of our main loop continues until _all_ tasks are done. It also assumes
@@ -190,17 +190,18 @@ that tasks have no return value. We'll fix both of these things when we get to
 
 ## Spawn
 
-The `spawn` function inserts another future into the tasks `Vec`. How should it
-access the `Vec`? It would be convenient if we could do the same thing we did
-with `WAKERS` and make `TASKS` a global variable protected by a `Mutex`, but
-that's not going to work this time. Our main loop only needs to lock `WAKERS`
-after it's finished polling, but if we made `TASKS` global, then the main loop
-would lock it _during_ polling, and any task that called `spawn` would
-deadlock.
+The `spawn` function is supposed to insert another future into the tasks `Vec`.
+How should it access the `Vec`? It would be convenient if we could do the same
+thing we did with `WAKERS` and make `TASKS` a global variable protected by a
+`Mutex`, but that's not going to work this time. Our main loop only needs to
+lock `WAKERS` after it's finished polling, but if we made `TASKS` global, then
+the main loop would lock it _during_ polling, and any task that called `spawn`
+would deadlock.
 
 We'll work around that by maintaining two separate lists. We'll keep the
 `tasks` list where it is, local to the main loop, and we'll add a global list
-called `NEW_TASKS`. The `spawn` function can append to `NEW_TASKS`:[^vec_deque]
+called `NEW_TASKS`. The `spawn` function will append to
+`NEW_TASKS`:[^vec_deque]
 
 [^vec_deque]: We could use a `VecDeque` instead of a `Vec` if we wanted to poll
     tasks in FIFO order instead of LIFO order. We could also use a [channel],
@@ -241,7 +242,9 @@ it's `Send`:
 [mutex_sync]: https://doc.rust-lang.org/std/sync/struct.Mutex.html#impl-Sync-for-Mutex%3CT%3E
 
 [^send_and_sync]: `Send` and `Sync` are the [thread safety marker
-    traits][send_and_sync] in Rust.
+    traits][send_and_sync] in Rust. Another way of putting this requirement is
+    that a `Mutex` is only safe to share with other threads if the obejct
+    inside of it is safe to move to other threads.
 
 [send_and_sync]: https://doc.rust-lang.org/book/ch16-04-extensible-concurrency-sync-and-send.html
 
@@ -303,7 +306,7 @@ global, it also has to promise that `F` is `'static`:[^spawn_vs_join]
 fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) { ... }
 ```
 
-It finally builds. That was a lot of ceremony just to make a global `Vec`, but
+Finally it builds. That was a lot of ceremony just to make a global `Vec`, but
 let's think about the meaning of what we wrote: Instead of a "`Vec` of
 futures", `NEW_TASKS` is a "`Vec` of thread-safe futures which don't hold any
 pointers that might become dangling." Rust doesn't have a garbage collector, so
@@ -327,7 +330,7 @@ poll new tasks as we collect them, rather than waiting until the next iteration
 of the main loop, so they get a chance to register wakeups before we
 sleep.[^wakeups] Second, we have to make sure that `NEW_TASKS` is unlocked
 before we poll, or else we'll recreate the same deadlock we were trying to
-avoid.[^deadlock] Here's the expanded main loop, with new code in the middle:
+avoid.[^deadlock] Here's the expanded main loop:
 
 [^wakeups]: We'd notice this mistake immediately below, after we added the
     `async_main` function that calls `spawn`. If our main loop didn't poll
@@ -337,9 +340,9 @@ avoid.[^deadlock] Here's the expanded main loop, with new code in the middle:
 [^deadlock]: Unfortunately this is an easy mistake to make. A method chain like
     `.lock().unwrap().pop()` creates a [`MutexGuard`] that lasts until the end
     of the current ["temporary scope"][rule]. In this example as written,
-    that's the semicolon after the `let-else`. But if we combined the inner
-    `loop` and the `let-else` into a `while let`, or if we replaced the
-    `let-else` with an `if let`, the guard would last until the end of the
+    that's the semicolon after the `let else`. But if we combined the inner
+    `loop` and the `let else` into a `while let`, or if we replaced the
+    `let else` with an `if let`, the guard would last until the end of the
     _block_, and we'd still be holding the lock when we called `poll`. If we
     made this mistake, and if we also made `foo` call `spawn` before its first
     `.await`, this example would deadlock. This is [an unfortunate footgun with
@@ -447,8 +450,8 @@ will lead to an interesting bug.
 
 `JoinHandle` needs to communicate between a task that's finishing and another
 task that's waiting for it to finish. The waiting side needs somewhere to put
-its `Waker`, so that the finishing side can invoke it.[^one_waker] The
-finishing side also needs somewhere to put its return value `T`, so that the
+its `Waker` so that the finishing side can invoke it,[^one_waker] and the
+finishing side needs somewhere to put its return value, `T`, so that the
 waiting side can receive it. We won't need both of those things at the same
 time, so we can use an `enum`. We need this `enum` to be shared and mutable, so
 we'll wrap it in an `Arc`[^arc] and a `Mutex`:[^rc_refcell]
@@ -689,35 +692,35 @@ The loop is about to `sleep`, so it asks for the next wake time, but the
 returned `Pending`, there must be at least one wake time registered, because
 the only source of blocking was `Sleep`. But now we have a second source of
 blocking: `JoinHandle`. If a `JoinHandle` is `Pending`, it could be because the
-other task is sleeping and has registered a wake time. However, it could also
-be that the other task is about to return `Ready` as soon as we poll it, and we
+other task is sleeping and will register a wake time. However, it could also be
+that the other task is about to return `Ready` as soon as we poll it, and we
 just haven't polled it yet. This is sensitive to the _order_ of our tasks list.
 If a task at the front is waiting on a task at the back, we might end up with
 `Pending` tasks and yet no wakeups scheduled.
 
-And that's exactly what's happened to us. Our main task is probably blocking on
-the first `JoinHandle`. The main loop wakes up, polls the main task, and that
+That's exactly what's happened to us. Our main task is probably blocking on the
+first `JoinHandle`. The main loop wakes up, polls the main task, and that
 handle is still `Pending`. Then it polls all the `other_tasks`. Each of them
 prints an "end" message, signals its `JoinHandle`, and returns `Ready`. At that
 point, we need to poll the main task again instead of trying to sleep. But how
 can the loop know that? Do we need to hack in another `static` flag? No,
-there's already a way to tell the main loop not to sleep: `Waker`!
+there's already a way to tell the main loop not to sleep: `Waker`.
 
 We've been using [`futures::task::noop_waker`] to supply a dummy `Waker` since
 Part One. When `Sleep` was the only source of blocking, there was nothing for
 the `Waker` to communicate, and all we needed was a placeholder to satisfy the
-compiler. But things have changed. Our `wrap_with_join_state` function is
-already invoking `Waker`s correctly when tasks finish, and now we want those
-`Waker`s to _do something_. How do we make our own `Waker`?
+compiler. But now things have changed. Our `wrap_with_join_state` function is
+already invoking `Waker`s correctly when tasks finish, and we need those
+`Waker`s to _do something_. How do we write our own `Waker`?
 
 [`futures::task::noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
 
 `Waker` implements `From<Arc<W>>`, where `W` is anything with the [`Wake`]
 trait, which requires a `wake` method.[^RawWaker] That method takes `self:
-Arc<Self>`, which is a little funny,[^clone] but apart from that we can do
-whatever we want with it. The simplest option is to build what's effectively an
-`Arc<Mutex<bool>>`[^atomic] and to set it to `true` when any task needs a
-wakeup.[^waker_per_task] That's not so different from a `static` flag, but in
+Arc<Self>`, which is a little funny,[^clone] but apart from that it can do
+whatever we like. The simplest option is to build what's effectively an
+`Arc<Mutex<bool>>`[^atomic] and to set it to `true` when any task has received
+a wakeup.[^waker_per_task] That's not so different from a `static` flag, but in
 theory other people's futures can invoke our `Waker` without needing to know
 the private implementation details of our main loop. Here's our glorified
 `bool`:
@@ -747,9 +750,9 @@ the private implementation details of our main loop. Here's our glorified
 [atomic_weapons]: https://www.youtube.com/watch?v=A8eCGOqgvH4
 
 [^waker_per_task]: We could also construct a unique `Waker` for each task and
-    then only poll tasks that have woken up. We saw
+    then only poll the tasks that received wakeups. We saw
     [`futures::future::JoinAll`][join_all] do something like this in Part One.
-    We could even get this "for free" by replacing our tasks `Vec` with a
+    We could get this "for free" by replacing our tasks `Vec` with a
     [`FuturesUnordered`].
 
 [join_all]: https://docs.rs/futures/latest/futures/future/fn.join_all.html

@@ -665,8 +665,7 @@ the main loop. It's a "foreign" function, so calling it is `unsafe`:[^fd_ub]
     (including for example reading from a file, which would advance its
     cursor), the worst that can happen here is a "spurious wakeup", where some
     event for an unrelated file wakes us up early. Our code already handles
-    busy loop polling, so spurious wakeups aren't a correctness issue, much
-    less undefined behavior.
+    busy loop polling, so it will handle spurious wakeups too.
 
 ```rust
 LINK: Playground playground://async_playground/client_server_poll.rs

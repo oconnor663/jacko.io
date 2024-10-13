@@ -494,7 +494,7 @@ many child futures,[^cutoff] it creates its own `Waker`s internally, which lets
 it tell which child asked for a wakeup. That's more efficient than polling all
 of them every time, but it means that children who invoke their own `Waker`
 will never get polled again. Thus the rule is that `Pending` futures must
-_always_ arrange to call `wake` somehow, even when they know main loop is
+_always_ arrange to call `wake` somehow, even when they know the main loop is
 waking up anyway.
 
 [^event_loop]: This is often called an "event loop", but right now all we have
