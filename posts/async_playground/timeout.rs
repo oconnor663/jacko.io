@@ -24,18 +24,20 @@ impl<F: Future> Future for Timeout<F> {
         mut self: Pin<&mut Self>,
         context: &mut Context,
     ) -> Poll<Self::Output> {
-        if self.sleep.as_mut().poll(context).is_ready() {
-            Poll::Ready(None)
-        } else {
-            match self.inner.as_mut().poll(context) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(output) => Poll::Ready(Some(output)),
-            }
+        // Check whether the inner future is finished.
+        if let Poll::Ready(output) = self.inner.as_mut().poll(context) {
+            return Poll::Ready(Some(output));
         }
+        // Check whether time is up.
+        if self.sleep.as_mut().poll(context).is_ready() {
+            return Poll::Ready(None);
+        }
+        // Still waiting.
+        Poll::Pending
     }
 }
 
-fn timeout<F: Future>(inner: F, duration: Duration) -> Timeout<F> {
+fn timeout<F: Future>(duration: Duration, inner: F) -> Timeout<F> {
     Timeout {
         sleep: Box::pin(tokio::time::sleep(duration)),
         inner: Box::pin(inner),
@@ -52,5 +54,5 @@ async fn main() {
         futures.push(foo(n));
     }
     let all = future::join_all(futures);
-    timeout(all, Duration::from_secs(1)).await;
+    timeout(Duration::from_secs(1), all).await;
 }

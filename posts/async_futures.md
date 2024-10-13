@@ -8,8 +8,9 @@
   - [Sleep](#sleep)
   - [Wake](#wake)
   - [Main](#main)
-  - [Aside: Pin](#aside__pin)
-  - [Aside: Superpowers](#aside__superpowers)
+  - [Bonus: Pin](#bonus__pin)
+  - [Bonus: Cancellation](#bonus__cancellation)
+  - [Bonus: Recursion](#bonus__recursion)
 - [Part Two: Tasks](async_tasks.html)
 - [Part Three: IO](async_io.html)
 
@@ -592,7 +593,7 @@ fn main() {
 
 This works, and it does everything on one thread.
 
-## Aside: Pin
+## Bonus: Pin
 
 Now that we know how to transform an `async fn` into a `Future` struct, we
 can say a bit more about `Pin` and the problem that it solves. Imagine our
@@ -710,15 +711,69 @@ docs][pin_docs].
 [pin_post]: https://without.boats/blog/pin
 [pin_docs]: https://doc.rust-lang.org/std/pin
 
-## Aside: Superpowers
+## Bonus: Cancellation
 
-TODO: cancellation and recursion
+Async functions look and feel a lot like regular functions, but they have a
+certain extra superpower, and there's another superpower that they're missing.
 
-[a `timeout()` example][timeout]
+The extra superpower they have is cancellation. When we call an ordinary
+function in non-async code, there's no general way for us to put a timeout on
+that call.[^thread_cancellation] But we can cancel any future by not polling it
+again. Tokio provides [`tokio::time::timeout`] for this, and we already have
+the tools to implement our own version:
 
-[timeout]: playground://async_playground/timeout.rs
+[^thread_cancellation]: We can spawn a new thread and call the function on that
+    thread, using a channel for example to wait for its return value with a
+    timeout. If the timeout passes, our main thread can go do something else,
+    but there's no general way to interrupt the background thread. One reason
+    this feature doesn't exist is that, if the interrupted thread was holding
+    any locks, those locks would never get unlocked. Lots of common libc
+    functions like `malloc` use locks internally, so forcefully killing threads
+    would tend to break the whole world. This is also why `fork` is difficult
+    to use correctly.
 
-Regular recursion doesn't work:
+[`tokio::time::timeout`]: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html
+
+TODO: FORK HARMFUL LINK
+
+```rust
+LINK: Playground playground://async_playground/timeout.rs
+struct Timeout<F> {
+    sleep: Pin<Box<tokio::time::Sleep>>,
+    inner: Pin<Box<F>>,
+}
+
+impl<F: Future> Future for Timeout<F> {
+    type Output = Option<F::Output>;
+
+    fn poll(
+        mut self: Pin<&mut Self>,
+        context: &mut Context,
+    ) -> Poll<Self::Output> {
+        // Check whether the inner future is finished.
+        if let Poll::Ready(output) = self.inner.as_mut().poll(context) {
+            return Poll::Ready(Some(output));
+        }
+        // Check whether time is up.
+        if self.sleep.as_mut().poll(context).is_ready() {
+            return Poll::Ready(None);
+        }
+        // Still waiting.
+        Poll::Pending
+    }
+}
+
+fn timeout<F: Future>(duration: Duration, inner: F) -> Timeout<F> {
+    Timeout {
+        sleep: Box::pin(tokio::time::sleep(duration)),
+        inner: Box::pin(inner),
+    }
+}
+```
+
+## Bonus: Recursion
+
+The missing superpower is recursion. If an async function tries to call itself:
 
 ```rust
 LINK: Playground playground://async_playground/compiler_errors/recursion.rs
@@ -731,8 +786,30 @@ async fn factorial(n: u64) -> u64 {
 }
 ```
 
-We need to box the thing:
+That's a compiler error:
 
+```
+LINK: Playground playground://async_playground/compiler_errors/recursion.rs
+error[E0733]: recursion in an async fn requires boxing
+ --> recursion.rs:1:1
+  |
+1 | async fn factorial(n: u64) -> u64 {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+5 |         n * factorial(n - 1).await
+  |             ---------------------- recursive call here
+  |
+  = note: a recursive `async fn` must introduce indirection such as `Box::pin` to avoid an infinitely sized future
+```
+
+When regular functions call other functions, they allocate space dynamically on
+the "call stack". But when futures await other futures, they get compiled into
+structs that contain other structs, and struct sizes are static.[^stackless] If
+an an async function calls itself, it has to `Box` the recursive future before
+awaiting it:
+
+[^stackless]: In other words, Rust futures are "stackless coroutines". In
+    contrast, "goroutines" in Go are "stackful".
 
 ```rust
 LINK: Playground playground://async_playground/boxed_recursion.rs
@@ -745,6 +822,8 @@ async fn factorial(n: u64) -> u64 {
     }
 }
 ```
+
+This works, but it requires heap allocation.
 
 ---
 
