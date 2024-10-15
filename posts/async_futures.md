@@ -808,8 +808,9 @@ structs that contain other structs, and struct sizes are static.[^stackless] If
 an an async function calls itself, it has to `Box` the recursive future before
 awaiting it:
 
-[^stackless]: In other words, Rust futures are "stackless coroutines". In
-    contrast, "goroutines" in Go are "stackful".
+[^stackless]: In other words, Rust futures are "stackless coroutines". For
+    comparison, "goroutines" in Go are "stackful", and they can do recursion
+    without any extra steps.
 
 ```rust
 LINK: Playground playground://async_playground/boxed_recursion.rs
