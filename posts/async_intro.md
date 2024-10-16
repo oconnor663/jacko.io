@@ -82,6 +82,7 @@ will go smoothly at first, but then we'll run into trouble.
 Here's an example function `foo` that takes a second to run:
 
 ```rust
+LINK: Playground ## playground://async_playground/threads.rs
 fn foo(n: u64) {
     println!("start {n}");
     thread::sleep(Duration::from_secs(1));
@@ -98,7 +99,7 @@ second instead of ten:[^threads_order]
     one will finish first.
 
 ```rust
-LINK: Playground playground://async_playground/threads.rs
+LINK: Playground ## playground://async_playground/threads.rs
 fn main() {
     let mut thread_handles = Vec::new();
     for n in 1..=10 {
@@ -126,7 +127,7 @@ threads][thousand_threads],[^thread_limit] it doesn't work anymore:
     this crash, but the Playground has tighter resource limits.
 
 ```
-LINK: Playground playground://async_playground/threads_1k.rs
+LINK: Playground ## playground://async_playground/threads_1k.rs
 thread 'main' panicked at /rustc/3f5fd8dd41153bc5fdca9427e9e05...
 failed to spawn thread: Os { code: 11, kind: WouldBlock, message:
 "Resource temporarily unavailable" }
@@ -168,6 +169,7 @@ details, but for now I just want to type it out and run it on the Playground.
 Our async `foo` function looks like this:[^tokio]
 
 ```rust
+LINK: Playground ## playground://async_playground/tokio.rs
 async fn foo(n: u64) {
     println!("start {n}");
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -189,7 +191,7 @@ Making a few calls to `foo` one at a time looks like this:[^tokio_main]
     that it's "the thing we put before `main` when we use Tokio."
 
 ```rust
-LINK: Playground playground://async_playground/tokio.rs
+LINK: Playground ## playground://async_playground/tokio.rs
 #[tokio::main]
 async fn main() {
     foo(1).await;
@@ -209,7 +211,7 @@ Making several calls at the same time looks like this:[^async_order]
 [new_tokio_timer]: https://tokio.rs/blog/2018-03-timers
 
 ```rust
-LINK: Playground playground://async_playground/tokio_10.rs
+LINK: Playground ## playground://async_playground/tokio_10.rs
 #[tokio::main]
 async fn main() {
     let mut futures = Vec::new();
@@ -259,7 +261,7 @@ in our async function:
 [`tokio::time::sleep`]: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
 
 ```rust
-LINK: Playground playground://async_playground/tokio_blocking.rs
+LINK: Playground ## playground://async_playground/tokio_blocking.rs
 async fn foo(n: u64) {
     println!("start {n}");
     thread::sleep(Duration::from_secs(1)); // Oops!
@@ -287,7 +289,7 @@ We can also try awaiting each future in a loop, like how we used `join` with
 threads above:
 
 ```rust
-LINK: Playground playground://async_playground/tokio_serial.rs
+LINK: Playground ## playground://async_playground/tokio_serial.rs
 HIGHLIGHT: 7-9
 #[tokio::main]
 async fn main() {

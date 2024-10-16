@@ -114,6 +114,9 @@ struct Output {
     // sorted map of offset to name
     footnote_references: BTreeMap<usize, Vec<String>>,
     markdown_filepath: PathBuf,
+    // map of Playground link occurrences, so that we can number them
+    // '##' in the text is the magic symbol to enable this
+    playground_counts: HashMap<CodeLink, u32>,
 }
 
 impl Output {
@@ -131,6 +134,7 @@ impl Output {
             footnotes: HashMap::new(),
             footnote_references: BTreeMap::new(),
             markdown_filepath: markdown_filepath.into(),
+            playground_counts: HashMap::new(),
         }
     }
 
@@ -252,10 +256,11 @@ impl Output {
         }
 
         if let Some(code_link) = &code_lines.link {
+            let text_with_counter = code_link.text_with_counter(&mut self.playground_counts);
             self.document_html += &format!(
                 r#"<div class="code_link"><a href="{}">{}</a></div>"#,
                 link_url_to_escaped_href(&code_link.url, &self.markdown_filepath)?,
-                html_escape::encode_text(&code_link.text),
+                html_escape::encode_text(&text_with_counter),
             );
         }
 
@@ -499,9 +504,28 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
         + FOOTER)
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct CodeLink {
     text: String,
     url: String,
+}
+
+impl CodeLink {
+    fn text_with_counter(&self, counters: &mut HashMap<CodeLink, u32>) -> String {
+        if !self.text.contains("##") {
+            return self.text.clone();
+        }
+        let count = match counters.get(self) {
+            Some(count) => *count,
+            None => {
+                let count = counters.len() as u32 + 1;
+                counters.insert(self.clone(), count);
+                count
+            }
+        };
+        let count_str = format!("#{}", count);
+        self.text.replace("##", &count_str)
+    }
 }
 
 struct HighlightedLines {
@@ -575,6 +599,7 @@ impl CodeLines {
             };
             if next_line.starts_with(link_tag) {
                 // Consume the "LINK: " line.
+                // Note that '##' replacement is done in `finish_code_block`.
                 let link_line = lines.next().unwrap();
                 let after_tag = &link_line[link_tag.len()..];
                 let (text, url) = after_tag.rsplit_once(' ').expect("no link text?");

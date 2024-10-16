@@ -40,7 +40,7 @@ fit in your head at once. Here we go.
 As a reminder, here's what `foo` looked like when it was an `async fn`:
 
 ```rust
-LINK: Playground playground://async_playground/tokio_10.rs
+LINK: Playground ## playground://async_playground/tokio_10.rs
 async fn foo(n: u64) {
     println!("start {n}");
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -53,7 +53,7 @@ We can rewrite it as a regular, non-async function that returns a struct:
 TODO: PUT ALL THE CODE UP FRONT HERE, THEN BREAK IT DOWN
 
 ```rust
-LINK: Playground playground://async_playground/foo.rs
+LINK: Playground ## playground://async_playground/foo.rs
 fn foo(n: u64) -> Foo {
     let sleep_future = tokio::time::sleep(Duration::from_secs(1));
     Foo {
@@ -90,7 +90,7 @@ the struct first:
 [`Box::pin`]: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.pin
 
 ```rust
-LINK: Playground playground://async_playground/foo.rs
+LINK: Playground ## playground://async_playground/foo.rs
 struct Foo {
     n: u64,
     started: bool,
@@ -152,7 +152,7 @@ mind, here's where the magic happens:
 [`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
 
 ```rust
-LINK: Playground playground://async_playground/foo.rs
+LINK: Playground ## playground://async_playground/foo.rs
 impl Future for Foo {
     type Output = ();
 
@@ -256,7 +256,7 @@ function too:[^always_was]
 [upstream]: https://docs.rs/futures-util/0.3.30/src/futures_util/future/join_all.rs.html#102-105
 
 ```rust
-LINK: Playground playground://async_playground/join.rs
+LINK: Playground ## playground://async_playground/join.rs
 struct JoinAll<F> {
     futures: Vec<Pin<Box<F>>>,
 }
@@ -324,7 +324,7 @@ implement our own `sleep`:[^narrator]
 [^narrator]: Narrator: They did not have everything they needed.
 
 ```rust
-LINK: Playground playground://async_playground/sleep_forever.rs
+LINK: Playground ## playground://async_playground/sleep_forever.rs
 struct Sleep {
     wake_time: Instant,
 }
@@ -397,7 +397,7 @@ The simplest thing we can try is immediately asking to be polled again every
 time we return `Pending`:
 
 ```rust
-LINK: Playground playground://async_playground/sleep_busy.rs
+LINK: Playground ## playground://async_playground/sleep_busy.rs
 HIGHLIGHT: 5
 fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
     if Instant::now() >= self.wake_time {
@@ -465,7 +465,7 @@ loop:
     does nothing.
 
 ```rust
-LINK: Playground playground://async_playground/loop.rs
+LINK: Playground ## playground://async_playground/loop.rs
 fn main() {
     let mut futures = Vec::new();
     for n in 1..=10 {
@@ -520,7 +520,7 @@ it in a `Mutex` if we want to mutate it from safe code:[^thread_local]
 [thread_local]: playground://async_playground/thread_local.rs
 
 ```rust
-LINK: Playground playground://async_playground/wakers.rs
+LINK: Playground ## playground://async_playground/wakers.rs
 static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> =
     Mutex::new(BTreeMap::new());
 ```
@@ -539,7 +539,7 @@ map in `Sleep::poll`:[^or_default]
 [`or_default`]: https://doc.rust-lang.org/std/collections/btree_map/enum.Entry.html#method.or_default
 
 ```rust
-LINK: Playground playground://async_playground/wakers.rs
+LINK: Playground ## playground://async_playground/wakers.rs
 HIGHLIGHT: 5-7
 fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
     if Instant::now() >= self.wake_time {
@@ -566,7 +566,7 @@ has passed, before polling again:
 [`thread::park_timeout`]: https://doc.rust-lang.org/std/thread/fn.park_timeout.html
 
 ```rust
-LINK: Playground playground://async_playground/wakers.rs
+LINK: Playground ## playground://async_playground/wakers.rs
 HIGHLIGHT: 10-19
 fn main() {
     let mut futures = Vec::new();
@@ -600,7 +600,7 @@ can say a bit more about `Pin` and the problem that it solves. Imagine our
 `async fn foo` took a reference internally for some reason:
 
 ```rust
-LINK: Playground playground://async_playground/tokio_ref.rs
+LINK: Playground ## playground://async_playground/tokio_ref.rs
 HIGHLIGHT: 2,3,5
 async fn foo(n: u64) {
     let n_ref = &n;
@@ -614,7 +614,7 @@ That compiles and runs just fine, and it looks like perfectly ordinary Rust
 code. But what would the same change look like on our `Foo` future?
 
 ```rust
-LINK: Playground playground://async_playground/compiler_errors/foo_ref.rs
+LINK: Playground ## playground://async_playground/compiler_errors/foo_ref.rs
 HIGHLIGHT: 2,3
 struct Foo {
     n: u64,
@@ -627,7 +627,7 @@ struct Foo {
 That doesn't compile:
 
 ```
-LINK: Playground playground://async_playground/compiler_errors/foo_ref.rs
+LINK: Playground ## playground://async_playground/compiler_errors/foo_ref.rs
 error[E0106]: missing lifetime specifier
  --> src/main.rs:3:12
   |
@@ -736,7 +736,7 @@ the tools to implement our own version:
 [`tokio::time::timeout`]: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html
 
 ```rust
-LINK: Playground playground://async_playground/timeout.rs
+LINK: Playground ## playground://async_playground/timeout.rs
 struct Timeout<F> {
     sleep: Pin<Box<tokio::time::Sleep>>,
     inner: Pin<Box<F>>,
@@ -775,7 +775,7 @@ fn timeout<F: Future>(duration: Duration, inner: F) -> Timeout<F> {
 The missing superpower is recursion. If an async function tries to call itself:
 
 ```rust
-LINK: Playground playground://async_playground/compiler_errors/recursion.rs
+LINK: Playground ## playground://async_playground/compiler_errors/recursion.rs
 async fn factorial(n: u64) -> u64 {
     if n == 0 {
         1
@@ -788,7 +788,7 @@ async fn factorial(n: u64) -> u64 {
 That's a compiler error:
 
 ```
-LINK: Playground playground://async_playground/compiler_errors/recursion.rs
+LINK: Playground ## playground://async_playground/compiler_errors/recursion.rs
 error[E0733]: recursion in an async fn requires boxing
  --> recursion.rs:1:1
   |
@@ -812,7 +812,7 @@ awaiting it:
     without any extra steps.
 
 ```rust
-LINK: Playground playground://async_playground/boxed_recursion.rs
+LINK: Playground ## playground://async_playground/boxed_recursion.rs
 async fn factorial(n: u64) -> u64 {
     if n == 0 {
         1

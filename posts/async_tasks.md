@@ -16,7 +16,7 @@ Luckily, we've already seen one, though we didn't call it that. The last
 version of our main loop in Part One looked like this:
 
 ```rust
-LINK: Playground playground://async_playground/wakers.rs
+LINK: Playground ## playground://async_playground/wakers.rs
 HIGHLIGHT: 1,4,6
 let mut joined_future = Box::pin(future::join_all(futures));
 let waker = futures::task::noop_waker();
@@ -38,7 +38,7 @@ example][tokio_10] using `spawn` instead of `join_all`:
 [tokio_10]: playground://async_playground/tokio_10.rs
 
 ```rust
-LINK: Playground playground://async_playground/tokio_tasks.rs
+LINK: Playground ## playground://async_playground/tokio_tasks.rs
 HIGHLIGHT: 3-9
 #[tokio::main]
 async fn main() {
@@ -137,7 +137,7 @@ building a `join_future` in our `main` function, we'll build a
 ["unsized coercion"]: https://doc.rust-lang.org/reference/type-coercions.html#unsized-coercions
 
 ```rust
-LINK: Playground playground://async_playground/tasks_no_spawn.rs
+LINK: Playground ## playground://async_playground/tasks_no_spawn.rs
 HIGHLIGHT: 2-5
 fn main() {
     let mut tasks: Vec<DynFuture> = Vec::new();
@@ -156,7 +156,7 @@ polling, then check whether we're done, then handle `Waker`s. Now it looks like
 this:
 
 ```rust
-LINK: Playground playground://async_playground/tasks_no_spawn.rs
+LINK: Playground ## playground://async_playground/tasks_no_spawn.rs
 HIGHLIGHT: 3-16
     let waker = futures::task::noop_waker();
     let mut context = Context::from_waker(&waker);
@@ -213,7 +213,7 @@ called `NEW_TASKS`. The `spawn` function will append to
 [`OnceLock`]: https://doc.rust-lang.org/stable/std/sync/struct.OnceLock.html
 
 ```rust
-LINK: Playground playground://async_playground/compiler_errors/tasks_no_send_no_static.rs
+LINK: Playground ## playground://async_playground/compiler_errors/tasks_no_send_no_static.rs
 static NEW_TASKS: Mutex<Vec<DynFuture>> = Mutex::new(Vec::new());
 
 fn spawn<F: Future<Output = ()>>(future: F) {
@@ -224,7 +224,7 @@ fn spawn<F: Future<Output = ()>>(future: F) {
 Now the main loop can&hellip;wait that doesn't build:
 
 ```
-LINK: Playground playground://async_playground/compiler_errors/tasks_no_send_no_static.rs
+LINK: Playground ## playground://async_playground/compiler_errors/tasks_no_send_no_static.rs
 error[E0277]: `(dyn Future<Output = ()> + 'static)` cannot be sent between threads safely
     --> tasks_no_send_no_static.rs:43:19
      |
@@ -255,7 +255,7 @@ type DynFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
 Ok, now the&hellip;nope it still doesn't build:
 
 ```
-LINK: Playground playground://async_playground/compiler_errors/tasks_one_send_no_static.rs
+LINK: Playground ## playground://async_playground/compiler_errors/tasks_one_send_no_static.rs
 error[E0277]: `F` cannot be sent between threads safely
   --> src/main.rs:46:36
    |
@@ -275,7 +275,7 @@ fn spawn<F: Future<Output = ()> + Send>(future: F) { ... }
 Happy yet? Nope:
 
 ```
-LINK: Playground playground://async_playground/compiler_errors/tasks_no_static.rs
+LINK: Playground ## playground://async_playground/compiler_errors/tasks_no_static.rs
 error[E0310]: the parameter type `F` may not live long enough
   --> src/main.rs:46:36
    |
@@ -372,7 +372,7 @@ avoid.[^deadlock] Here's the expanded main loop:
 [lint]: https://rust-lang.github.io/rust-clippy/master/index.html#/significant_drop_in_scrutinee
 
 ```rust
-LINK: Playground playground://async_playground/tasks_no_join.rs
+LINK: Playground ## playground://async_playground/tasks_no_join.rs
 HIGHLIGHT: 8-17
 loop {
     // Poll each task, removing any that are Ready.
@@ -405,7 +405,7 @@ With all that in place, instead of hardcoding all whole task list in `main`, we
 can define an `async_main` function and let it do the spawning:
 
 ```rust
-LINK: Playground playground://async_playground/tasks_no_join.rs
+LINK: Playground ## playground://async_playground/tasks_no_join.rs
 HIGHLIGHT: 1-6,11
 async fn async_main() {
     // The main loop currently waits for all tasks to finish.
@@ -479,7 +479,7 @@ we'll wrap it in an `Arc`[^arc] and a `Mutex`:[^rc_refcell]
     `Mutex`.
 
 ```rust
-LINK: Playground playground://async_playground/tasks_noop_waker.rs
+LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 enum JoinState<T> {
     Unawaited,
     Awaited(Waker),
@@ -514,7 +514,7 @@ need to replace the whole `JoinState` with [`mem::replace`]:[^mem_take]
 [soundness]: https://github.com/rust-lang/rfcs/pull/1736#issuecomment-1311564676
 
 ```rust
-LINK: Playground playground://async_playground/tasks_noop_waker.rs
+LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 impl<T> Future for JoinHandle<T> {
     type Output = T;
 
@@ -544,7 +544,7 @@ return values and invoke the `Waker` if there is one:[^async_block]
     below and make it an async block.
 
 ```rust
-LINK: Playground playground://async_playground/tasks_noop_waker.rs
+LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 async fn wrap_with_join_state<F: Future>(
     future: F,
     join_state: Arc<Mutex<JoinState<F::Output>>>,
@@ -569,7 +569,7 @@ accepts any `Output` type and returns a `JoinHandle`:[^send_bound]
     the first time.
 
 ```rust
-LINK: Playground playground://async_playground/tasks_noop_waker.rs
+LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 fn spawn<F, T>(future: F) -> JoinHandle<T>
 where
     F: Future<Output = T> + Send + 'static,
@@ -607,7 +607,7 @@ similar to how we used Tokio tasks above:[^unwrap]
 [`std::panic::catch_unwind`]: https://doc.rust-lang.org/std/panic/fn.catch_unwind.html
 
 ```rust
-LINK: Playground playground://async_playground/tasks_noop_waker.rs
+LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 async fn async_main() {
     let mut task_handles = Vec::new();
     for n in 1..=10 {
@@ -631,7 +631,7 @@ rename to `other_tasks`:[^eagle_eyed]
     anymore either, but we won't mess with that.
 
 ```rust
-LINK: Playground playground://async_playground/tasks_noop_waker.rs
+LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 HIGHLIGHT: 4-15
 fn main() {
     let waker = futures::task::noop_waker();
@@ -662,7 +662,7 @@ correct output, but then it panics:
 [iocaine]: https://www.youtube.com/watch?v=rMz7JBRbmNo
 
 ```
-LINK: Playground playground://async_playground/tasks_noop_waker.rs
+LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 HIGHLIGHT: 2-6
 ...
 end 3
@@ -680,7 +680,7 @@ The panic is coming from this line, which has been in our main loop since the
 end of Part One:
 
 ```rust
-LINK: Playground playground://async_playground/tasks_noop_waker.rs
+LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 HIGHLIGHT: 2
 let mut wake_times = WAKE_TIMES.lock().unwrap();
 let next_wake = wake_times.keys().next().expect("sleep forever?");
@@ -759,7 +759,7 @@ the private implementation details of our main loop. Here's our glorified
 [`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
 
 ```rust
-LINK: Playground playground://async_playground/tasks.rs
+LINK: Playground ## playground://async_playground/tasks.rs
 struct AwakeFlag(Mutex<bool>);
 
 impl AwakeFlag {
@@ -781,7 +781,7 @@ impl Wake for AwakeFlag {
 We can create an `AwakeFlag` and make a `Waker` with it at the start of `main`:
 
 ```rust
-LINK: Playground playground://async_playground/tasks.rs
+LINK: Playground ## playground://async_playground/tasks.rs
 HIGHLIGHT: 2-4
 fn main() {
     let awake_flag = Arc::new(AwakeFlag(Mutex::new(false)));
@@ -799,7 +799,7 @@ discussion:[^another_deadlock]
     `Wakers`, and `AwakeFlag::wake` takes the same lock.
 
 ```rust
-LINK: Playground playground://async_playground/tasks.rs
+LINK: Playground ## playground://async_playground/tasks.rs
 HIGHLIGHT: 11-15
 // Collect new tasks, poll them, and keep the ones that are Pending.
 loop {

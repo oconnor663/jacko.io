@@ -22,7 +22,7 @@ building on [the main loop we wrote in Part Two][part_two_impl].
 Here's our toy server:
 
 ```rust
-LINK: Playground playground://async_playground/single_threaded_server.rs
+LINK: Playground ## playground://async_playground/single_threaded_server.rs
 fn main() -> io::Result<()> {
     let listener = TcpListener::bind("0.0.0.0:8000")?;
     let mut n = 1;
@@ -59,7 +59,7 @@ message.[^writeln] Here's the client for our toy server:
     read, but in small examples like these it generally does.
 
 ```rust
-LINK: Playground playground://async_playground/single_threaded_client.rs
+LINK: Playground ## playground://async_playground/single_threaded_client.rs
 fn main() -> io::Result<()> {
     let mut socket = TcpStream::connect("localhost:8000")?;
     io::copy(&mut socket, &mut io::stdout())?;
@@ -111,7 +111,7 @@ time:[^unwrap]
     better than nothing.
 
 ```rust
-LINK: Playground playground://async_playground/two_threaded_client_server.rs
+LINK: Playground ## playground://async_playground/two_threaded_client_server.rs
 fn main() -> io::Result<()> {
     // Avoid a race between bind and connect by binding before spawn.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
@@ -141,7 +141,7 @@ request:[^move]
     to `n` would become dangling.
 
 ```rust
-LINK: Playground playground://async_playground/threads_client_server.rs
+LINK: Playground ## playground://async_playground/threads_client_server.rs
 HIGHLIGHT: 1, 7-17
 fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     let start_msg = format!("start {n}\n");
@@ -220,7 +220,7 @@ There's `accept` and `write` on the server side, and there's `connect` and
 [outlives_trick]: https://rust-lang.github.io/rfcs/3498-lifetime-capture-rules-2024.html#the-outlives-trick
 
 ```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
+LINK: Playground ## playground://async_playground/client_server_busy.rs
 async fn accept(
     listener: &mut TcpListener,
 ) -> io::Result<(TcpStream, SocketAddr)> {
@@ -271,7 +271,7 @@ code. Instead, let's keep it short and hardcode that we're writing to a
 [RFC 3058]: https://rust-lang.github.io/rfcs/3058-try-trait-v2.html
 
 ```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
+LINK: Playground ## playground://async_playground/client_server_busy.rs
 async fn write_all(
     mut buf: &[u8],
     stream: &mut TcpStream,
@@ -327,7 +327,7 @@ Those are the async building blocks we needed for the server, and now we can
 write the async version of `server_main`:
 
 ```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
+LINK: Playground ## playground://async_playground/client_server_busy.rs
 HIGHLIGHT: 1, 3-4, 6, 10, 13-14
 async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     let start_msg = format!("start {n}\n");
@@ -374,7 +374,7 @@ hardcode the printing. We'll call our function `print_all`:[^copy]
 [`AsyncWrite`]: https://docs.rs/tokio/latest/tokio/io/trait.AsyncWrite.html
 
 ```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
+LINK: Playground ## playground://async_playground/client_server_busy.rs
 async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
     let mut buf = [0; 1024];
     std::future::poll_fn(|context| {
@@ -443,7 +443,7 @@ So, with one real async building block and one blatant lie, we can write
 `client_main`:
 
 ```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
+LINK: Playground ## playground://async_playground/client_server_busy.rs
 async fn client_main() -> io::Result<()> {
     // XXX: Assume that connect() returns quickly.
     let mut socket = TcpStream::connect("localhost:8000")?;
@@ -456,7 +456,7 @@ async fn client_main() -> io::Result<()> {
 And finally `async_main`:
 
 ```rust
-LINK: Playground playground://async_playground/client_server_busy.rs
+LINK: Playground ## playground://async_playground/client_server_busy.rs
 async fn async_main() -> io::Result<()> {
     // Avoid a race between bind and connect by binding before spawn.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
@@ -581,7 +581,7 @@ function to populate them:[^lock_order]
     before `POLL_WAKERS` here, so we'll do the same in `main`.
 
 ```rust
-LINK: Playground playground://async_playground/client_server_poll.rs
+LINK: Playground ## playground://async_playground/client_server_poll.rs
 static POLL_FDS: Mutex<Vec<libc::pollfd>> = Mutex::new(Vec::new());
 static POLL_WAKERS: Mutex<Vec<Waker>> = Mutex::new(Vec::new());
 
@@ -606,7 +606,7 @@ Now our async IO functions can call `register_pollfd` instead of `wake_by_ref`.
 `POLLIN`:
 
 ```rust
-LINK: Playground playground://async_playground/client_server_poll.rs
+LINK: Playground ## playground://async_playground/client_server_poll.rs
 HIGHLIGHT: 2
 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
     register_pollfd(context, stream, libc::POLLIN);
@@ -617,7 +617,7 @@ Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
 `write_all` is a write, so it'll handle `WouldBlock` by setting `POLLOUT`:
 
 ```rust
-LINK: Playground playground://async_playground/client_server_poll.rs
+LINK: Playground ## playground://async_playground/client_server_poll.rs
 HIGHLIGHT: 2
 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
     register_pollfd(context, stream, libc::POLLOUT);
@@ -634,7 +634,7 @@ need to convert it to milliseconds:
     can wait on IO in addition to sleeping, waiting forever is valid.
 
 ```rust
-LINK: Playground playground://async_playground/client_server_poll.rs
+LINK: Playground ## playground://async_playground/client_server_poll.rs
 HIGHLIGHT: 6-15
 // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been
 // set. Polling futures that aren't ready yet is inefficient but allowed.
@@ -668,7 +668,7 @@ the main loop. It's a "foreign" function, so calling it is `unsafe`:[^fd_ub]
     busy loop polling, so it will handle spurious wakeups too.
 
 ```rust
-LINK: Playground playground://async_playground/client_server_poll.rs
+LINK: Playground ## playground://async_playground/client_server_poll.rs
 let mut poll_fds = POLL_FDS.lock().unwrap();
 let mut poll_wakers = POLL_WAKERS.lock().unwrap();
 let poll_error_code = unsafe {
@@ -689,7 +689,7 @@ every time, and tasks that aren't `Ready` will re-register themselves in
 `POLL_FDS` before the next sleep.
 
 ```rust
-LINK: Playground playground://async_playground/client_server_poll.rs
+LINK: Playground ## playground://async_playground/client_server_poll.rs
 HIGHLIGHT: 1-4
 poll_fds.clear();
 for waker in poll_wakers.drain(..) {
