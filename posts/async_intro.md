@@ -53,13 +53,7 @@ that we can run and understand, and gradually we'll build our own async
 
 [^runtime]: For now, a "runtime" is a library or framework that we use to write
     async programs. Building our own futures, tasks, and IO will gradually make
-    it clear what a runtime does for us. The async examples in this
-    introduction and in Part One will use the [Tokio] runtime. There are
-    several async runtimes available in Rust, but the differences between them
-    aren't important for this series. Tokio is the most popular and the most
-    widely supported.
-
-[Tokio]: https://tokio.rs/
+    it clear what a runtime does for us.
 
 In Rust maybe more than in other languages, async/await pulls together all the
 tools in the language toolbox. In Part One alone we'll need enums, traits,
@@ -171,7 +165,7 @@ once, we need something different.
 
 Let's try the same thing with async/await. Part Two will go into all the
 details, but for now I just want to type it out and run it on the Playground.
-Our async `foo` function looks like this:
+Our async `foo` function looks like this:[^tokio]
 
 ```rust
 async fn foo(n: u64) {
@@ -180,6 +174,13 @@ async fn foo(n: u64) {
     println!("end {n}");
 }
 ```
+
+[^tokio]: The async examples in this introduction and in Part One will use the
+    [Tokio] runtime. There are several async runtimes available in Rust, but
+    the differences between them aren't important for this series. Tokio is the
+    most popular and the most widely supported.
+
+[Tokio]: https://tokio.rs/
 
 Making a few calls to `foo` one at a time looks like this:[^tokio_main]
 
@@ -282,7 +283,8 @@ the nitty gritty details of how exactly this works.
 [reddit_blocking_comment]: https://www.reddit.com/r/rust/comments/ebfj3x/stop_worrying_about_blocking_the_new_asyncstd/fb4i9z5/
 [tokio_blocking_note]: https://tokio.rs/blog/2020-04-preemption#a-note-on-blocking
 
-TODO: This also doesn't work:
+We can also try awaiting each future in a loop, like how we used `join` with
+threads above:
 
 ```rust
 LINK: Playground playground://async_playground/tokio_serial.rs
@@ -298,6 +300,12 @@ async fn main() {
     }
 }
 ```
+
+This also doesn't work! What we're seeing is that futures don't automatically
+do any work "in the background". Instead, they do their work when we await
+them, so if we await them one-at-a-time, they'll do their work one-at-a-time.
+Somehow, `future::join_all` is letting us await all of them at once. We'll see
+how in Part One.
 
 ---
 
