@@ -729,12 +729,11 @@ the tools to implement our own version:
     this feature doesn't exist is that, if the interrupted thread was holding
     any locks, those locks would never get unlocked. Lots of common libc
     functions like `malloc` use locks internally, so forcefully killing threads
-    would tend to break the whole world. This is also why `fork` is difficult
-    to use correctly.
+    would tend to break the whole world. This is also why [`fork` is difficult
+    to use correctly][fork].
 
+[fork]: https://www.microsoft.com/en-us/research/uploads/prod/2019/04/fork-hotos19.pdf
 [`tokio::time::timeout`]: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html
-
-TODO: FORK HARMFUL LINK
 
 ```rust
 LINK: Playground playground://async_playground/timeout.rs
