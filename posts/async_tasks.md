@@ -743,7 +743,7 @@ the private implementation details of our main loop. Here's our glorified
 [^atomic]: Using [`AtomicBool`] for this would be more efficient, but `Mutex`
     is more familiar and good enough. If you want a three hour deep dive on
     atomics, listen to ["atomic<> Weapons" by Herb Sutter][atomic_weapons].
-    That talk is focused on C++, but C and Rust both stole their atomic memory
+    That talk is focused on C++, but Rust and C both stole their atomic memory
     models from C++ anyway.
 
 [`AtomicBool`]: https://doc.rust-lang.org/std/sync/atomic/struct.AtomicBool.html

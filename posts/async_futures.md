@@ -374,10 +374,10 @@ are no other futures below it,[^upside_down] and it needs to wake itself.
 ## Wake
 
 It's finally time to make use of `poll`'s [`Context`] argument. If we call
-`context.waker()`, we get something called a [`Waker`].[^only_method] Calling
-either `waker.wake()` or `waker.wake_by_ref()` is how we ask to be polled
-again. Those two methods do the same thing, and we'll use whichever one is more
-convenient.[^efficiency]
+`context.waker()`, we get something called a [`Waker`].[^only_method] Then
+calling either `waker.wake()` or `waker.wake_by_ref()` is how we ask to be
+polled again. Those two methods do the same thing, and we'll use whichever one
+is more convenient.[^efficiency]
 
 [`Context`]: https://doc.rust-lang.org/std/task/struct.Context.html
 [`Waker`]: https://doc.rust-lang.org/std/task/struct.Waker.html
@@ -391,7 +391,15 @@ convenient.[^efficiency]
 
 [possibility]: https://github.com/rust-lang/rust/pull/59119
 
-[^efficiency]: TODO: FIND AN EXAMPLE CASE WHERE CONSUMING A WAKER BY VALUE IS MORE EFFICIENT
+[^efficiency]: As we'll see in Part Two, the implementation of `Waker` is
+    ultimately something that we can control. [In some
+    implementations][waker_implementations], `Waker` is an `Arc` internally,
+    and invoking a `Waker` might move that `Arc` into a global queue. In that
+    case, `wake_by_ref` would need to clone the `Arc`, so `wake` saves an
+    atomic operation on the refcount. This is a very small optimization, and we
+    won't worry about it.
+
+[waker_implementations]: https://without.boats/blog/wakers-i/
 
 The simplest thing we can try is immediately asking to be polled again every
 time we return `Pending`:
