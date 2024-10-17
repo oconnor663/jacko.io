@@ -9,6 +9,12 @@ async fn foo(n: u64) {
     println!("end {n}");
 }
 
+fn join_all<F: Future>(futures: Vec<F>) -> JoinAll<F> {
+    JoinAll {
+        futures: futures.into_iter().map(Box::pin).collect(),
+    }
+}
+
 struct JoinAll<F> {
     futures: Vec<Pin<Box<F>>>,
 }
@@ -26,12 +32,6 @@ impl<F: Future> Future for JoinAll<F> {
         } else {
             Poll::Pending
         }
-    }
-}
-
-fn join_all<F: Future>(futures: Vec<F>) -> JoinAll<F> {
-    JoinAll {
-        futures: futures.into_iter().map(Box::pin).collect(),
     }
 }
 

@@ -57,6 +57,11 @@ static WAKER_SENDER: LazyLock<Sender<(Instant, Waker)>> =
         sender
     });
 
+fn sleep(duration: Duration) -> Sleep {
+    let wake_time = Instant::now() + duration;
+    Sleep { wake_time }
+}
+
 struct Sleep {
     wake_time: Instant,
 }
@@ -73,11 +78,6 @@ impl Future for Sleep {
             Poll::Pending
         }
     }
-}
-
-fn sleep(duration: Duration) -> Sleep {
-    let wake_time = Instant::now() + duration;
-    Sleep { wake_time }
 }
 
 async fn foo(n: u64) {

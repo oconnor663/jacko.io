@@ -7,6 +7,11 @@ use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
 
+fn sleep(duration: Duration) -> Sleep {
+    let wake_time = Instant::now() + duration;
+    Sleep { wake_time }
+}
+
 static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> =
     Mutex::new(BTreeMap::new());
 
@@ -27,11 +32,6 @@ impl Future for Sleep {
             Poll::Pending
         }
     }
-}
-
-fn sleep(duration: Duration) -> Sleep {
-    let wake_time = Instant::now() + duration;
-    Sleep { wake_time }
 }
 
 async fn foo(n: u64) {

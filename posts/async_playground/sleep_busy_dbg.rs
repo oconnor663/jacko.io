@@ -4,6 +4,13 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
+fn sleep(duration: Duration) -> Sleep {
+    Sleep {
+        wake_time: Instant::now() + duration,
+        poll_count: 0,
+    }
+}
+
 struct Sleep {
     wake_time: Instant,
     poll_count: u64,
@@ -21,13 +28,6 @@ impl Future for Sleep {
             context.waker().wake_by_ref();
             Poll::Pending
         }
-    }
-}
-
-fn sleep(duration: Duration) -> Sleep {
-    Sleep {
-        wake_time: Instant::now() + duration,
-        poll_count: 0,
     }
 }
 

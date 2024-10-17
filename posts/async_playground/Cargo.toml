@@ -72,6 +72,10 @@ name = "foo"
 path = "foo.rs"
 
 [[bin]]
+name = "foo_printing"
+path = "foo_printing.rs"
+
+[[bin]]
 name = "foo_timing"
 path = "foo_timing.rs"
 

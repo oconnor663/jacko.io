@@ -4,6 +4,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
+fn sleep(duration: Duration) -> Sleep {
+    let wake_time = Instant::now() + duration;
+    Sleep { wake_time }
+}
+
 struct Sleep {
     wake_time: Instant,
 }
@@ -18,11 +23,6 @@ impl Future for Sleep {
             Poll::Pending
         }
     }
-}
-
-fn sleep(duration: Duration) -> Sleep {
-    let wake_time = Instant::now() + duration;
-    Sleep { wake_time }
 }
 
 async fn foo(n: u64) {

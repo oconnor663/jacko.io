@@ -9,6 +9,11 @@ use std::time::{Duration, Instant};
 static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> =
     Mutex::new(BTreeMap::new());
 
+fn sleep(duration: Duration) -> Sleep {
+    let wake_time = Instant::now() + duration;
+    Sleep { wake_time }
+}
+
 struct Sleep {
     wake_time: Instant,
 }
@@ -26,11 +31,6 @@ impl Future for Sleep {
             Poll::Pending
         }
     }
-}
-
-fn sleep(duration: Duration) -> Sleep {
-    let wake_time = Instant::now() + duration;
-    Sleep { wake_time }
 }
 
 type DynFuture = Pin<Box<dyn Future<Output = ()>>>;

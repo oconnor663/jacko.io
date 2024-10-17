@@ -4,6 +4,13 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
+fn foo(n: u64) -> Foo {
+    let started = false;
+    let duration = Duration::from_secs(1);
+    let sleep = Box::pin(tokio::time::sleep(duration));
+    Foo { n, started, sleep }
+}
+
 struct Foo {
     n: u64,
     started: bool,
@@ -31,17 +38,10 @@ impl Future for Foo {
     }
 }
 
-fn foo(n: u64) -> Foo {
-    let started = false;
-    let duration = Duration::from_secs(1);
-    let sleep = Box::pin(tokio::time::sleep(duration));
-    Foo { n, started, sleep }
-}
-
 #[tokio::main]
 async fn main() {
     let mut futures = Vec::new();
-    for n in 1..=3 {
+    for n in 1..=10 {
         futures.push(foo(n));
     }
     let joined_future = future::join_all(futures);

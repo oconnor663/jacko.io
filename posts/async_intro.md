@@ -201,7 +201,7 @@ async fn main() {
 }
 ```
 
-Making several calls at the same time looks like this:[^async_order]
+And making several calls at the same time looks like this:[^async_order]
 
 [^async_order]: Unlike the version with threads above, you'll always see this
     version print its start messages in order, and you'll _usually_ see it

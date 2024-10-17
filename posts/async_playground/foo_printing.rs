@@ -21,6 +21,8 @@ impl Future for Foo {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
+        // EXTRA PRINT HERE
+        println!("Foo {} polled", self.n);
         if !self.started {
             println!("start {}", self.n);
             self.started = true;

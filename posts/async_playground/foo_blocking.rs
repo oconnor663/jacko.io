@@ -5,6 +5,10 @@ use std::task::{Context, Poll};
 use std::thread;
 use std::time::Duration;
 
+fn foo(n: u64) -> Foo {
+    Foo { n }
+}
+
 struct Foo {
     n: u64,
 }
@@ -19,10 +23,6 @@ impl Future for Foo {
         println!("end {}", self.n);
         Poll::Ready(())
     }
-}
-
-fn foo(n: u64) -> Foo {
-    Foo { n }
 }
 
 #[tokio::main]
