@@ -94,14 +94,14 @@ used `Vec<Pin<Box<F>>>`,[^ignore_pin] where `F` was a generic type parameter,
 but our main function doesn't have any type parameters. We also want the new
 `Vec` to be able to hold futures of different types at the same
 time.[^same_thing] The Rust feature we need here is ["dynamic trait
-objects"][dyn], or `dyn Trait`.[^dyn] Let's start with a type alias so we don't
+objects"][dyn], `dyn Trait`.[^dyn] Let's start with a type alias so we don't
 have to write this more than once:[^box]
 
 [^ignore_pin]: We're still not paying much attention to `Pin`, but `Box` is
     about to do some important work.
 
-[^same_thing]: `JoinAll` can do this too, if you set `F` to the same type we're
-    about to use.
+[^same_thing]: In other words we want a "heterogeneous" collection. `JoinAll`
+    can do this too, if you set `F` to the same type we're about to use.
 
 [dyn]: https://doc.rust-lang.org/book/ch17-02-trait-objects.html
 

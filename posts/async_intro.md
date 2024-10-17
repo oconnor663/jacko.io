@@ -75,7 +75,8 @@ refer to [Rust By Example] whenever you see something new.[^books]
 [advice]: https://youtu.be/HgtRAbE1nBM?t=3913
 
 Let's get started by doing more than one thing at a time with threads. This
-will go smoothly at first, but then we'll run into trouble.
+will go smoothly at first, but we'll run into trouble as the number of threads
+grows.
 
 ## Threads
 

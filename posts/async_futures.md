@@ -16,24 +16,33 @@
 
 In the introduction we looked at [some async Rust code][part_one] without
 explaining anything about how it worked. That left us with several mysteries:
-What's an `async fn`, and what are the "futures" that they return? What is
-[`join_all`] doing? How is [`tokio::time::sleep`] different from
-[`thread::sleep`]? What does `#[tokio::main]` actually do?
+What are `async` functions and the "futures" they return? What does
+[`join_all`] do? And how is [`tokio::time::sleep`] different from
+[`std::thread::sleep`]?[^tokio_main]
 
 [part_one]: playground://async_playground/tokio.rs
 [`join_all`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
 [`tokio::time::sleep`]: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
-[`thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
+[`std::thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
 
-I think the best way to answer these questions is to translate each piece into
+[^tokio_main]: You might also wonder what [`#[tokio::main]`][tokio_main] does.
+    The short answer is that it's a ["procedural macro"][proc_macro] that sets
+    up the Tokio "runtime" and then calls our `async fn main` in that
+    "environment". We're not going to get into proc macros in this series, but
+    we'll start to get an idea of what we mean by an "environment" when we
+    create a global list of `Waker`s towards the end of this post, and we'll
+    keep building on that with "tasks" in Part Two and "file descriptors" in
+    Part Three.
+
+[tokio_main]: https://docs.rs/tokio-macros/latest/tokio_macros/attr.main.html
+[proc_macro]: https://doc.rust-lang.org/reference/procedural-macros.html
+
+To answer those questions, we're going to translate each of those pieces into
 normal, non-async Rust code and stare at it for a while. We'll find that we can
 replicate `foo` and `join_all` without too much trouble, but writing our own
-`sleep` is going to be a whole different story.[^universe] This will be the
-most difficult part of this series, with the most new details that you need to
-fit in your head at once. Here we go.
+`sleep` will be more complicated. [Let's go.][so_it_begins]
 
-[^universe]: [If you wish to make an apple pie from scratch, you must first
-    invent the universe.](https://youtu.be/BkHCO8f2TWs?si=gIfadwLGsvawJ3qn)
+[so_it_begins]: https://youtu.be/QYSYAHDKtvM?t=17
 
 ## Foo
 
