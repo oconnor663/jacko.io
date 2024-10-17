@@ -7,7 +7,7 @@ use std::time::Duration;
 struct Foo {
     n: u64,
     started: bool,
-    sleep_future: Pin<Box<tokio::time::Sleep>>,
+    sleep: Pin<Box<tokio::time::Sleep>>,
 }
 
 impl Future for Foo {
@@ -18,7 +18,7 @@ impl Future for Foo {
             println!("start {}", self.n);
             self.started = true;
         }
-        if self.sleep_future.as_mut().poll(context).is_pending() {
+        if self.sleep.as_mut().poll(context).is_pending() {
             Poll::Pending
         } else {
             println!("end {}", self.n);
@@ -28,12 +28,10 @@ impl Future for Foo {
 }
 
 fn foo(n: u64) -> Foo {
-    let sleep_future = tokio::time::sleep(Duration::from_secs(1));
-    Foo {
-        n,
-        started: false,
-        sleep_future: Box::pin(sleep_future),
-    }
+    let started = false;
+    let duration = Duration::from_secs(1);
+    let sleep = Box::pin(tokio::time::sleep(duration));
+    Foo { n, started, sleep }
 }
 
 #[tokio::main]

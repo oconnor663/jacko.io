@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 struct Foo {
     n: u64,
     started: bool,
-    sleep_future: Pin<Box<tokio::time::Sleep>>,
+    sleep: Pin<Box<tokio::time::Sleep>>,
 }
 
 impl Future for Foo {
@@ -19,7 +19,7 @@ impl Future for Foo {
             self.started = true;
         }
         let before = Instant::now();
-        let poll_result = self.sleep_future.as_mut().poll(context);
+        let poll_result = self.sleep.as_mut().poll(context);
         let duration = Instant::now() - before;
         println!("Sleep::poll returned {poll_result:?} in {duration:?}.");
         if poll_result.is_pending() {
@@ -32,12 +32,10 @@ impl Future for Foo {
 }
 
 fn foo(n: u64) -> Foo {
-    let sleep_future = tokio::time::sleep(Duration::from_secs(1));
-    Foo {
-        n,
-        started: false,
-        sleep_future: Box::pin(sleep_future),
-    }
+    let started = false;
+    let duration = Duration::from_secs(1);
+    let sleep = Box::pin(tokio::time::sleep(duration));
+    Foo { n, started, sleep }
 }
 
 #[tokio::main]

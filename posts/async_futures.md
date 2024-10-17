@@ -64,12 +64,10 @@ TODO: PUT ALL THE CODE UP FRONT HERE, THEN BREAK IT DOWN
 ```rust
 LINK: Playground ## playground://async_playground/foo.rs
 fn foo(n: u64) -> Foo {
-    let sleep_future = tokio::time::sleep(Duration::from_secs(1));
-    Foo {
-        n,
-        started: false,
-        sleep_future: Box::pin(sleep_future),
-    }
+    let started = false;
+    let duration = Duration::from_secs(1);
+    let sleep = Box::pin(tokio::time::sleep(duration));
+    Foo { n, started, sleep }
 }
 ```
 
@@ -103,7 +101,7 @@ LINK: Playground ## playground://async_playground/foo.rs
 struct Foo {
     n: u64,
     started: bool,
-    sleep_future: Pin<Box<tokio::time::Sleep>>,
+    sleep: Pin<Box<tokio::time::Sleep>>,
 }
 ```
 
@@ -170,7 +168,7 @@ impl Future for Foo {
             println!("start {}", self.n);
             self.started = true;
         }
-        if self.sleep_future.as_mut().poll(context).is_pending() {
+        if self.sleep.as_mut().poll(context).is_pending() {
             Poll::Pending
         } else {
             println!("end {}", self.n);
@@ -637,7 +635,7 @@ struct Foo {
     n: u64,
     n_ref: &u64,
     started: bool,
-    sleep_future: Pin<Box<tokio::time::Sleep>>,
+    sleep: Pin<Box<tokio::time::Sleep>>,
 }
 ```
 
