@@ -31,8 +31,11 @@ What are `async` functions and the "futures" they return? What does
     "environment". We're not going to get into proc macros in this series, but
     we'll start to get an idea of what an "environment" means here when we
     create a global list of `Waker`s towards the end of this post, and we'll
-    keep building on that with "tasks" in Part Two and "file descriptors" in
-    Part Three.
+    keep building on that with "tasks" in [Part Two] and "file descriptors" in
+    [Part Three].
+
+[Part Two]: async_tasks.html
+[Part Three]: async_io.html
 
 [tokio_main]: https://docs.rs/tokio-macros/latest/tokio_macros/attr.main.html
 [proc_macro]: https://doc.rust-lang.org/reference/procedural-macros.html
@@ -390,7 +393,14 @@ Note that I'm taking a shortcut here by ignoring the outputs of child futures.
 I'm getting away with that because we're only using `join_all` with `foo`,
 which has no output. The real `join_all` returns `Vec<F::Output>`, which
 requires some more bookkeeping. This is left as an exercise for the reader, as
-they say.
+they say.[^not_either_version]
+
+[^not_either_version]: As with `foo`, we're going to put the original
+    `join_all` back in for the rest of these examples. This time though, the
+    two versions aren't exactly the same, even apart from the shortcut we just
+    mentioned. We'll make another "important mistake" in the [Main](#main)
+    section below, which requires the version of `join_all` from the
+    [`futures`] crate.
 
 ## Sleep
 
@@ -478,7 +488,7 @@ convenient.[^efficiency]
 
 [waker_implementations]: https://without.boats/blog/wakers-i/
 
-The simplest thing we can try is immediately asking to be polled again every
+The simplest thing we can try is asking to be polled again immediately every
 time we return `Pending`:
 
 ```rust
@@ -508,42 +518,38 @@ directly [using tools like `perf` on Linux][perf].
 
 [perf]: https://github.com/oconnor663/jacko.io/blob/master/posts/async_playground/perf_stat.sh
 
-We want to call `wake` later, when it's actually time to wake up. One way to do
-that is to spawn a thread to call `thread::sleep` and `wake` for us. If we did
-that in every call to `poll`, we'd run into the [too-many-threads crash from
-the introduction][same_crash]. We could work around that by spawning one shared
-thread and and [using a channel to send `Waker`s to it][shared_thread]. That
-would be a correct and viable implementation, but there's something
-unsatisfying about it&hellip;
+We want to invoke the `Waker` later, when it's actually time to wake up. One
+way to do that is to spawn a thread to call `thread::sleep` and then `wake`. If
+we do [that in every call to `poll`][same_crash], we'll run into the same
+too-many-threads crash from the introduction. We can work around that by
+[spawning a shared thread and and using a channel to send `Waker`s to
+it][shared_thread]. That would actually be a viable implementation, but there's
+something unsatisfying about it. The main thread of our program is already
+going to spend most of its time sleeping. Why do we need two sleeping threads?
+Why doesn't Tokio give us a way to tell the main thread to wake up at a
+specific time?
 
-We already have a thread that spends most of its time sleeping, the main thread
-of our program! Why doesn't Tokio give us a way to tell the main thread to wake
-up at a specific time, so that we don't need two sleeping threads? Well, there
-is a way, that's what `tokio::time::sleep` _is_. But if we really want to write
-our own `sleep`, and we don't want to spawn an extra thread to make it work,
-then it turns out we also need to write our own `main`.
+Well to be fair, it does give us a way, that's what `tokio::time::sleep` is.
+But if we really want to write our own `sleep`, and we don't want to spawn an
+extra thread to make it work, then we also need to write our own `main`.
 
 [same_crash]: playground://async_playground/sleep_many_threads.rs
 [shared_thread]: playground://async_playground/sleep_one_thread.rs
 
 ## Main
 
-Our `main` function wants to call `poll`, so it needs a `Context` to pass in.
-We can make one with [`Context::from_waker`], which means we need a `Waker`.
-There are a few different ways to make a `Waker`,[^make_a_waker] but since a
-busy loop doesn't need it to do anything, we can use a helper function called
-[`noop_waker`].[^noop] With a new `Context` in hand, we can call `poll` in a
+To call `poll` from `main`, we need a `Context` to pass in. We can make one
+with [`Context::from_waker`], which means we need a `Waker`. There are a few
+different ways to make a `Waker`,[^make_a_waker] but since a busy loop doesn't
+need it to do anything, we can use a helper function called
+[`noop_waker`].[^noop] Once we've got a `Context`, we can call `poll` in a
 loop:
 
 [`Context::from_waker`]: https://doc.rust-lang.org/std/task/struct.Context.html#method.from_waker
 [`noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
 
-[^make_a_waker]: The safe way is to implement the [`Wake`] trait and use
-    [`Waker::from`][from_arc]. The unsafe way is to build a [`RawWaker`].
-
-[`Wake`]: https://doc.rust-lang.org/alloc/task/trait.Wake.html
-[from_arc]: https://doc.rust-lang.org/std/task/struct.Waker.html#impl-From%3CArc%3CW%3E%3E-for-Waker
-[`RawWaker`]: https://doc.rust-lang.org/std/task/struct.RawWaker.html
+[^make_a_waker]: We'll get to these in [the Waker section of Part
+    Two](async_tasks.html#waker).
 
 [^noop]: "Noop", "no-op", and "nop" are all short for "no&nbsp;operation". Most
     assembly languages have an instruction named something like this, which
@@ -566,41 +572,51 @@ fn main() {
 ```
 
 This works, but we still have the "busy loop" problem from above. Before we fix
-that, though, we need to make another important mistake:
+that, we need to make another important mistake:
 
 Since this version of our main loop[^event_loop] never stops polling, and since
-our `Waker` does nothing, we might wonder whether calling `wake` in
-`Sleep::poll` actually matters. Surprisingly, it does. If we delete it, [things
-appear to work at first][loop_forever_10]. But when we bump the number of jobs
-from ten to a hundred, [our futures never wake up][loop_forever_100]. What
-we're seeing is that, even though _our_ `Waker` does nothing, there are _other_
-`Waker`s hidden in our program. Specifically, when the real [`JoinAll`] has
+our `Waker` does nothing, you might wonder whether calling `wake` in
+`Sleep::poll` actually matters. Surprisingly, it does matter. If we delete it,
+[things appear to work at first][loop_forever_10]. But when we bump the number
+of jobs from ten to a hundred, [our futures never wake up][loop_forever_100].
+What we're seeing is that, even though _our_ `Waker` does nothing, there are
+_other_ `Waker`s hidden in our program. When [`futures::future::JoinAll`] has
 many child futures,[^cutoff] it creates its own `Waker`s internally, which lets
-it tell which child asked for a wakeup. That's more efficient than polling all
-of them every time, but it means that children who invoke their own `Waker`
-will never get polled again. Thus the rule is that `Pending` futures must
-_always_ arrange to call `wake` somehow, even when they know the main loop is
-waking up anyway.
+it avoid polling children that haven't asked for a wakeup. That's more
+efficient than polling all of them every time, but it also means that children
+who never invoke their own `Waker` will never get polled again. This sort of
+thing is why a `Pending` future must _always_ arrange to invoke its
+waker.[^pending]
 
 [^event_loop]: This is often called an "event loop", but right now all we have
     is sleeps, and those aren't really events. We'll build a proper event loop
-    when we get to IO in Part Three. For now I'm going to call this the "main
-    loop".
+    in [Part Three].
 
 [loop_forever_10]: playground://async_playground/loop_forever_10.rs
 [loop_forever_100]: playground://async_playground/loop_forever_100.rs
-[`JoinAll`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
+[`futures::future::JoinAll`]: https://docs.rs/futures/latest/futures/future/struct.JoinAll.html
 
 [^cutoff]: As of `futures` v0.3.30, [the exact cutoff is
     31](https://github.com/rust-lang/futures-rs/blob/0.3.30/futures-util/src/future/join_all.rs#L35).
 
-Ok, back to `main`. Somehow our loop needs to get at each `Waker` and its wake
-time. Let's use a global variable for this. As usual in Rust, we need to wrap
-it in a `Mutex` if we want to mutate it from safe code:[^thread_local]
+[^pending]: We don't usually worry about this, because most futures in ordinary
+    application code aren't "leaf" futures. Most futures (like `Foo` and
+    `JoinAll`) only return `Pending` when other futures return `Pending` to
+    them, so they can assume that those other futures schedule wakeups.
+    However, there are exceptions. The [`futures::pending!`][pending_macro]
+    macro explicitly returns `Pending` _without_ scheduling a wakeup.
 
-[^thread_local]: It would be slightly more efficient to [use `thread_local!`
-    and `RefCell` instead of `Mutex`][thread_local], but `Mutex` is more
-    familiar, and it's good enough.
+[pending_macro]: https://docs.rs/futures/latest/futures/macro.pending.html
+
+Ok, back to `main`. We need a way for `Sleep::poll` to send `Waker`s and wake
+times up to the main loop. Let's use a global variable.[^thread_local] We'll
+wrap it in a `Mutex`, so that safe code can modify it:
+
+[^thread_local]: Real async runtimes like Tokio use
+    [`thread_local!`][thread_local] instead of globals for this. It's more
+    efficient, and it also lets them run more than one event loop in the same
+    program. `Mutex` is more familiar, though, and it's good enough for this
+    series.
 
 [thread_local]: playground://async_playground/thread_local.rs
 
@@ -610,13 +626,14 @@ static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> =
     Mutex::new(BTreeMap::new());
 ```
 
-This is a sorted map from wake times to `Waker`s.[^vec] We'll insert into this
-map in `Sleep::poll`:[^or_default]
+This is a sorted map from wake times to `Waker`s.[^vec] `Sleep::poll` can
+insert its `Waker` into this map:[^or_default]
 
-[^vec]: Note that the value type is `Vec<Waker>` instead of just `Waker`,
-    because we might have more than one `Waker` for a given `Instant`. This is
-    very unlikely on Linux and macOS, where the resolution of `Instant::now()`
-    is measured in nanoseconds, but on Windows it's 15.6 ms.
+[^vec]: Note that the value type here is `Vec<Waker>` instead of just `Waker`,
+    because there might be more than one `Waker` for a given `Instant`. This is
+    unlikely on Linux and macOS, where the resolution of `Instant::now()` is
+    measured in nanoseconds, but the resolution on Windows is 15.6
+    *milli*seconds.
 
 [^or_default]: [`or_default`] creates an empty `Vec` if no value was there
     before.
@@ -638,21 +655,21 @@ fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
 }
 ```
 
-After polling, our main loop reads the first key from this sorted map to get
-the earliest wake time. It `thread::sleep`s until that time, which fixes the
+After polling, our main loop can read the first key from this sorted map to get
+the earliest wake time. Then it can `thread::sleep` until that time, fixing the
 busy loop problem.[^hold_lock] Then it invokes all the `Waker`s whose wake time
 has passed, before polling again:
 
 [^hold_lock]: We're holding the `WAKERS` lock while we sleep here, which is a
     little sketchy, but it doesn't matter in this single-threaded example. A
     real multithreaded runtime would use [`thread::park_timeout`] or similar
-    instead of sleeping, so that other threads could wake it up early.
+    instead of sleeping, so that other threads could trigger an early wakeup.
 
 [`thread::park_timeout`]: https://doc.rust-lang.org/std/thread/fn.park_timeout.html
 
 ```rust
 LINK: Playground ## playground://async_playground/wakers.rs
-HIGHLIGHT: 10-19
+HIGHLIGHT: 10-22
 fn main() {
     let mut futures = Vec::new();
     for n in 1..=10 {
@@ -662,9 +679,11 @@ fn main() {
     let waker = futures::task::noop_waker();
     let mut context = Context::from_waker(&waker);
     while joined_future.as_mut().poll(&mut context).is_pending() {
+        // The joined future is Pending. Sleep until the next wake time.
         let mut wake_times = WAKE_TIMES.lock().unwrap();
         let next_wake = wake_times.keys().next().expect("sleep forever?");
         thread::sleep(next_wake.saturating_duration_since(Instant::now()));
+        // We just woke up. Invoke all the Wakers whose time has come.
         while let Some(entry) = wake_times.first_entry() {
             if *entry.key() <= Instant::now() {
                 entry.remove().into_iter().for_each(Waker::wake);
@@ -672,11 +691,18 @@ fn main() {
                 break;
             }
         }
+        // Loop and poll again.
     }
 }
 ```
 
-This works, and it does everything on one thread.
+This works, and doesn't need to spawn any extra threads. This is what it takes
+to write our own `sleep`.
+
+This is sort of the end of Part One. In [Part Two] we'll expand our main loop
+to implement "tasks". However, now that we understand how futures work, there
+are a few "bonus" topics that we finally have the tools to talk about, at least
+briefly. The following sections aren't required for Parts Two and Three.
 
 ## Bonus: Pin
 
@@ -803,9 +829,9 @@ certain extra superpower, and there's another superpower that they're missing.
 
 The extra superpower they have is cancellation. When we call an ordinary
 function in non-async code, there's no general way for us to put a timeout on
-that call.[^thread_cancellation] But we can cancel any future by not polling it
-again. Tokio provides [`tokio::time::timeout`] for this, and we already have
-the tools to implement our own version:
+that call.[^thread_cancellation] But we can cancel any future by
+just&hellip;not polling it again. Tokio provides [`tokio::time::timeout`] for
+this, and we already have the tools to implement our own version:
 
 [^thread_cancellation]: We can spawn a new thread and call the function on that
     thread, using a channel for example to wait for its return value with a
@@ -854,6 +880,9 @@ fn timeout<F: Future>(duration: Duration, inner: F) -> Timeout<F> {
     }
 }
 ```
+
+That `timeout` wrapper works with _any_ async function. Regular functions have
+no equivalent.
 
 ## Bonus: Recursion
 
