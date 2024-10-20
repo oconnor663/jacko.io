@@ -30,11 +30,10 @@ impl Future for Foo {
         let duration = Instant::now() - before;
         println!("Sleep::poll returned {poll_result:?} in {duration:?}.");
         if poll_result.is_pending() {
-            Poll::Pending
-        } else {
-            println!("end {}", self.n);
-            Poll::Ready(())
+            return Poll::Pending;
         }
+        println!("end {}", self.n);
+        Poll::Ready(())
     }
 }
 

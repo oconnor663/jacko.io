@@ -37,10 +37,10 @@ What are `async` functions and the "futures" they return? What does
 [tokio_main]: https://docs.rs/tokio-macros/latest/tokio_macros/attr.main.html
 [proc_macro]: https://doc.rust-lang.org/reference/procedural-macros.html
 
-To answer those questions, we're going to translate each piece into normal,
-non-async Rust code and stare at it for a while. We'll find that we can
-replicate `foo` and `join_all` without too much trouble, but writing our own
-`sleep` will be more complicated. [Let's go.][so_it_begins]
+To answer those questions, we're going to translate each of those pieces into
+normal, non-async Rust code. We'll find that we can replicate `foo` and
+`join_all` without too much trouble, but writing our own `sleep` will be more
+complicated. [Let's go.][so_it_begins]
 
 [so_it_begins]: https://youtu.be/QYSYAHDKtvM?t=17
 
@@ -59,7 +59,7 @@ async fn foo(n: u64) {
 
 And here's `foo` as a regular, non-async function. I'll put everything on the
 page, and then we'll break it down piece-by-piece. This is an exact, drop-in
-replacement, so `main` hasn't changed at all. You can click the Playground
+replacement, and `main` hasn't changed at all. You can click the Playground
 button and run it:
 
 ```rust
@@ -97,7 +97,7 @@ impl Future for Foo {
 Starting from the top, `fn foo` is a regular function that returns a `Foo`
 struct.[^convention] It calls [`tokio::time::sleep`], but it doesn't `.await`
 the [`Sleep`] future that `sleep` returns.[^compiler_error] Instead, it stores
-that future in the struct. We'll talk about [`Box::pin`] and
+that future in the `Foo` struct. We'll talk about [`Box::pin`] and
 [`Pin<Box<_>>`][`Pin`] in a moment.
 
 [^convention]: It's conventional to use the same name lowercase for an async
@@ -121,8 +121,8 @@ that future in the struct. We'll talk about [`Box::pin`] and
 [`Box::pin`]: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.pin
 [`Pin`]: https://doc.rust-lang.org/std/pin/struct.Pin.html
 
-The most important thing about `Foo` is that it implements the [`Future`]
-trait. Here's how `Future` is defined in the standard library:
+Implementing the [`Future`] trait is what makes `Foo` a future. Here's the
+entire `Future` trait from the standard library:
 
 [`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
 
@@ -134,10 +134,9 @@ pub trait Future {
 }
 ```
 
-The trait is just a couple lines of code, but it gives us three new types to
-think about: [`Pin`], [`Context`], and [`Poll`]. We're going to focus on
-`Poll`, so let's say a bit about `Context` and `Pin`, and then we'll set them
-aside until later.
+The trait itself is only a couple lines of code, but it comes with three new
+types: [`Pin`], [`Context`], and [`Poll`]. We're going to focus on `Poll`, so
+we'll say a bit about `Context` and `Pin` and then set them aside until later.
 
 [`Context`]: https://doc.rust-lang.org/std/task/struct.Context.html
 [`Poll`]: https://doc.rust-lang.org/std/task/enum.Poll.html
@@ -147,13 +146,13 @@ Each call to `Future::poll` receives a `Context` from the caller. When one
 passes that `Context` along. That's all we need to know until we get to the
 [Wake](#wake) section below.
 
-`Pin` is a wrapper type that wraps pointers. For now, if you'll forgive me,
-we're going to close our eyes and imagine that `Pin` does _nothing at
-all_.[^truth] We'll imagine that `Pin<Box<_>>` is just `Box<_>`,[^boxing] that
-`Pin<&mut _>` is just `&mut _`, and that `Pin<Box<_>>::as_mut` is just
-[`Box::as_mut`].[^as_mut] `Pin` actually solves an important problem, but that
-problem will make more sense after we've had some practice writing futures.
-We'll come back to it in the [Pin](#bonus__pin) section below.
+`Pin` is a wrapper type that wraps pointers. For now, if you'll forgive me, I'm
+going to pretend that `Pin` does _nothing at all_.[^truth] I'll pretend that
+`Pin<Box<T>>` is just `Box<T>`,[^boxing] that `Pin<&mut T>` is just `&mut T`,
+and that `Pin<Box<T>>::as_mut` is just [`Box::as_mut`].[^as_mut] `Pin` actually
+solves a crucial problem for async Rust, but that problem will make more sense
+after we get some practice writing futures. We'll come back to it in the
+[Pin](#bonus__pin) section below.
 
 [^truth]: As far as lies go, this one is pretty close to the truth. `Pin`'s job
     is to _prevent_ certain things in safe code, namely, moving certain futures
@@ -177,8 +176,8 @@ We'll come back to it in the [Pin](#bonus__pin) section below.
     mutable reference to a function that only needs a short-lived one, so that
     the long-lived reference isn't consumed unnecessarily. However, neither of
     those convenience features work through `Pin` today, and we often need to
-    call `as_mut` explicitly when we're implementing `poll` "by hand". If
-    `&pin` or maybe `&pinned` references [become a first-class language feature
+    call `as_mut` explicitly when we're writing futures "by hand". If `&pin` or
+    maybe `&pinned` references [become a first-class language feature
     someday][pinned_places], that will make these examples shorter and less
     finicky.
 
@@ -207,11 +206,11 @@ pub enum Poll<T> {
 }
 ```
 
-The most important thing that the `poll` function does is that it returns
-either `Poll::Ready` or `Poll::Pending`. `Ready` means that the future is
-finished with its work, and it includes the `Output` value, if any.[^no_output]
-In this case, `poll` won't be called again.[^logic_error] `Pending` means that
-the future isn't finished yet, and `poll` will be called again.
+The first job of the `poll` function is to return either `Poll::Ready` or
+`Poll::Pending`. Returning `Ready` means that the future is finished with its
+work, and it includes the `Output` value, if any.[^no_output] In that case,
+`poll` won't be called again.[^logic_error] Returning `Pending` means that the
+future isn't finished yet, and `poll` will be called again.
 
 [^no_output]: `async fn foo` has no return value, so the `Foo` future has no
     `Output`. Rust represents no value with `()`, the empty tuple, also known
@@ -232,9 +231,10 @@ over again in a "busy loop" as long as it keeps returning `Pending`, and we
 need it to behave correctly if that happens.[^not_busy] We'll get to the long
 answer in the [Wake](#wake) section below.
 
-[^not_busy]: However, if we [put an extra `println` in the `poll`
-    function][foo_printing], we can see that it's not actually getting called
-    in a busy loop. Interesting!
+[^not_busy]: If we [add an extra `println`][foo_printing], we can see that
+    `poll` isn't actually getting called in a busy loop here. But there'll be a
+    few times in this series where it does, including the [Wake](#wake) section
+    below.
 
 [foo_printing]: playground://async_playground/foo_printing.rs
 
@@ -260,10 +260,10 @@ impl Future for Foo {
 }
 ```
 
-We saw that `poll`'s first job was returning `Ready` or `Pending`, but now we
+We saw that `poll`'s first job was to return `Ready` or `Pending`, and now we
 can see that `poll` has a second job,[^three] the actual work of the future.
-`Foo` is supposed to print some messages, and `poll` is where that printing
-happens.
+`Foo` wants to print some messages and sleep, and `poll` is where the printing
+and sleeping happen.
 
 [^three]: In fact `poll` has three jobs. We'll get to the third in the
     [Sleep](#sleep) section.
@@ -272,24 +272,26 @@ There's an important compromise here: `poll` should do all the work that it can
 get done quickly, but it shouldn't make the caller wait for an answer. It
 should either return `Ready` immediately or return `Pending`
 immediately.[^immediately] This compromise is the key to "driving" many futures
-at the same time. It's what lets them make progress without waiting on each
-other's work.
+at the same time. It's what lets them make progress without blocking each
+other.
 
-[^immediately]: When we're doing IO, "immediately" means that we shouldn't
-    block. But when we're doing CPU-heavy work, like compression or
-    cryptography, it's less clear what it means. The usual rule of thumb is
-    that if a function does more than "a few milliseconds" of CPU work, it
-    should either insert `.await` points to break up the work, or offload it
-    with [`spawn_blocking`] or similar.
+[^immediately]: "Immediately" means that we shouldn't do any blocking sleeps or
+    blocking IO a `poll` function or in an `async fn`. But when we're doing
+    CPU-heavy work, like compression or cryptography, it's less clear what it
+    means. The usual rule of thumb is that, if a function does more than "a few
+    milliseconds" of CPU work, it should either offload that work using
+    something like [`tokio::task::spawn_blocking`], or insert await points
+    using something like [`tokio::task::yield_now`].
 
-[`spawn_blocking`]: https://dtantsur.github.io/rust-openstack/tokio/task/fn.spawn_blocking.html
+[`tokio::task::spawn_blocking`]: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
+[`tokio::task::yield_now`]: https://docs.rs/tokio/latest/tokio/task/fn.yield_now.html
 
-That means this implementation of `poll` is only correct if `Sleep::poll`
-returns quickly. If we [add some timing and printing][timing], we can see that
-it does. Now we can understand why [the `thread::sleep` mistake][intro_sleep]
-in the introduction was 10x slower than the correct version. `thread::sleep`
-doesn't return quickly. If we [use it in our `poll` function][same_result], we
-get exactly the same result.
+That means `Foo::poll` is only correct if `Sleep::poll` returns quickly. If we
+[add some timing and printing][timing], we can see that it does. But now we can
+understand why [the `thread::sleep` mistake][intro_sleep] in the introduction
+was 10x slower than the correct version. `thread::sleep` doesn't return
+quickly. If we [use it in our `poll` function][same_result], we get exactly the
+same result.
 
 [timing]: playground://async_playground/foo_timing.rs?mode=release
 [intro_sleep]: playground://async_playground/tokio_blocking.rs
