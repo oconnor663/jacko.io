@@ -261,7 +261,7 @@ impl Future for Foo {
 ```
 
 We saw that `poll`'s first job was to return `Ready` or `Pending`, and now we
-can see that `poll` has a second job,[^three] the actual work of the future.
+can see that `poll` has a second job, the actual work of the future.[^three]
 `Foo` wants to print some messages and sleep, and `poll` is where the printing
 and sleeping happen.
 
@@ -271,9 +271,9 @@ and sleeping happen.
 There's an important compromise here: `poll` should do all the work that it can
 get done quickly, but it shouldn't make the caller wait for an answer. It
 should either return `Ready` immediately or return `Pending`
-immediately.[^immediately] This compromise is the key to "driving" many futures
-at the same time. It's what lets them make progress without blocking each
-other.
+immediately.[^immediately] This compromise is the key to "driving" more than
+one future at the same time. It's what lets them make progress without blocking
+each other.
 
 [^immediately]: "Immediately" means that we shouldn't do any blocking sleeps or
     blocking IO a `poll` function or in an `async fn`. But when we're doing
@@ -286,46 +286,52 @@ other.
 [`tokio::task::spawn_blocking`]: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
 [`tokio::task::yield_now`]: https://docs.rs/tokio/latest/tokio/task/fn.yield_now.html
 
-That means `Foo::poll` is only correct if `Sleep::poll` returns quickly. If we
-[add some timing and printing][timing], we can see that it does. But now we can
-understand why [the `thread::sleep` mistake][intro_sleep] in the introduction
-was 10x slower than the correct version. `thread::sleep` doesn't return
-quickly. If we [use it in our `poll` function][same_result], we get exactly the
-same result.
+To follow this rule, `Foo::poll` has to trust that `Sleep::poll` will return
+quickly. If we [add some timing and printing][timing], we can see that it does.
+The ["important mistake"][intro_sleep] we made in the introduction with
+`thread::sleep` broke this rule, and our futures run back-to-back instead of at
+the same time.[^concurrently] If we [make the same mistake in
+`Foo::poll`][same_result], we get the same result. Doing a blocking sleep in
+`poll` makes the caller wait for an answer, and it can't poll any other futures
+while it's waiting.
 
 [timing]: playground://async_playground/foo_timing.rs?mode=release
 [intro_sleep]: playground://async_playground/tokio_blocking.rs
 [same_result]: playground://async_playground/foo_blocking.rs
 
+[^concurrently]: In other words, "serially" instead of "concurrently".
+
 `Foo` uses the `started` flag to make sure it only prints the start message
-once, no matter how many times `poll` is called. It returns `Ready` when it
-prints the end message, so it doesn't need to worry about `poll` getting called
-again after that. The `started` flag makes `Foo` a "state machine" with two
-states. In general, an `async` function needs a starting state and a state for
-each of its `.await` points, so that the `poll` function knows where to "resume
-execution". If we had more than two states, we could use an `enum` instead of a
-`bool`. When we write an `async fn`, the compiler figures all of this out for
-us, and that convenience is the main reason that async/await exists as a
-language feature.[^unsafe_stuff]
+once, no matter how many times `poll` is called. It doesn't need an `ended`
+flag, because `poll` won't be called again after it returns `Ready`. The
+`started` flag makes `Foo` a "state machine" with two states. In general, an
+`async` function needs a starting state and another state for each of its
+`.await` points, so that its `poll` function knows where to "resume execution".
+If we had more than two states, we could use an `enum` instead of a `bool`.
+When we write an `async fn`, the compiler takes care of all that for us, and
+that convenience is the main reason that async/await exists as a language
+feature.[^unsafe_stuff]
 
 [^unsafe_stuff]: Apart from the convenience, async/await also makes it possible
-    to certain things in safe code that are `unsafe` when we do them in `poll`.
+    to do certain things in safe code that would require `unsafe` in `poll`.
     We'll see that in the [Pin](#bonus__pin) section.
-
-The 28 lines of code in this section are the most important lines in this
-series, so it's worth taking the time to type them out by hand. Now that we
-understand how to implement `foo`, let's implement `join_all`.
 
 ## Join
 
-It might seem like [`join_all`] is doing something much more magical than
-`foo`, but now that we've seen the moving parts of a future, it turns out we
-already have everything we need. Here's `join_all` as a regular, non-async
+Now that we know how to implement a basic future, let's look at
+[`join_all`].[^either_version] It might seem like `join_all` is doing something
+much more magical than `foo`, but it turns out we already have everything we
+need to make it work. Here's `join_all` as a regular, non-async
 function:[^always_was]
 
-[^always_was]: In fact it's [defined this way upstream][upstream].
+[^either_version]: We'll put `async fn foo` back in to keep the examples short,
+    but either version of `foo` would work going forward.
+
+[^always_was]: In fact it's [implemented as a regular function][upstream]
+    upstream in the [`futures`] crate.
 
 [upstream]: https://docs.rs/futures-util/0.3.30/src/futures_util/future/join_all.rs.html#102-105
+[`futures`]: https://docs.rs/futures/latest/futures
 
 ```rust
 LINK: Playground ## playground://async_playground/join.rs
@@ -356,44 +362,42 @@ impl<F: Future> Future for JoinAll<F> {
 }
 ```
 
-[`Vec::retain_mut`] does all the heavy lifting here. It takes a closure
-argument, calls that closure on each element, and removes the elements that
-returned `false`.[^algorithm] That means we drop each child future the first
-time it returns `Ready`, following the rule that we're not supposed to `poll`
-again after that.
+Again our non-async `join_all` function returns a struct that implements
+`Future`, and all the real work happens in `Future::poll`. There's `Box::pin`
+again, but we'll keep ignoring it.
+
+In the `poll` function, [`Vec::retain_mut`] does all the heavy lifting. It's a
+standard `Vec` helper method that takes a closure argument, calls that closure
+on each element, and removes the elements that return `false`.[^algorithm] This
+drops each child future the first time it returns `Ready`.
 
 [`Vec::retain_mut`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.retain_mut
 
 [^algorithm]: If we did this by calling `remove` in a loop, it would take
-    O(n<sup>2</sup>) time, because `remove` is O(n). But `retain_mut` uses
-    a clever algorithm that walks two pointers through the `Vec` and moves each
+    O(n<sup>2</sup>) time, because `remove` is O(n). But `retain_mut` uses a
+    clever algorithm that "walks" two pointers through the `Vec` and moves each
     element at most once.
 
 [`Vec::remove`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.remove
 
-Having seen `Foo` above, there's nothing new here. From the outside, running
-all these futures at the same time seemed like magic, but on the inside, all
-we're doing is calling `poll` on the elements of a `Vec`. This is the other
-side of the compromise: It works because `poll` returns quickly, and `poll`
-knows that if it returns `Pending` we'll call it again later.
+There's nothing else new here. From the outside, running all these futures at
+the same time seemed like magic, but on the inside, all we're doing is calling
+`poll` on the elements of a `Vec`. This is the flip side of the compromise we
+talked about above. If we can trust that each call to `poll` returns quickly,
+then one loop can drive lots of futures.
 
-Note that we're taking a shortcut by ignoring the outputs of child
-futures.[^payload] We're getting away with this because we only use our version
-of `join_all` with `foo`, which has no output. The real `join_all` returns
-`Vec<F::Output>`, which requires some more bookkeeping. This is left as an
-exercise for the reader, as they say.
-
-[^payload]: Specifically, when we call `.is_pending()` on the result of `poll`,
-    we ignore any value that `Poll::Ready` might be carrying.
-
-Onward!
+Note that I'm taking a shortcut here by ignoring the outputs of child futures.
+I'm getting away with that because we're only using `join_all` with `foo`,
+which has no output. The real `join_all` returns `Vec<F::Output>`, which
+requires some more bookkeeping. This is left as an exercise for the reader, as
+they say.
 
 ## Sleep
 
 We're on a roll here! It feels like we already have everything we need to
 implement our own `sleep`:[^narrator]
 
-[^narrator]: Narrator: They did not have everything they needed.
+[^narrator]: We do not.
 
 ```rust
 LINK: Playground ## playground://async_playground/sleep_forever.rs
@@ -429,33 +433,34 @@ the start and then never again. What are we missing?
 [sleep_forever_dbg]: playground://async_playground/sleep_forever_dbg.rs
 
 It turns out that `poll` has [three jobs][poll_docs], and so far we've only
-seen two. First, `poll` does as much work as it can without blocking. Check.
-Second, `poll` returns `Ready` if its work is finished or `Pending` if there's
-more work to do. Check. But third, whenever `poll` returns `Pending`, it needs
-to "schedule a wakeup". Ah.
+seen two. First, `poll` does as much work as it can without blocking. Then,
+`poll` returns `Ready` if it's finished or `Pending` if it's not. But finally,
+whenever `poll` is about to return `Pending`, it needs to&hellip;"schedule a
+wakeup". Ah, that's what we're missing.
 
 [poll_docs]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
 
 The reason we didn't run into this before is that `Foo` and `JoinAll` only
-return `Pending` when other futures return `Pending` to them, which means a
-wakeup is already scheduled. But `Sleep` is what we call a "leaf" future. There
-are no other futures below it,[^upside_down] and it needs to wake itself.
+return `Pending` when another future has returned `Pending` to them, which
+means a wakeup is already scheduled. But `Sleep` is what we call a "leaf"
+future. There are no other futures below it,[^upside_down] and it needs to wake
+itself.
 
 [^upside_down]: Trees in computing are upside down for some reason.
 
 ## Wake
 
-It's finally time to make use of `poll`'s [`Context`] argument. If we call
-`context.waker()`, we get something called a [`Waker`].[^only_method] Then
-calling either `waker.wake()` or `waker.wake_by_ref()` is how we ask to be
-polled again. Those two methods do the same thing, and we'll use whichever one
-is more convenient.[^efficiency]
+It's time to look more closely at [`Context`]. If we call `context.waker()`, we
+get something called a [`Waker`].[^only_method] Then calling either
+`waker.wake()` or `waker.wake_by_ref()` is how we ask to be polled again. Those
+two methods do the same thing, and we'll use whichever one is more
+convenient.[^efficiency]
 
 [`Context`]: https://doc.rust-lang.org/std/task/struct.Context.html
 [`Waker`]: https://doc.rust-lang.org/std/task/struct.Waker.html
 
 [^only_method]: Handing out a `Waker` is currently all that `Context` does. An
-    early version of the `Future` trait even had `poll` take a `Waker` directly
+    early version of the `Future` trait had `poll` take a `Waker` directly
     instead of wrapping it in a `Context`, but the designers [wanted to leave
     open the possibility][possibility] of expanding the `poll` API in a
     backwards-compatible way. Note that `Waker` is `Clone` and `Send`, but
@@ -467,8 +472,8 @@ is more convenient.[^efficiency]
     ultimately something that we can control. [In some
     implementations][waker_implementations], `Waker` is an `Arc` internally,
     and invoking a `Waker` might move that `Arc` into a global queue. In that
-    case, `wake_by_ref` would need to clone the `Arc`, so `wake` saves an
-    atomic operation on the refcount. This is a very small optimization, and we
+    case, `wake_by_ref` would need to clone the `Arc`, and `wake` saves an
+    atomic operation on the refcount. This is a micro-optimization, and we
     won't worry about it.
 
 [waker_implementations]: https://without.boats/blog/wakers-i/
