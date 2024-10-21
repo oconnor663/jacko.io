@@ -9,9 +9,9 @@
   - [Non-blocking](#non_blocking)
   - [Poll](#poll)
 
-Of course async/await wasn't invented just for efficient sleeping. Our goal all
-along has been IO, especially network IO. Now that we can build futures and
-tasks, we have all the tools we need to get some real work done.
+Of course async/await wasn't invented for sleeping. Our goal all along has been
+IO, especially network IO. Now that we have futures and tasks, we can start
+doing some real work.
 
 Let's go back to ordinary, non-async Rust for a moment. We'll start with a toy
 server program and a client that talks to it. Then we'll use threads to combine
@@ -40,7 +40,7 @@ fn main() -> io::Result<()> {
 
 It starts listening on port 8000.[^zero_ip] For each connection it receives it
 writes a start message, sleeps for one second, and writes an end
-message.[^writeln] Here's the client for our toy server:
+message.[^writeln] Here's a client for our toy server:
 
 [^zero_ip]: `0.0.0.0` is the special IP address that means "all IPv4 interfaces
     on this host". It's the standard way to listen for connections coming from
@@ -54,8 +54,8 @@ message.[^writeln] Here's the client for our toy server:
     the `TcpStream`, one for the prefix, one for the number, and one more for
     the newline. That's probably slower than allocating. Separate writes also
     tend to appear as separate reads on the client side, so we'd need to do
-    line buffering to avoid garbled output when running multiple clients at
-    once. It's not guaranteed that the `format!` approach will come out as one
+    line buffering to avoid garbled output when we run multiple clients at once
+    below. It's not guaranteed that the `format!` approach will come out as one
     read, but in small examples like these it generally does.
 
 ```rust
@@ -68,7 +68,7 @@ fn main() -> io::Result<()> {
 ```
 
 This client opens a connection to the server and copies all the bytes it
-receives to standard output, as soon as they come it. It doesn't explicitly
+receives to standard output, as soon as they arrive. It doesn't explicitly
 sleep, but it still takes a second, because the server takes a second to finish
 responding. Under the covers, [`io::copy`] is a convenience wrapper around the
 standard [`Read::read`] and [`Write::write`] methods, and `read` blocks until
@@ -79,12 +79,11 @@ input arrives.
 [`Write::write`]: https://doc.rust-lang.org/std/io/trait.Write.html#tymethod.write
 [`TcpStream`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html
 
-These programs can't talk to each other on the Playgroud, so if this is your
-first time working with TCP in code, you might want to take some time to run
-them together on your computer, or even better on two different computers on
-your WiFi network.[^localhost] Seeing this work for the first time on a real
-network is pretty cool. Reviewing the web server project from [Chapter&nbsp;20
-of The Book][ch20] might be helpful too.
+These programs can't talk to each other on the Playgroud. You might want to
+take the time to run them on your computer, or even better on two different
+computers on your WiFi network.[^localhost] If you haven't done this before,
+seeing it work on a real network is pretty cool. Reviewing the web server
+project from [Chapter&nbsp;20 of The Book][ch20] might be helpful too.
 
 [ch20]: https://doc.rust-lang.org/book/ch20-00-final-project-a-web-server.html
 [part_two_impl]: playground://async_playground/tasks.rs
@@ -97,7 +96,7 @@ of The Book][ch20] might be helpful too.
 Let's get this working on the Playground by putting the client and server
 together in one program. Since they're both blocking, we'll have to run them on
 separate threads. We'll rename their `main` functions to `client_main` and
-`server_main`, and while we're at it we'll run ten clients together at the same
+`server_main`, and while we're at it we'll run ten clients at the same
 time:[^unwrap]
 
 [^unwrap]: Note that the return type of `handle.join()` in this example is
@@ -163,7 +162,7 @@ fn server_main(listener: TcpListener) -> io::Result<()> {
 ```
 
 It still works, and now it only takes one second. This is exactly the behavior
-we want. Now we're ready for our final project: expanding [our main loop from
+we want. Now we're ready for our final project: expanding [the main loop from
 Part Two][part_two_impl] and translating this example into async.
 
 There are two big problems we need to solve. First, we need IO functions that
@@ -173,20 +172,20 @@ waiting for input, we want to sleep instead of busy looping, and we need a way
 to wake up when any input arrives.
 
 [^remember]: Remember that blocking in `poll` holds up the entire main loop,
-    which in our single-threaded implementation blocks _all_ tasks. That's
+    which in our single-threaded implementation will block _all_ tasks. That's
     always a performance issue, but in this case it's a correctness issue too.
     Once we get this example working, we'll have ten client tasks waiting to
     read input from the server task. If a client task blocks the server task,
-    then no more input will arrive, and the program will deadlock.
+    then input will never arrive, and the program will deadlock.
 
 ## Non-blocking
 
-The first problem is easier, because Rust has a solution in the standard
+There's a solution for the first problem in the standard
 library.[^three_quarters] [`TcpListener`] and [`TcpStream`] both have
 [`set_nonblocking`] methods, which make `accept`, `read`, and `write` return
 [`ErrorKind::WouldBlock`][error_kind] instead of blocking.
 
-[^three_quarters]: Well, it has three quarters of a solution. For the rest
+[^three_quarters]: Well, there's three quarters of a solution. For the rest
     we're gonna cheat&hellip;
 
 [`TcpListener`]: https://doc.rust-lang.org/std/net/struct.TcpListener.html
@@ -205,22 +204,24 @@ takes a standalone `poll` function and generates the rest of the future.
 
 [`std::future::poll_fn`]: https://doc.rust-lang.org/stable/std/future/fn.poll_fn.html
 
-There are four potentially blocking operations that we need async versions of.
+There are four potentially blocking operations that we need to async-ify.
 There's `accept` and `write` on the server side, and there's `connect` and
-`read` on the client side. Let's start with accept:[^async_wrapper]
+`read` on the client side. Let's start with `accept`:[^async_wrapper]
 
 [^async_wrapper]: We're writing this as an async function that creates a future
     and then immediately awaits it, but we could also have written it as a
     non-async function that returns that future. That would be cleaner, but
     we'd need lifetimes in the function signature, and [the "obvious" way to
-    write them turns out to be subtly incorrect][outlives_trick]. Rust 2024
+    write them turns out to be subtly incorrect][outlives_trick]. The 2024
     Edition will fix this by changing the way that "return position `impl
     Trait`" types "capture" lifetime parameters.
 
 [outlives_trick]: https://rust-lang.github.io/rfcs/3498-lifetime-capture-rules-2024.html#the-outlives-trick
 
+[client_server_busy_orig]: playground://async_playground/client_server_busy.rs
+
 ```rust
-LINK: Playground ## playground://async_playground/client_server_busy.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
 async fn accept(
     listener: &mut TcpListener,
 ) -> io::Result<(TcpStream, SocketAddr)> {
@@ -239,6 +240,7 @@ async fn accept(
 }
 ```
 
+The key here is handling `WouldBlock` errors by converting them to `Pending`.
 Calling `wake_by_ref` whenever we return `Pending`, like we did in [the second
 version of `Sleep` from Part One][sleep_busy], makes this a busy loop. We'll
 fix that in the next section. We're assuming that the `TcpListener` is already
@@ -247,14 +249,13 @@ non-blocking mode too,[^io_result] to get ready for async writes.
 
 [sleep_busy]: playground://async_playground/sleep_busy.rs
 
-Next let's implement those writes. If we were rebuilding all of Tokio, we'd
-define an [`AsyncWrite`] trait and make everything generic, but that's a lot of
-code. Instead, let's keep it short and hardcode that we're writing to a
-`TcpStream`:
+Next let's implement those writes. If we wanted to copy Tokio, we'd define an
+[`AsyncWrite`] trait and make everything generic, but that's a lot of code.
+Instead, let's keep it short and hardcode that we're writing to a `TcpStream`:
 
 [^eintr]: And we're going to [assume that non-blocking calls never return
     `ErrorKind::Interrupted`/`EINTR`][eintr], so we don't need an extra line of
-    code in each example retrying that case.
+    code in each example to retry that case.
 
 [eintr]: https://stackoverflow.com/a/14485305/823869
 
@@ -271,7 +272,7 @@ code. Instead, let's keep it short and hardcode that we're writing to a
 [RFC 3058]: https://rust-lang.github.io/rfcs/3058-try-trait-v2.html
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_busy.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
 async fn write_all(
     mut buf: &[u8],
     stream: &mut TcpStream,
@@ -297,12 +298,12 @@ async fn write_all(
 }
 ```
 
-`TcpStream::write` isn't guaranteed to consume the entire buffer, so we need to
-call it in a loop, bumping `buf` forward each time through. It's unlikely that
-we'll see `Ok(0)` from `TcpStream`,[^ok_0] but if we do it's better for that to
-be an error than an infinite loop. The loop condition also means that we won't
-make any calls to `write` if `buf` is initially empty, which matches the
-default behavior of [`Write::write_all`].[^write_all]
+`TcpStream::write` isn't guaranteed to consume all of `buf`, so we need to call
+it in a loop, bumping `buf` forward each time. It's unlikely that we'll see
+`Ok(0)` from `TcpStream`,[^ok_0] but if we do it's better for that to be an
+error than an infinite loop. The loop condition also means that we won't make
+any calls to `write` if `buf` is initially empty, which matches the default
+behavior of [`Write::write_all`].[^write_all]
 
 [^ok_0]: `Ok(0)` from a write means that either the input `buf` was empty,
     which is ruled out by our `while` condition, or that the writer can't
@@ -318,23 +319,23 @@ default behavior of [`Write::write_all`].[^write_all]
     the loop and the `WriteZero` handling for free. But unfortunately, when
     `Write::write_all` returns `WouldBlock`, it doesn't tell us how many bytes
     it wrote before that, and we need that number to update `buf`. In contrast,
-    when `Write::write` needs to block after it's already written some bytes,
-    it returns `Ok(n)` first, and then the _next_ call returns `WouldBlock`.
+    if `Write::write` needs to block after it's already written some bytes, it
+    returns `Ok(n)` first, and then the _next_ call returns `WouldBlock`.
 
 [`Write::write_all`]: https://doc.rust-lang.org/std/io/trait.Write.html#method.write_all
 
 Those are the async building blocks we needed for the server, and now we can
 write the async version of `server_main`:[^rely_on_pin]
 
-[^rely_on_pin]: I'm pretty sure this is the first time we've needed `Pin`
-    guarantees for soundness. The compiler-generated `one_response` future owns
-    a `TcpStream`, but it also passes references to that stream into
-    `write_all` futures, and it owns those too. That would be unsound if the
-    `one_response` future could move (thus moving the `TcpStream`) after those
-    borrows were established.
+[^rely_on_pin]: I'm pretty sure this is the first time we've implicitly relied
+    on `Pin` guarantees for soundness. The compiler-generated `one_response`
+    future owns a `TcpStream`, but it also passes references to that stream
+    into `write_all` futures, and it owns those too. That would be unsound if
+    the `one_response` future could move (thus moving the `TcpStream`) after
+    those borrows were established.
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_busy.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
 HIGHLIGHT: 1, 3-4, 6, 10, 13-14
 async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     let start_msg = format!("start {n}\n");
@@ -360,13 +361,14 @@ server tasks, so we use `unwrap` to at least print to stderr if they fail.
 Previously we did that inside a closure, and here we do it inside an `async`
 block, which works like an anonymous `async fn` that takes no arguments.
 
-Hopefully that works. Now we need to translate the client so we can test it.
+Hopefully that works, but we need to translate the client before we can test
+it.
 
 We just did async writes, so let's do async reads. The counterpart of
-`Write::write_all` is [`Read::read_to_end`], but that's not quite what we want.
-We're supposed print output as soon as it arrives, rather than collecting it
-all in a `Vec` and printing it at the end. Let's keep things short again and
-hardcode the printing. We'll call our function `print_all`:[^copy]
+`Write::write_all` is [`Read::read_to_end`], but that's not quite what we want
+here. We want to print output as soon as it arrives, rather than collecting it
+in a `Vec` and printing it all at the end. Let's keep things short again and
+hardcode the printing. We'll call it `print_all`:[^copy]
 
 [`Read::read_to_end`]: https://doc.rust-lang.org/std/io/trait.Read.html#method.read_to_end
 
@@ -381,11 +383,11 @@ hardcode the printing. We'll call our function `print_all`:[^copy]
 [`AsyncWrite`]: https://docs.rs/tokio/latest/tokio/io/trait.AsyncWrite.html
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_busy.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
 async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
-    let mut buf = [0; 1024];
     std::future::poll_fn(|context| {
         loop {
+            let mut buf = [0; 1024];
             match stream.read(&mut buf) {
                 Ok(0) => return Poll::Ready(Ok(())), // EOF
                 // Assume that printing doesn't block.
@@ -402,7 +404,7 @@ async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
 }
 ```
 
-`Ok(0)` means end-of-file for a read, but otherwise this is similar to
+`Ok(0)` from a read means end-of-file, but otherwise this is similar to
 `write_all` above.[^println]
 
 [^println]: We're cheating a little bit by assuming that printing doesn't
@@ -434,7 +436,8 @@ going to cheat and just assume that `connect` doesn't block.[^huge_cheat]
     and [makes a blocking call to `getaddrinfo` on a thread pool][tokio_dns].
     For comparison, the `net` module in the Golang standard library [contains
     two DNS implementations][golang_fallback], an async resolver for simple
-    cases, and a fallback resolver that calls `getaddrinfo` on a thread pool.
+    cases, and a fallback resolver that also calls `getaddrinfo` on a thread
+    pool.
 
 [`getaddrinfo`]: https://man7.org/linux/man-pages/man3/getaddrinfo.3.html
 [tokio_dns]: https://github.com/tokio-rs/tokio/blob/tokio-1.40.0/tokio/src/net/addr.rs#L182-L184
@@ -446,11 +449,11 @@ going to cheat and just assume that `connect` doesn't block.[^huge_cheat]
 
 [`tokio::net::TcpStream::connect`]: https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html#method.connect
 
-So, with one real async building block and one blatant lie, we can write
+With one real async building block and one blatant lie, we can write
 `client_main`:
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_busy.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
 async fn client_main() -> io::Result<()> {
     // XXX: Assume that connect() returns quickly.
     let mut socket = TcpStream::connect("localhost:8000")?;
@@ -463,7 +466,7 @@ async fn client_main() -> io::Result<()> {
 And finally `async_main`:
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_busy.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
 async fn async_main() -> io::Result<()> {
     // Avoid a race between bind and connect by binding before spawn.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
@@ -492,7 +495,7 @@ arrives. This isn't something we can do on our own, and we need help from the
 OS. We're going to use the [`poll`] "system call" for this,[^name] which is
 available on all Unix-like OSs, including Linux and macOS.[^syscall] We'll
 invoke it using the C standard library function [`libc::poll`], which looks
-like this:
+like this in Rust:
 
 [`poll`]: https://man7.org/linux/man-pages/man2/poll.2.html
 
@@ -530,7 +533,7 @@ pub unsafe extern "C" fn poll(
 ) -> c_int
 ```
 
-It takes a list[^c_style] of "poll file descriptors" and a timeout in
+`libc::poll` takes a list[^c_style] of "poll file descriptors" and a timeout in
 milliseconds. The timeout will let us wake up for sleeps in addition to IO,
 replacing `thread::sleep` in our main loop. Each [`pollfd`] looks like this:
 
@@ -550,18 +553,22 @@ struct pollfd {
 The `fd` field is a "file descriptor", or in Rust terms a "raw" file
 descriptor. It's an identifier that Unix-like OSs use to track open resources
 like files and sockets. We can get a descriptor from a `TcpListener` or a
-`TcpStream` by calling [`.as_raw_fd()`][as_raw_fd], which returns [`RawFd`], a
-type alias for `c_int`.[^windows]
+`TcpStream` by calling [`.as_raw_fd()`][as_raw_fd], which returns a [`RawFd`],
+a type alias for `c_int`.[^windows]
 
 [as_raw_fd]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.as_raw_fd
 [`RawFd`]: https://doc.rust-lang.org/std/os/fd/type.RawFd.html
 
 [^windows]: Unfortunately, none of these raw file descriptor operations will
-    compile on Windows. This is a low enough level of detail that OS
-    differences start to matter, and the Rust standard library doesn't try to
-    abstract over them. To make code like this portable, we have to write it at
-    least twice, using `#[cfg(unix)]` and `#[cfg(windows)]` to gate each
-    implementation to a specific platform.
+    compile on Windows. The Windows counterpart of `as_raw_fd` is
+    [`as_raw_handle`]. This is a low enough level of detail that the Rust
+    standard library doesn't try to abstract over platform differences. The
+    Unix function isn't defined on Windows targets, and the Windows function
+    isn't defined on Unix targets. To make code like this portable, we have to
+    write it at least twice, using `#[cfg(unix)]` and `#[cfg(windows)]` to gate
+    each implementation to its target platform.
+
+[`as_raw_handle`]: https://doc.rust-lang.org/std/os/windows/io/trait.AsRawHandle.html
 
 The `events` field is a collection of bitflags indicating what we're waiting
 for. The most common events are [`POLLIN`], meaning input is available, and
@@ -584,11 +591,14 @@ send `pollfd`s and `Waker`s back to `main`, so that `main` can call
 function to populate them:[^lock_order]
 
 [^lock_order]: Whenever we hold more than one lock at a time, we need to make
-    sure that all callers lock them in the same order. We're locking `POLL_FDS`
-    before `POLL_WAKERS` here, so we'll do the same in `main`.
+    sure that all callers lock them in the same order, to avoid deadlocks.
+    We're locking `POLL_FDS` before `POLL_WAKERS` here, so we'll do the same in
+    `main`.
+
+[client_server_poll_orig]: playground://async_playground/client_server_poll.rs
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_poll.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
 static POLL_FDS: Mutex<Vec<libc::pollfd>> = Mutex::new(Vec::new());
 static POLL_WAKERS: Mutex<Vec<Waker>> = Mutex::new(Vec::new());
 
@@ -609,22 +619,22 @@ fn register_pollfd(
 ```
 
 Now our async IO functions can call `register_pollfd` instead of `wake_by_ref`.
-`accept` and `print_all` are reads, so they'll handle `WouldBlock` by setting
+`accept` and `print_all` are reads, so they handle `WouldBlock` by setting
 `POLLIN`:
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_poll.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
 HIGHLIGHT: 2
 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-    register_pollfd(context, stream, libc::POLLIN);
-    return Poll::Pending;
+    register_pollfd(context, listener, libc::POLLIN);
+    Poll::Pending
 }
 ```
 
-`write_all` is a write, so it'll handle `WouldBlock` by setting `POLLOUT`:
+`write_all` handles `WouldBlock` by setting `POLLOUT`:
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_poll.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
 HIGHLIGHT: 2
 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
     register_pollfd(context, stream, libc::POLLOUT);
@@ -634,14 +644,14 @@ Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
 
 Finally, `main`. We'll start by preparing the `timeout` argument for
 `libc::poll`. This is similar to how we've been computing the next wake time
-all along, except now we're not guaranteed to have one,[^no_wake] and we also
-need to convert it to milliseconds:
+all along, except now we're not guaranteed to have one,[^no_wake] and we need
+to convert it to milliseconds:
 
 [^no_wake]: Previously, sleeping forever could only be a bug, but now that we
     can wait on IO in addition to sleeping, waiting forever is valid.
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_poll.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
 HIGHLIGHT: 6-15
 // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been
 // set. Polling futures that aren't ready yet is inefficient but allowed.
@@ -663,19 +673,19 @@ let timeout_ms = if let Some(time) = wake_times.keys().next() {
 After all that preparation, we can replace `thread::sleep` with `libc::poll` in
 the main loop. It's a "foreign" function, so calling it is `unsafe`:[^fd_ub]
 
-[^fd_ub]: We know that the raw pointer we're giving it is valid, and that it
-    won't retain that pointer after returning. We might also worry about what
-    happens if one of the descriptors in `POLL_FDS` came from a socket that's
-    since been closed. In that case the descriptor might refer to nothing, or
-    it might've been reused by the kernel to refer to an unrelated file or
-    socket. But since `libc::poll` doesn't modify any of its arguments
-    (including for example reading from a file, which would advance its
-    cursor), the worst that can happen here is a "spurious wakeup", where some
-    event for an unrelated file wakes us up early. Our code already handles
-    busy loop polling, so it will handle spurious wakeups too.
+[^fd_ub]: We know that the raw pointer is valid, and that `libc::poll` won't
+    retain that pointer after returning. We might also worry about what happens
+    if one of the descriptors in `POLL_FDS` came from a socket that's since
+    been closed. In that case the descriptor might refer to nothing, or it
+    might've been reused by the kernel to refer to an unrelated file or socket.
+    Since `libc::poll` doesn't modify any of its arguments (including for
+    example reading from a file, which would advance the cursor), the worst
+    that can happen here is a "spurious wakeup", where some event for an
+    unrelated file wakes us up early. Our code already handles busy loop
+    polling, so spurious wakeups are no problem.
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_poll.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
 let mut poll_fds = POLL_FDS.lock().unwrap();
 let mut poll_wakers = POLL_WAKERS.lock().unwrap();
 let poll_error_code = unsafe {
@@ -696,7 +706,7 @@ every time, and tasks that aren't `Ready` will re-register themselves in
 `POLL_FDS` before the next sleep.
 
 ```rust
-LINK: Playground ## playground://async_playground/client_server_poll.rs
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
 HIGHLIGHT: 1-4
 poll_fds.clear();
 for waker in poll_wakers.drain(..) {
@@ -707,8 +717,16 @@ while let Some(entry) = wake_times.first_entry() {
     …
 ```
 
-It works! And now we can finally call our main loop what it is, an _event
-loop_.
+It works!
+
+And that's it. We did it. Our main loop is finally an _event loop_. Hopefully
+this whole adventure has made async Rust and async IO in general seem less
+magical. There's lots more to explore and look forward to, like [future
+language features][future_features] and [all the gory details of `Pin`][pin].
+Good luck out there :)
+
+[future_features]: https://smallcultfollowing.com/babysteps/blog/2024/01/03/async-rust-2024/
+[pin]: https://without.boats/blog/pin/
 
 ---
 

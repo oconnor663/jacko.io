@@ -158,9 +158,9 @@ async fn write_all(
 }
 
 async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
-    let mut buf = [0; 1024];
     std::future::poll_fn(|context| {
         loop {
+            let mut buf = [0; 1024];
             match stream.read(&mut buf) {
                 Ok(0) => return Poll::Ready(Ok(())), // EOF
                 // Assume that printing doesn't block.
