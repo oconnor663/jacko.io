@@ -11,50 +11,43 @@
 
 Async/await, or "async IO", is a new-ish[^new_ish] language feature that lets
 our programs do more than one thing at a time. It's sort of an alternative to
-multithreading, though Rust programs often use both.[^threads] Async is popular
-with websites and network services that handle many connections at once,[^lots]
+multithreading, though Rust programs often use both. Async is popular with
+websites and network services that handle many connections at once,[^lots]
 because running lots of "futures" or "tasks" is more efficient than running
 lots of threads.
 
 [^new_ish]: Rust added async/await in 2019. For comparison, C# added it in
     2012, Python in 2015, JS in 2017, and C++ in 2020.
 
-[^threads]: Throughout this series we'll compare examples using threads to
-    examples that accomplish the same thing using async. If this is your first
-    time using threads in any language, this approach might be more confusing
-    than helpful, because you'll have to learn two things at once. For an
-    introduction to threads in Rust, see [Chapter&nbsp;16][ch16] and
-    [Chapter&nbsp;20][ch20] of [The Book].
-
-[The Book]: https://doc.rust-lang.org/book
-[ch16]: https://doc.rust-lang.org/book/ch16-00-concurrency.html
-[ch20]: https://doc.rust-lang.org/book/ch20-00-final-project-a-web-server.html
-
 [^lots]: "Many" here conventionally means ten thousand or more. This is
-    sometimes called the ["C10K problem"][c10k], short for 10k clients or
+    sometimes called the ["C10K problem"][c10k], short for 10,000 clients or
     connections.
 
 [c10k]: https://en.wikipedia.org/wiki/C10k_problem
 
 This series is an introduction to futures, tasks, and async IO in Rust. Our
-goal will be understanding the machinery, so that async code doesn't feel like
-"magic". We'll start by translating ("desugaring") async examples into ordinary
-Rust, and gradually we'll build our own async "runtime".[^runtime] I'll assume
-that you've written some Rust before and that you've read [The Rust Programming
-Language][The Book] ("The Book") or similar.[^ch20]
+goal will be to get a good look at the machinery, so that async code doesn't
+feel like magic. We'll start by translating ("desugaring") async examples into
+ordinary Rust, and gradually we'll build our own async "runtime".[^runtime]
+I'll assume that you've written some Rust before and that you've read [The Rust
+Programming Language][The Book] ("The Book") or similar.[^ch20]
 
 [^runtime]: For now, a "runtime" is a library or framework that we use to write
     async programs. Building our own futures, tasks, and IO will gradually make
     it clear what a runtime does for us.
 
+[The Book]: https://doc.rust-lang.org/book
+
 [^ch20]: The multithreaded web server project in [Chapter&nbsp;20][ch20] is
     especially relevant.
 
+[ch20]: https://doc.rust-lang.org/book/ch20-00-final-project-a-web-server.html
+
 Let's get started by doing more than one thing at a time with threads. This
-will go well at first, but as the number of threads grows, we'll run into
-trouble. Then we'll get the same thing working in async, to see what all the
-fuss is about. That'll give us some example code to play with, and then in
-[Part One] we'll start digging into it.
+will go well at first, but we'll run into trouble as the number of threads
+grows. Then we'll get the same thing working in async, to see what all the fuss
+is about. That'll give us some example code to play with, and in [Part One]
+we'll start digging into it.
 
 ## Threads
 
@@ -74,8 +67,8 @@ thread for each one. Click on the Playground button to see that this takes one
 second instead of ten:[^threads_order]
 
 [^threads_order]: You'll probably also see the "start" and "end" prints appear
-    out of order. One of the tricky things about threads is that we don't which
-    one will finish first.
+    out of order. Different threads running at the same time run in an
+    unpredictable order, and that can be true of futures too.
 
 ```rust
 LINK: Playground ## playground://async_playground/threads.rs
@@ -163,7 +156,7 @@ async fn foo(n: u64) {
 [Part One]: async_futures.html
 [Tokio]: https://tokio.rs/
 
-Making a few calls to `foo` one at a time looks like this:[^tokio_main]
+Making a few calls to `foo` one-at-a-time looks like this:[^tokio_main]
 
 [^tokio_main]: In Parts Two and Three of this series, we'll implement a lot of
     what `#[tokio::main]` is doing. Until then we can just take it on faith
@@ -179,9 +172,8 @@ async fn main() {
 }
 ```
 
-So the first thing that's different about async functions is that we declare
-them with the `async` keyword, and we write `.await` after when we call them.
-Ok.
+The first thing that's different about async functions is that we declare them
+with the `async` keyword, and we write `.await` when we call them. Fair enough.
 
 Making several calls to `foo` at the same time looks like this:[^async_order]
 
@@ -206,13 +198,14 @@ async fn main() {
 }
 ```
 
-Note that there's no `.await` right after `foo` this time. Despite its name,
-[`join_all`] is doing something very different from the [`join`] method we used
-with threads. Previously joining meant waiting on something, but here it means
-combining multiple "futures" together.  We'll get to the details in [Part One],
-but for now we can [add some more prints][tokio_10_dbg] to see that `join_all`
-doesn't take any time, and none of `foo`s start running until we `.await` the
-joined future.
+Note that we don't `.await` each call to `foo` this time. Each un-awaited `foo`
+returns a "future", which we collect in a `Vec`, kind of like the `Vec` of
+thread handles above. But [`join_all`] is very different from the [`join`]
+method we used with threads. Previously joining meant waiting on something, but
+here it means combining multiple "futures" together somehow. We'll get to the
+details in [Part One], but for now we can [add some more prints][tokio_10_dbg]
+to see that `join_all` doesn't take any time, and none of `foo`s start running
+until we `.await` the joined future.
 
 [`join_all`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
 [`join`]: https://doc.rust-lang.org/std/thread/struct.JoinHandle.html#method.join
@@ -221,25 +214,16 @@ joined future.
 Unlike the threads example above, this works even if we bump it up to [a
 thousand jobs][thousand_futures]. In fact, if we [comment out the prints and
 build in release mode][million_futures], we can run _a million jobs_ at
-once.[^remember] This sort of thing is why async is popular.
+once. This sort of thing is why async is popular.
 
 [thousand_futures]: playground://async_playground/tokio_1k.rs
 [million_futures]: playground://async_playground/tokio_1m.rs?mode=release
 
-[^remember]: For me this takes about two seconds, so it's spending about as
-    much time working as it is sleeping. And remember this is on the
-    Playground, with tight resource limits. The [tasks
-    version][basketball_tasks] of the basketball demo above is also much more
-    efficient than the threads version, but it requires lots of concepts we
-    haven't explained yet, so I don't want to focus on it.
-
-[basketball_tasks]: playground://async_playground/basketball_tasks.rs?mode=release
-
 ## Important Mistakes
 
-We can get some hints about how async works if we start making some mistakes.
-First let's try using [`thread::sleep`] instead of [`tokio::time::sleep`]
-in our async function:
+We can get hints about how async works if we start making some mistakes. First
+let's try using [`thread::sleep`] instead of [`tokio::time::sleep`] in our
+async function:
 
 [`thread::sleep`]: https://doc.rust-lang.org/std/thread/fn.sleep.html
 [`tokio::time::sleep`]: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
@@ -289,17 +273,16 @@ async fn main() {
 ```
 
 This also doesn't work! What we're seeing is that futures don't do any work "in
-the background".[^tasks] Instead, they do their work when we `.await` them, and
-if we `.await` them one-at-a-time, they do their work one-at-a-time. Somehow
-`join_all` was helping us await all of them at once.
+the background".[^tasks] Instead, they do their work when we `.await` them. If
+we `.await` them one-at-a-time, they do their work one-at-a-time. Somehow
+`join_all` was helping us `.await` all of them together.
 
 [^tasks]: "Tasks" are futures that run in the background. We'll get to tasks in
     [Part Two].
 
 [Part Two]: async_tasks.html
 
-So, we've built up quite a big pile of mysteries here. Let's start solving
-them.
+We've built up quite a pile of mysteries here. Let's get started solving them.
 
 ---
 
