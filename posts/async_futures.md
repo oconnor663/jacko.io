@@ -778,32 +778,35 @@ in safe code. The `Pin` struct works with the [`Unpin`] auto
 trait,[^auto_traits] which is implemented for most concrete types but not for
 the compiler-generated futures returned by `async` functions. Operations that
 might let us move pinned objects are either gated by `Unpin`
-([`DerefMut`][pin_deref_mut]) or marked `unsafe` ([`get_unchecked_mut`]).
+([`DerefMut`][pin_deref_mut]) or marked `unsafe` ([`get_unchecked_mut`]). It
+turns out that our extensive use of `Box::pin` in the examples above meant that
+all our futures were automatically `Unpin`, so `DerefMut` worked for our
+`Pin<&mut Self>` references, and we could mutate members like `self.started`
+and `self.futures` without thinking about it.
 
 [erase]: https://tmandry.gitlab.io/blog/posts/optimizing-await-1/#generators-as-data-structures
 
-[^unsafe_pinned]: In fact, what the compiler is doing is so wildly unsafe
-    that some of the machinery to make it formally sound [hasn't been
+[^unsafe_pinned]: In fact, what the compiler is doing is so wildly unsafe that
+    some of the machinery that will make it formally sound [hasn't been
     implemented yet][unsafe_pinned].
 
 [unsafe_pinned]: https://rust-lang.github.io/rfcs/3467-unsafe-pinned.html
 
 [`Unpin`]: https://doc.rust-lang.org/std/marker/trait.Unpin.html
 
-[^auto_traits]: ["Auto traits"] are implemented automatically by the
-    compiler for types that qualify. The most familiar auto traits are the
-    thread safety markers, `Send` and `Sync`. However, note that those two
-    are `unsafe` traits, because implementing them inappropriately can lead
-    to data races and other UB. In contrast, `Unpin` is _safe_, and types
-    that don't implement it automatically (usually because they have
-    generic type parameters that aren't required to be `Unpin`) can still
-    safely opt into it. That's sound for two reasons: First, the main
-    reason a type shouldn't implement `Unpin` is if it contains
-    self-references and can't be moved, but we can't create types like that
-    in safe code anyway. Second, even though `Unpin` lets us go from
-    `Pin<&mut T>` to `&mut T`, we can't construct a pinned pointer to one
-    of `T`'s fields ("pin projection") without either requiring that field
-    to be `Unpin` ([`Pin::new`]) or writing `unsafe` code
+[^auto_traits]: ["Auto traits"] are implemented automatically by the compiler
+    for types that qualify. The most familiar auto traits are the thread safety
+    markers, `Send` and `Sync`. However, note that those two are `unsafe`
+    traits, because implementing them inappropriately can lead to data races
+    and other UB. In contrast, `Unpin` is _safe_, and types that don't
+    implement it automatically (usually because they have generic type
+    parameters that aren't required to be `Unpin`) can still safely opt into
+    it. That's sound for two reasons: First, a type shouldn't implement `Unpin`
+    if it contains self-references and can't be moved, but we can't make
+    self-references in safe code anyway. Second, even though `Unpin` lets us go
+    from `Pin<&mut T>` to `&mut T`, we still can't construct a pinned pointer
+    to one of `T`'s fields (["pin projection"][projection]) without either
+    requiring that field to be `Unpin` ([`Pin::new`]) or writing `unsafe` code
     ([`Pin::new_unchecked`]).
 
 ["Auto traits"]: https://doc.rust-lang.org/reference/special-types-and-traits.html#auto-traits
@@ -813,11 +816,10 @@ might let us move pinned objects are either gated by `Unpin`
 [`get_unchecked_mut`]: https://doc.rust-lang.org/core/pin/struct.Pin.html#method.get_unchecked_mut
 [pin_deref_mut]: https://doc.rust-lang.org/core/pin/struct.Pin.html#impl-DerefMut-for-Pin%3CPtr%3E
 
-This is all we're going to say about `Pin`, because we're going to move on to
-tasks (Part Two) and IO (Part Three), and the nitty gritty details of pinning
-aren't going to come up. But if you want the whole story, start with [this post
-by the inventor of `Pin`][pin_post] and then read through [the official `Pin`
-docs][pin_docs].
+That's all we're going to say about `Pin`, because the nitty gritty details
+aren't necessary for tasks ([Part Two]) or IO ([Part Three]). But if you want
+the whole story, start with [this post by the inventor of `Pin`][pin_post] and
+then read [the official `Pin` docs][pin_docs].
 
 [pin_post]: https://without.boats/blog/pin
 [pin_docs]: https://doc.rust-lang.org/std/pin
@@ -825,26 +827,29 @@ docs][pin_docs].
 ## Bonus: Cancellation
 
 Async functions look and feel a lot like regular functions, but they have a
-certain extra superpower, and there's another superpower that they're missing.
+certain extra superpower, and there's another superpower they're missing.
 
-The extra superpower they have is cancellation. When we call an ordinary
-function in non-async code, there's no general way for us to put a timeout on
-that call.[^thread_cancellation] But we can cancel any future by
-just&hellip;not polling it again. Tokio provides [`tokio::time::timeout`] for
-this, and we already have the tools to implement our own version:
+The extra superpower is cancellation. When we call an ordinary function in
+non-async code, there's no general way for us to put a timeout on that
+call.[^thread_cancellation] But we can cancel any future by just&hellip;not
+polling it again. Tokio provides [`tokio::time::timeout`] for this, and we
+already have the tools to implement our own version:
 
-[^thread_cancellation]: We can spawn a new thread and call the function on that
-    thread, using a channel for example to wait for its return value with a
-    timeout. If the timeout passes, our main thread can go do something else,
-    but there's no general way to interrupt the background thread. One reason
-    this feature doesn't exist is that, if the interrupted thread was holding
-    any locks, those locks would never get unlocked. Lots of common libc
-    functions like `malloc` use locks internally, so forcefully killing threads
-    would tend to break the whole world. This is also why [`fork` is difficult
-    to use correctly][fork].
+[`tokio::time::timeout`]: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html
+
+[^thread_cancellation]: We could spawn a new thread and call the function on
+    that thread, using a channel for example to wait for its return value with
+    a timeout. But if that timeout passes, there's no general way to stop the
+    thread. One reason this feature doesn't exist (actually [it does exist on
+    Windows][TerminateThread], but [you should never use it][old_new_thing]) is
+    that, if the interrupted thread was holding any locks, those locks would
+    never get unlocked. Lots of common libc functions like `malloc` use locks
+    internally, so forcefully killing threads tends to corrupt the whole
+    process. This is also why [`fork` is difficult to use correctly][fork].
 
 [fork]: https://www.microsoft.com/en-us/research/uploads/prod/2019/04/fork-hotos19.pdf
-[`tokio::time::timeout`]: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html
+[TerminateThread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread#remarks
+[old_new_thing]: https://devblogs.microsoft.com/oldnewthing/20150814-00/?p=91811
 
 ```rust
 LINK: Playground ## playground://async_playground/timeout.rs
@@ -918,11 +923,11 @@ error[E0733]: recursion in an async fn requires boxing
 When regular functions call other functions, they allocate space dynamically on
 the "call stack". But when futures await other futures, they get compiled into
 structs that contain other structs, and struct sizes are static.[^stackless] If
-an an async function calls itself, it has to `Box` the recursive future before
+an an async function calls itself, it has to `Box` the recurring future before
 awaiting it:
 
-[^stackless]: In other words, Rust futures are "stackless coroutines". For
-    comparison, "goroutines" in Go are "stackful", and they can do recursion
+[^stackless]: In other words, Rust futures are "stackless coroutines". In Go on
+    the other hand, "goroutines" are "stackful", and they can do recursion
     without any extra steps.
 
 ```rust
@@ -938,6 +943,8 @@ async fn factorial(n: u64) -> u64 {
 ```
 
 This works, but it requires heap allocation.
+
+Ok, enough of all that, on to "tasks".
 
 ---
 
