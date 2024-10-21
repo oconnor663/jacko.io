@@ -433,7 +433,7 @@ impl Future for Sleep {
 }
 ```
 
-(Playgroud running…)
+(Playground running…)
 
 Hmm. This compiles cleanly, and the logic in `poll` looks right, but running it
 prints the "start" messages and then hangs forever. If we [add more
