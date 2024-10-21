@@ -11,9 +11,9 @@
 - [Part Three: IO](async_io.html)
 
 In the introduction we said that async/await was about futures and tasks. Part
-One was firehose of details about futures, and now we can talk about tasks.
-Luckily, we've already seen one, though we didn't call it that. The last
-version of our main loop in Part One looked like this:
+One was all about futures, and now we can talk about tasks. Luckily, we've
+already seen one, though we didn't call it that. The last version of our main
+loop in Part One looked like this:
 
 ```rust
 LINK: Playground ## playground://async_playground/wakers.rs
@@ -22,7 +22,7 @@ let mut joined_future = Box::pin(future::join_all(futures));
 let waker = futures::task::noop_waker();
 let mut context = Context::from_waker(&waker);
 while joined_future.as_mut().poll(&mut context).is_pending() {
-    ...
+    …
 }
 ```
 
@@ -146,7 +146,7 @@ fn main() {
     }
     let waker = futures::task::noop_waker();
     let mut context = Context::from_waker(&waker);
-    ...
+    …
 ```
 
 We can manage the `Vec<DynFuture>` using `retain_mut` like `JoinAll` did,
@@ -157,7 +157,7 @@ this:
 
 ```rust
 LINK: Playground ## playground://async_playground/tasks_no_spawn.rs
-HIGHLIGHT: 3-16
+HIGHLIGHT: 3-13
     let waker = futures::task::noop_waker();
     let mut context = Context::from_waker(&waker);
     loop {
@@ -173,7 +173,7 @@ HIGHLIGHT: 3-16
         }
 
         // Otherwise handle WAKERS and sleep as in Part One...
-        ...
+        …
 ```
 
 This works fine, though it might not feel like we've accomplished much. Mostly
@@ -269,7 +269,7 @@ error[E0277]: `F` cannot be sent between threads safely
 Fair enough, `spawn` has to make the same promise:
 
 ```rust
-fn spawn<F: Future<Output = ()> + Send>(future: F) { ... }
+fn spawn<F: Future<Output = ()> + Send>(future: F) { … }
 ```
 
 Happy yet? Nope:
@@ -303,7 +303,7 @@ global, it also has to promise that `F` is `'static`:[^spawn_vs_join]
 [open research question]: https://without.boats/blog/the-scoped-task-trilemma/
 
 ```rust
-fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) { ... }
+fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) { … }
 ```
 
 Finally it builds. That was a lot of ceremony just to make a global `Vec`, but
@@ -398,7 +398,7 @@ loop {
     }
 
     // Otherwise handle WAKERS and sleep as in Part One...
-    ...
+    …
 ```
 
 With all that in place, instead of hardcoding all whole task list in `main`, we
@@ -418,7 +418,7 @@ fn main() {
     let waker = futures::task::noop_waker();
     let mut context = Context::from_waker(&waker);
     let mut tasks: Vec<DynFuture> = vec![Box::pin(async_main())];
-    ...
+    …
 ```
 
 It works! Because of how we push and pop `NEW_TASKS`, the order of prints is
@@ -538,7 +538,7 @@ At the other end of the communication, futures passed to `spawn` don't know
 anything about `JoinState`, so we need a wrapper function to handle their
 return values and invoke the `Waker` if there is one:[^async_block]
 
-[^async_block]: Rust also supports async blocks, written `async { ... }`, which
+[^async_block]: Rust also supports async blocks, written `async { … }`, which
     act like async closures that take no arguments. If we didn't want this
     adapter to be a standalone function, we could move its body into `spawn`
     below and make it an async block.
@@ -664,7 +664,7 @@ correct output, but then it panics:
 ```
 LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 HIGHLIGHT: 2-6
-...
+…
 end 3
 end 2
 end 1
@@ -787,7 +787,7 @@ fn main() {
     let awake_flag = Arc::new(AwakeFlag(Mutex::new(false)));
     let waker = Waker::from(Arc::clone(&awake_flag));
     let mut context = Context::from_waker(&waker);
-    ...
+    …
 ```
 
 Now we can finally add the check in the main loop that started this whole

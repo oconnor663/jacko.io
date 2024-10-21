@@ -924,7 +924,7 @@ error[E0733]: recursion in an async fn requires boxing
   |
 1 | async fn factorial(n: u64) -> u64 {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-...
+…
 5 |         n * factorial(n - 1).await
   |             ---------------------- recursive call here
   |

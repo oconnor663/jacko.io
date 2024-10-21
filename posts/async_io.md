@@ -261,10 +261,10 @@ code. Instead, let's keep it short and hardcode that we're writing to a
 [^io_result]: Eagle-eyed readers might spot that our `poll_fn` closure is using
     the `?` operator with `set_nonblocking`, even though the closure itself
     returns `Poll`. This works because there's [a `Try` implementation for
-    `Poll<Result<...>>`][try_poll_result] that uses the same associated
-    `Residual` type as [the `Try` implementation for
-    `Result<...>`][try_result]. See [RFC 3058] for the details of the `Try`
-    trait, which are still unstable as of Rust&nbsp;1.81.
+    `Poll<Result<…>>`][try_poll_result] that uses the same associated
+    `Residual` type as [the `Try` implementation for `Result<…>`][try_result].
+    See [RFC 3058] for the details of the `Try` trait, which are still unstable
+    as of Rust&nbsp;1.81.
 
 [try_poll_result]: https://doc.rust-lang.org/stable/std/ops/trait.Try.html#impl-Try-for-Poll%3CResult%3CT,+E%3E%3E
 [try_result]: https://doc.rust-lang.org/stable/std/ops/trait.Try.html#impl-Try-for-Result%3CT,+E%3E
@@ -697,7 +697,7 @@ for waker in poll_wakers.drain(..) {
 }
 // Invoke Wakers from WAKE_TIMES if their time has come.
 while let Some(entry) = wake_times.first_entry() {
-    ...
+    …
 ```
 
 It works! And now we can finally call our main loop what it is, an _event
