@@ -14,7 +14,7 @@
 - [Part Two: Tasks](async_tasks.html)
 - [Part Three: IO](async_io.html)
 
-In the introduction we looked at [some async Rust code][part_one] without
+In the introduction we looked at [an example of async Rust][part_one] without
 explaining anything about how it worked. That left us with several mysteries:
 What are `async` functions and the "futures" they return? What does
 [`join_all`] do? And how is [`tokio::time::sleep`] different from
@@ -151,11 +151,11 @@ passes that `Context` along. That's all we need to know until we get to the
 
 `Pin` is a wrapper type that wraps pointers. For now, if you'll forgive me, I'm
 going to pretend that `Pin` does _nothing at all_.[^truth] I'll pretend that
-`Pin<Box<T>>` is just `Box<T>`,[^boxing] that `Pin<&mut T>` is just `&mut T`,
-and that `Pin<Box<T>>::as_mut` is just [`Box::as_mut`].[^as_mut] `Pin` actually
-solves a crucial problem for async Rust, but that problem will make more sense
-after we get some practice writing futures. We'll come back to it in the
-[Pin](#bonus__pin) section below.
+`Box::pin` is just `Box::new`,[^boxing] that `Pin<Box<T>>` is just `Box<T>`,
+that `Pin<&mut T>` is just `&mut T`, and that `Pin<Box<T>>::as_mut` is just
+[`Box::as_mut`].[^as_mut] `Pin` actually solves a crucial problem for async
+Rust, but that problem will make more sense after we get some practice writing
+futures. We'll come back to it in the [Pin](#bonus__pin) section below.
 
 [^truth]: As far as lies go, this one is pretty close to the truth. `Pin`'s job
     is to _prevent_ certain things in safe code, namely, moving certain futures
@@ -172,20 +172,21 @@ after we get some practice writing futures. We'll come back to it in the
 [cpp_coroutines]: https://pigweed.dev/docs/blog/05-coroutines.html
 [`Box::as_mut`]: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.as_mut
 
-[^as_mut]: It's rare that we need to call `Box::as_mut` explicitly, because
-    `&mut Box<T>` automatically converts to `&mut T` as needed. This is called
-    ["deref coercion"][deref_coercion]. Similarly, Rust does automatic
-    ["reborrowing"][reborrowing] of `&mut T` whenever we pass a long-lived
-    mutable reference to a function that only needs a short-lived one, so that
-    the long-lived reference isn't consumed unnecessarily. However, neither of
-    those convenience features work through `Pin` today, and we often need to
-    call `as_mut` explicitly when we're writing futures "by hand". If `&pin` or
-    maybe `&pinned` references [become a first-class language feature
-    someday][pinned_places], that will make these examples shorter and less
-    finicky.
+[^as_mut]: We don't often call `Box::as_mut` explicitly in non-async Rust,
+    because `&mut Box<T>` automatically converts to `&mut T` as needed. This is
+    called ["deref coercion"][deref_coercion]. Similarly, Rust automatically
+    ["reborrows"][reborrowing] `&mut T` whenever we pass a long-lived mutable
+    reference to a function that only needs a short-lived one, so that the
+    long-lived reference isn't consumed unnecessarily. (`&mut` references [are
+    not `Copy`][not_copy].) However, neither of those convenience features work
+    through `Pin` today, and we often need to call `as_mut` explicitly when
+    we're implementing `Future` "by hand". If [`&pin` or maybe `&pinned`
+    references][pinned_places] became a first-class language feature someday,
+    that would make these examples shorter and less finicky.
 
 [deref_coercion]: https://doc.rust-lang.org/book/ch15-02-deref.html#implicit-deref-coercions-with-functions-and-methods
 [reborrowing]: https://github.com/rust-lang/reference/issues/788
+[not_copy]: https://doc.rust-lang.org/std/marker/trait.Copy.html#impl-Copy-for-%26T
 [pinned_places]: https://without.boats/blog/pinned-places/
 
 Ok, let's focus on `Poll`. It's an enum, and it looks like this:[^option]
@@ -210,21 +211,22 @@ pub enum Poll<T> {
 ```
 
 The first job of the `poll` function is to return either `Poll::Ready` or
-`Poll::Pending`. Returning `Ready` means that the future is finished with its
-work, and it includes the `Output` value, if any.[^no_output] In that case,
-`poll` won't be called again.[^logic_error] Returning `Pending` means that the
-future isn't finished yet, and `poll` will be called again.
+`Poll::Pending`. Returning `Ready` means that the future has finished its work,
+and it includes the `Output` value, if any.[^no_output] In that case, `poll`
+won't be called again.[^logic_error] Returning `Pending` means that the future
+isn't finished yet, and `poll` will be called again.
 
 [^no_output]: `async fn foo` has no return value, so the `Foo` future has no
     `Output`. Rust represents no value with `()`, the empty tuple, also known
     as the "unit" type.
 
 [^logic_error]: Yet another similarity between `Future` and `Iterator` is that
-    calling `poll` again after it's returned `Ready` is like calling `next`
-    again after it's returned `None`. Both of those are considered "logic
-    errors", i.e. bugs in the caller. These functions are safe, so they're not
-    allowed to corrupt memory or lead to other [undefined behavior], but they
-    are allowed to panic, deadlock, or return "random" results.
+    calling `Future::poll` again after it's returned `Ready` is a lot like
+    calling `Iterator::next` again after it's returned `None`. Both of these
+    are considered "logic errors", i.e. bugs in the caller. These functions are
+    safe, so they're not allowed to corrupt memory or lead to other [undefined
+    behavior], but they are allowed to panic, deadlock, or return "random"
+    results.
 
 [undefined behavior]: https://doc.rust-lang.org/nomicon/what-unsafe-does.html
 
@@ -292,7 +294,7 @@ each other.
 To follow this rule, `Foo::poll` has to trust that `Sleep::poll` will return
 quickly. If we [add some timing and printing][timing], we can see that it does.
 The ["important mistake"][intro_sleep] we made in the introduction with
-`thread::sleep` broke this rule, and our futures run back-to-back instead of at
+`thread::sleep` broke this rule, and our futures ran back-to-back instead of at
 the same time.[^concurrently] If we [make the same mistake in
 `Foo::poll`][same_result], we get the same result. Doing a blocking sleep in
 `poll` makes the caller wait for an answer, and it can't poll any other futures
@@ -306,18 +308,18 @@ while it's waiting.
 
 `Foo` uses the `started` flag to make sure it only prints the start message
 once, no matter how many times `poll` is called. It doesn't need an `ended`
-flag, because `poll` won't be called again after it returns `Ready`. The
-`started` flag makes `Foo` a "state machine" with two states. In general, an
-`async` function needs a starting state and another state for each of its
-`.await` points, so that its `poll` function knows where to "resume execution".
-If we had more than two states, we could use an `enum` instead of a `bool`.
-When we write an `async fn`, the compiler takes care of all that for us, and
-that convenience is the main reason that async/await exists as a language
-feature.[^unsafe_stuff]
+flag, though, because `poll` won't be called again after it returns `Ready`.
+The `started` flag makes `Foo` a "state machine" with two states. In general an
+`async` function needs one starting state and another state for each of its
+`.await` points, so that its `poll` function can know where to "resume
+execution". If we had more than two states, we could use an `enum` instead of a
+`bool`. When we write an `async fn`, the compiler takes care of all of this for
+us, and that convenience is the main reason that async/await exists as a
+language feature.[^unsafe_stuff]
 
-[^unsafe_stuff]: Apart from the convenience, async/await also makes it possible
-    to do certain things in safe code that would require `unsafe` in `poll`.
-    We'll see that in the [Pin](#bonus__pin) section.
+[^unsafe_stuff]: Async/await also makes it possible to do certain things in
+    safe code that would be `unsafe` in `poll`. We'll see that in the
+    [Pin](#bonus__pin) section.
 
 ## Join
 
@@ -366,13 +368,14 @@ impl<F: Future> Future for JoinAll<F> {
 ```
 
 Again our non-async `join_all` function returns a struct that implements
-`Future`, and all the real work happens in `Future::poll`. There's `Box::pin`
+`Future`, and the real work happens in `Future::poll`. There's `Box::pin`
 again, but we'll keep ignoring it.
 
 In the `poll` function, [`Vec::retain_mut`] does all the heavy lifting. It's a
 standard `Vec` helper method that takes a closure argument, calls that closure
-on each element, and removes the elements that return `false`.[^algorithm] This
-drops each child future the first time it returns `Ready`.
+on each element, and drops the elements that return `false`.[^algorithm] This
+removes each child future once it returns `Ready`, following the rule that we
+shouldn't poll them again after that.
 
 [`Vec::retain_mut`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.retain_mut
 
@@ -395,12 +398,11 @@ which has no output. The real `join_all` returns `Vec<F::Output>`, which
 requires some more bookkeeping. This is left as an exercise for the reader, as
 they say.[^not_either_version]
 
-[^not_either_version]: As with `foo`, we're going to put the original
-    `join_all` back in for the rest of these examples. This time though, the
-    two versions aren't exactly the same, even apart from the shortcut we just
-    mentioned. We'll make another "important mistake" in the [Main](#main)
-    section below, which requires the version of `join_all` from the
-    [`futures`] crate.
+[^not_either_version]: As we did `foo`, we're going to put the original
+    `join_all` back in going forward. This time though, the two versions aren't
+    exactly the same, even apart from the shortcut we just mentioned. We'll
+    make another "important mistake" in the [Main](#main) section below, which
+    only works with the version of `join_all` from the [`futures`] crate.
 
 ## Sleep
 
@@ -445,8 +447,8 @@ the start and then never again. What are we missing?
 It turns out that `poll` has [three jobs][poll_docs], and so far we've only
 seen two. First, `poll` does as much work as it can without blocking. Then,
 `poll` returns `Ready` if it's finished or `Pending` if it's not. But finally,
-whenever `poll` is about to return `Pending`, it needs to&hellip;"schedule a
-wakeup". Ah, that's what we're missing.
+whenever `poll` is about to return `Pending`, it needs to "schedule a wakeup".
+Ah, that's what we're missing.
 
 [poll_docs]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
 
@@ -460,14 +462,16 @@ itself.
 
 ## Wake
 
-It's time to look more closely at [`Context`]. If we call `context.waker()`, we
-get something called a [`Waker`].[^only_method] Then calling either
-`waker.wake()` or `waker.wake_by_ref()` is how we ask to be polled again. Those
+It's time to look more closely at [`Context`]. If we call `context.waker()`, it
+returns a [`Waker`].[^only_method] Calling either [`waker.wake()`][wake] or
+[`waker.wake_by_ref()`][wake_by_ref] is how we ask to get polled again. Those
 two methods do the same thing, and we'll use whichever one is more
 convenient.[^efficiency]
 
 [`Context`]: https://doc.rust-lang.org/std/task/struct.Context.html
 [`Waker`]: https://doc.rust-lang.org/std/task/struct.Waker.html
+[wake]: https://doc.rust-lang.org/std/task/struct.Waker.html#method.wake
+[wake_by_ref]: https://doc.rust-lang.org/std/task/struct.Waker.html#method.wake_by_ref
 
 [^only_method]: Handing out a `Waker` is currently all that `Context` does. An
     early version of the `Future` trait had `poll` take a `Waker` directly
@@ -482,13 +486,13 @@ convenient.[^efficiency]
     ultimately something that we can control. [In some
     implementations][waker_implementations], `Waker` is an `Arc` internally,
     and invoking a `Waker` might move that `Arc` into a global queue. In that
-    case, `wake_by_ref` would need to clone the `Arc`, and `wake` saves an
+    case, `wake_by_ref` would need to clone the `Arc`, and `wake` would save an
     atomic operation on the refcount. This is a micro-optimization, and we
     won't worry about it.
 
 [waker_implementations]: https://without.boats/blog/wakers-i/
 
-The simplest thing we can try is asking to be polled again immediately every
+The simplest thing we can try is asking to get polled again immediately every
 time we return `Pending`:
 
 ```rust
@@ -505,11 +509,11 @@ fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
 ```
 
 This prints the right output and quits at the right time, so the "sleep
-forever" problem is fixed, but we've replaced it with a "busy loop" problem.
-This program calls `poll` over and over as fast as it can, burning 100% of the
-CPU until the wake time. We can see this indirectly by [counting the number of
-times `poll` gets called][sleep_busy_dbg],[^poll_count] or we can measure it
-directly [using tools like `perf` on Linux][perf].
+forever" problem is solved, but we've replaced it with a "busy loop" problem.
+This program calls `poll` over and over as fast as it can, burning 100% CPU
+until it exits. We can see this indirectly by [counting the number of times
+`poll` gets called][sleep_busy_dbg],[^poll_count] or we can measure it directly
+[using tools like `perf` on Linux][perf].
 
 [sleep_busy_dbg]: playground://async_playground/sleep_busy_dbg.rs?mode=release
 
@@ -518,32 +522,33 @@ directly [using tools like `perf` on Linux][perf].
 
 [perf]: https://github.com/oconnor663/jacko.io/blob/master/posts/async_playground/perf_stat.sh
 
-We want to invoke the `Waker` later, when it's actually time to wake up. One
-way to do that is to spawn a thread to call `thread::sleep` and then `wake`. If
-we do [that in every call to `poll`][same_crash], we'll run into the same
-too-many-threads crash from the introduction. We can work around that by
+What we really want is to invoke the `Waker` later, when it's actually time to
+wake up, but we can't use `thread::sleep` in `poll`. One thing we could do is
+spawn another thread to `thread::sleep` for us and then call `wake`.[^send] If
+we [did that in every call to `poll`][same_crash], we'd run into the same
+too-many-threads crash from the introduction. But we could work around that by
 [spawning a shared thread and and using a channel to send `Waker`s to
-it][shared_thread]. That would actually be a viable implementation, but there's
+it][shared_thread]. That's actually a viable implementation, but there's
 something unsatisfying about it. The main thread of our program is already
-going to spend most of its time sleeping. Why do we need two sleeping threads?
-Why doesn't Tokio give us a way to tell the main thread to wake up at a
-specific time?
+spending most of its time sleeping. Why do we need two sleeping threads? Why
+isn't there a way to tell our main thread to wake up at a specific time?
 
-Well to be fair, it does give us a way, that's what `tokio::time::sleep` is.
-But if we really want to write our own `sleep`, and we don't want to spawn an
-extra thread to make it work, then we also need to write our own `main`.
+[^send]: Note that `Waker` is `Send`, so this is allowed.
+
+Well to be fair, there is a way, that's what `tokio::time::sleep` is. But if we
+really want to write our own `sleep`, and we don't want to spawn an extra
+thread to make it work, then it turns out we also need to write our own `main`.
 
 [same_crash]: playground://async_playground/sleep_many_threads.rs
 [shared_thread]: playground://async_playground/sleep_one_thread.rs
 
 ## Main
 
-To call `poll` from `main`, we need a `Context` to pass in. We can make one
+To call `poll` from `main`, we'll need a `Context` to pass in. We can make one
 with [`Context::from_waker`], which means we need a `Waker`. There are a few
-different ways to make a `Waker`,[^make_a_waker] but since a busy loop doesn't
-need it to do anything, we can use a helper function called
-[`noop_waker`].[^noop] Once we've got a `Context`, we can call `poll` in a
-loop:
+different ways to make one,[^make_a_waker] but since a busy loop doesn't need
+it to do anything, we can use a helper function called [`noop_waker`].[^noop]
+Once we've built a `Context`, we can call `poll` in a loop:
 
 [`Context::from_waker`]: https://doc.rust-lang.org/std/task/struct.Context.html#method.from_waker
 [`noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
@@ -571,26 +576,26 @@ fn main() {
 }
 ```
 
-This works, but we still have the "busy loop" problem from above. Before we fix
-that, we need to make another important mistake:
+This works! Though we still have the "busy loop" problem from above. But before
+we fix that, we need to make another important mistake:
 
 Since this version of our main loop[^event_loop] never stops polling, and since
-our `Waker` does nothing, you might wonder whether calling `wake` in
-`Sleep::poll` actually matters. Surprisingly, it does matter. If we delete it,
-[things appear to work at first][loop_forever_10]. But when we bump the number
-of jobs from ten to a hundred, [our futures never wake up][loop_forever_100].
-What we're seeing is that, even though _our_ `Waker` does nothing, there are
-_other_ `Waker`s hidden in our program. When [`futures::future::JoinAll`] has
-many child futures,[^cutoff] it creates its own `Waker`s internally, which lets
-it avoid polling children that haven't asked for a wakeup. That's more
-efficient than polling all of them every time, but it also means that children
-who never invoke their own `Waker` will never get polled again. This sort of
-thing is why a `Pending` future must _always_ arrange to invoke its
-waker.[^pending]
+our `Waker` does nothing, you might wonder whether invoking the `Waker` in
+`Sleep::poll` actually matters. Surprisingly, it does matter. If we delete that
+line, [things appear to work at first][loop_forever_10]. But when we bump the
+number of jobs from ten to a hundred, [our futures never wake
+up][loop_forever_100]. What we're seeing is that, even though _our_ `Waker`
+does nothing, there are _other_ `Waker`s hidden in our program. When
+[`futures::future::JoinAll`] has many child futures,[^cutoff] it creates its
+own `Waker`s internally, which lets it avoid polling children that haven't
+asked for a wakeup. That's more efficient than polling all of them every time,
+but it also means that children who never invoke their own `Waker` will never
+get polled again. This sort of thing is why a `Pending` future must _always_
+arrange to invoke its `Waker`.[^pending]
 
-[^event_loop]: This is often called an "event loop", but right now all we have
-    is sleeps, and those aren't really events. We'll build a proper event loop
-    in [Part Three].
+[^event_loop]: This sort of thing often called an "event loop", but right now
+    all we have is sleeps, and those aren't really events. We'll build a proper
+    event loop in [Part Three].
 
 [loop_forever_10]: playground://async_playground/loop_forever_10.rs
 [loop_forever_100]: playground://async_playground/loop_forever_100.rs
@@ -601,19 +606,22 @@ waker.[^pending]
 
 [^pending]: We don't usually worry about this, because most futures in ordinary
     application code aren't "leaf" futures. Most futures (like `Foo` and
-    `JoinAll`) only return `Pending` when other futures return `Pending` to
-    them, so they can assume that those other futures schedule wakeups.
-    However, there are exceptions. The [`futures::pending!`][pending_macro]
-    macro explicitly returns `Pending` _without_ scheduling a wakeup.
+    `JoinAll` and any `async fn`) only return `Pending` when other futures
+    return `Pending` to them, so they can usually assume that those other
+    futures have scheduled a wakeup. However, there are exceptions. The
+    [`futures::pending!`][pending_macro] macro explicitly returns `Pending`
+    _without_ scheduling a wakeup.
 
 [pending_macro]: https://docs.rs/futures/latest/futures/macro.pending.html
 
-Ok, back to `main`. We need a way for `Sleep::poll` to send `Waker`s and wake
-times up to the main loop. Let's use a global variable.[^thread_local] We'll
-wrap it in a `Mutex`, so that safe code can modify it:
+Ok, back to `main`. Let's fix the busy loop problem. We want `main` to
+`thread::sleep` until the next wake time, which means we need a way for
+`Sleep::poll` to send `Waker`s and wake times to `main`. We'll use a global
+variable for this, and we'll wrap it in a `Mutex`, so that safe code can modify
+it:[^thread_local]
 
 [^thread_local]: Real async runtimes like Tokio use
-    [`thread_local!`][thread_local] instead of globals for this. It's more
+    [`thread_local!`][thread_local] instead of globals for this. That's more
     efficient, and it also lets them run more than one event loop in the same
     program. `Mutex` is more familiar, though, and it's good enough for this
     series.
@@ -627,7 +635,7 @@ static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> =
 ```
 
 This is a sorted map from wake times to `Waker`s.[^vec] `Sleep::poll` can
-insert its `Waker` into this map:[^or_default]
+insert its `Waker` into this map using [`BTreeMap::entry`]:[^or_default]
 
 [^vec]: Note that the value type here is `Vec<Waker>` instead of just `Waker`,
     because there might be more than one `Waker` for a given `Instant`. This is
@@ -635,7 +643,9 @@ insert its `Waker` into this map:[^or_default]
     measured in nanoseconds, but the resolution on Windows is 15.6
     *milli*seconds.
 
-[^or_default]: [`or_default`] creates an empty `Vec` if no value was there
+[`BTreeMap::entry`]: https://doc.rust-lang.org/std/collections/struct.BTreeMap.html#method.entry
+
+[^or_default]: [`or_default`] creates an empty `Vec` if nothing was there
     before.
 
 [`or_default`]: https://doc.rust-lang.org/std/collections/btree_map/enum.Entry.html#method.or_default
@@ -658,10 +668,10 @@ fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
 After polling, our main loop can read the first key from this sorted map to get
 the earliest wake time. Then it can `thread::sleep` until that time, fixing the
 busy loop problem.[^hold_lock] Then it invokes all the `Waker`s whose wake time
-has passed, before polling again:
+has arrived, before looping and polling again:
 
-[^hold_lock]: We're holding the `WAKERS` lock while we sleep here, which is a
-    little sketchy, but it doesn't matter in this single-threaded example. A
+[^hold_lock]: We're holding the `WAKERS` lock while we sleep here, which is
+    slightly sketchy, but it doesn't matter in this single-threaded example. A
     real multithreaded runtime would use [`thread::park_timeout`] or similar
     instead of sleeping, so that other threads could trigger an early wakeup.
 
@@ -696,10 +706,10 @@ fn main() {
 }
 ```
 
-This works, and doesn't need to spawn any extra threads. This is what it takes
-to write our own `sleep`.
+This works! We solved the busy loop problem, and we didn't need to spawn any
+extra threads. This is what it takes to write our own `sleep`.
 
-This is sort of the end of Part One. In [Part Two] we'll expand our main loop
+This is sort of the end of Part One. In [Part Two] we'll expand this main loop
 to implement "tasks". However, now that we understand how futures work, there
 are a few "bonus" topics that we finally have the tools to talk about, at least
 briefly. The following sections aren't required for Parts Two and Three.
@@ -777,10 +787,10 @@ encapsulate that unsafety, so that we can write custom futures like `JoinAll`
 in safe code. The `Pin` struct works with the [`Unpin`] auto
 trait,[^auto_traits] which is implemented for most concrete types but not for
 the compiler-generated futures returned by `async` functions. Operations that
-might let us move pinned objects are either gated by `Unpin`
-([`DerefMut`][pin_deref_mut]) or marked `unsafe` ([`get_unchecked_mut`]). It
-turns out that our extensive use of `Box::pin` in the examples above meant that
-all our futures were automatically `Unpin`, so `DerefMut` worked for our
+might let us move pinned objects are either gated by `Unpin` (like
+[`DerefMut`][pin_deref_mut]) or marked `unsafe` (like [`get_unchecked_mut`]).
+It turns out that our extensive use of `Box::pin` in the examples above meant
+that all our futures were automatically `Unpin`, so `DerefMut` worked for our
 `Pin<&mut Self>` references, and we could mutate members like `self.started`
 and `self.futures` without thinking about it.
 
@@ -837,15 +847,16 @@ already have the tools to implement our own version:
 
 [`tokio::time::timeout`]: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html
 
-[^thread_cancellation]: We could spawn a new thread and call the function on
-    that thread, using a channel for example to wait for its return value with
-    a timeout. But if that timeout passes, there's no general way to stop the
-    thread. One reason this feature doesn't exist (actually [it does exist on
-    Windows][TerminateThread], but [you should never use it][old_new_thing]) is
-    that, if the interrupted thread was holding any locks, those locks would
-    never get unlocked. Lots of common libc functions like `malloc` use locks
-    internally, so forcefully killing threads tends to corrupt the whole
-    process. This is also why [`fork` is difficult to use correctly][fork].
+[^thread_cancellation]: We could spawn a new thread and call any function we
+    like on that thread, for example using a channel to wait for its return
+    value with a timeout. But if that timeout passes, there's no general way
+    for us to stop the thread. One reason this feature doesn't exist (actually
+    [it does exist on Windows][TerminateThread], but [you should never use
+    it][old_new_thing]) is that, if the interrupted thread was holding any
+    locks, those locks would never get unlocked. Lots of common libc functions
+    like `malloc` use locks internally, so forcefully killing threads tends to
+    corrupt the whole process. This is also why [`fork` is difficult to use
+    correctly][fork].
 
 [fork]: https://www.microsoft.com/en-us/research/uploads/prod/2019/04/fork-hotos19.pdf
 [TerminateThread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread#remarks
@@ -886,7 +897,7 @@ fn timeout<F: Future>(duration: Duration, inner: F) -> Timeout<F> {
 }
 ```
 
-That `timeout` wrapper works with _any_ async function. Regular functions have
+This `timeout` wrapper works with _any_ async function. Regular functions have
 no equivalent.
 
 ## Bonus: Recursion
@@ -920,15 +931,15 @@ error[E0733]: recursion in an async fn requires boxing
   = note: a recursive `async fn` must introduce indirection such as `Box::pin` to avoid an infinitely sized future
 ```
 
-When regular functions call other functions, they allocate space dynamically on
-the "call stack". But when futures await other futures, they get compiled into
-structs that contain other structs, and struct sizes are static.[^stackless] If
-an an async function calls itself, it has to `Box` the recurring future before
-awaiting it:
+When regular functions call each other, they allocate space dynamically on the
+"call stack". But when async functions `.await` each other, they get compiled
+into structs that contain other structs, and struct sizes are
+static.[^stackless] If an an async function calls itself, it has to `Box` the
+recurring future before it `.await`s it:
 
 [^stackless]: In other words, Rust futures are "stackless coroutines". In Go on
-    the other hand, "goroutines" are "stackful", and they can do recursion
-    without any extra steps.
+    the other hand, "goroutines" are "stackful". They can do recursion without
+    any extra steps.
 
 ```rust
 LINK: Playground ## playground://async_playground/boxed_recursion.rs
