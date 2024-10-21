@@ -264,7 +264,7 @@ code. Instead, let's keep it short and hardcode that we're writing to a
     `Poll<Result<…>>`][try_poll_result] that uses the same associated
     `Residual` type as [the `Try` implementation for `Result<…>`][try_result].
     See [RFC 3058] for the details of the `Try` trait, which are still unstable
-    as of Rust&nbsp;1.81.
+    as of Rust&nbsp;1.82.
 
 [try_poll_result]: https://doc.rust-lang.org/stable/std/ops/trait.Try.html#impl-Try-for-Poll%3CResult%3CT,+E%3E%3E
 [try_result]: https://doc.rust-lang.org/stable/std/ops/trait.Try.html#impl-Try-for-Result%3CT,+E%3E
@@ -324,7 +324,14 @@ default behavior of [`Write::write_all`].[^write_all]
 [`Write::write_all`]: https://doc.rust-lang.org/std/io/trait.Write.html#method.write_all
 
 Those are the async building blocks we needed for the server, and now we can
-write the async version of `server_main`:
+write the async version of `server_main`:[^rely_on_pin]
+
+[^rely_on_pin]: I'm pretty sure this is the first time we've needed `Pin`
+    guarantees for soundness. The compiler-generated `one_response` future owns
+    a `TcpStream`, but it also passes references to that stream into
+    `write_all` futures, and it owns those too. That would be unsound if the
+    `one_response` future could move (thus moving the `TcpStream`) after those
+    borrows were established.
 
 ```rust
 LINK: Playground ## playground://async_playground/client_server_busy.rs

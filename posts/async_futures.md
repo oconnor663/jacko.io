@@ -630,7 +630,7 @@ it:[^thread_local]
 
 ```rust
 LINK: Playground ## playground://async_playground/wakers.rs
-static WAKERS: Mutex<BTreeMap<Instant, Vec<Waker>>> =
+static WAKE_TIMES: Mutex<BTreeMap<Instant, Vec<Waker>>> =
     Mutex::new(BTreeMap::new());
 ```
 
@@ -657,8 +657,8 @@ fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<()> {
     if Instant::now() >= self.wake_time {
         Poll::Ready(())
     } else {
-        let mut wakers_tree = WAKERS.lock().unwrap();
-        let wakers_vec = wakers_tree.entry(self.wake_time).or_default();
+        let mut wake_times = WAKE_TIMES.lock().unwrap();
+        let wakers_vec = wake_times.entry(self.wake_time).or_default();
         wakers_vec.push(context.waker().clone());
         Poll::Pending
     }
@@ -670,7 +670,7 @@ the earliest wake time. Then it can `thread::sleep` until that time, fixing the
 busy loop problem.[^hold_lock] Then it invokes all the `Waker`s whose wake time
 has arrived, before looping and polling again:
 
-[^hold_lock]: We're holding the `WAKERS` lock while we sleep here, which is
+[^hold_lock]: We're holding the `WAKE_TIMES` lock while we sleep here, which is
     slightly sketchy, but it doesn't matter in this single-threaded example. A
     real multithreaded runtime would use [`thread::park_timeout`] or similar
     instead of sleeping, so that other threads could trigger an early wakeup.

@@ -45,9 +45,9 @@ Programming Language][The Book] ("The Book") or similar.[^ch20]
 
 Let's get started by doing more than one thing at a time with threads. This
 will go well at first, but we'll run into trouble as the number of threads
-grows. Then we'll get the same thing working in async, to see what all the fuss
-is about. That'll give us some example code to play with, and in [Part One]
-we'll start digging into it.
+grows. Then we'll get the same thing working with async/await, to see what all
+the fuss is about. That'll give us some example code to play with, and in [Part
+One] we'll start digging into it.
 
 ## Threads
 
