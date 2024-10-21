@@ -719,11 +719,12 @@ while let Some(entry) = wake_times.first_entry() {
 
 It works!
 
-And that's it. We did it. Our main loop is finally an _event loop_. Hopefully
-this whole adventure has made async Rust and async IO in general seem less
-magical. There's lots more to explore and look forward to, like [future
-language features][future_features] and [all the gory details of `Pin`][pin].
-Good luck out there :)
+And that's it. We did it. Our main loop is finally an _event loop_.
+
+Hopefully this little adventure has made async Rust and async IO in general
+seem less magical. There's lots more to explore and look forward to, like
+[future language features][future_features] and [all the gory details of
+`Pin`][pin]. Good luck out there :)
 
 [future_features]: https://smallcultfollowing.com/babysteps/blog/2024/01/03/async-rust-2024/
 [pin]: https://without.boats/blog/pin/
