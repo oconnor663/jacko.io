@@ -108,10 +108,10 @@ failed to spawn thread: Os { code: 11, kind: WouldBlock, message:
 Each thread uses a lot of memory,[^stack_space] so there's a limit on how many
 threads we can spawn. It's harder to see on the Playground, but we can also
 cause performance problems by switching between lots of threads at
-once.[^basketball_demo] Threads are a fine way to run a
-few jobs in parallel, or even a few hundred, but for various reasons they don't
-scale well beyond that.[^thread_pool] If we want to run thousands of jobs at
-once, we need something different.
+once.[^basketball_demo] Threads are a fine way to run a few jobs in parallel,
+or even a few hundred, but for various reasons they don't scale well beyond
+that.[^thread_pool] If we want to run thousands of jobs, we need something
+different.
 
 [^stack_space]: In particular, each thread allocates space for its "stack",
     which is 8&nbsp;MiB by default on Linux. The OS uses fancy tricks to
@@ -127,7 +127,7 @@ once, we need something different.
 [basketball_threads_orig]: playground://async_playground/basketball_threads.rs?mode=release
 
 [^thread_pool]: A thread pool can be a good approach for CPU-intensive work,
-    but when each jobs spends most of its time blocked on IO, the pool quickly
+    but when each job spends most of its time blocked on IO, the pool quickly
     runs out of worker threads, and [there's not enough parallelism to go
     around][rayon].
 
@@ -212,8 +212,8 @@ until we `.await` the joined future.
 [tokio_10_dbg]: playground://async_playground/tokio_10_dbg.rs
 
 Unlike the threads example above, this works even if we bump it up to [a
-thousand jobs][thousand_futures]. In fact, if we [comment out the prints and
-build in release mode][million_futures], we can run _a million jobs_ at
+thousand futures][thousand_futures]. In fact, if we [comment out the prints and
+build in release mode][million_futures], we can run a _million_ futures at
 once. This sort of thing is why async is popular.
 
 [thousand_futures]: playground://async_playground/tokio_1k.rs
@@ -221,7 +221,7 @@ once. This sort of thing is why async is popular.
 
 ## Important Mistakes
 
-We can get hints about how async works if we start making some mistakes. First
+We can get some hints about how async works if we start making mistakes. First,
 let's try using [`thread::sleep`] instead of [`tokio::time::sleep`] in our
 async function:
 
@@ -274,15 +274,15 @@ async fn main() {
 
 This also doesn't work! What we're seeing is that futures don't do any work "in
 the background".[^tasks] Instead, they do their work when we `.await` them. If
-we `.await` them one-at-a-time, they do their work one-at-a-time. Somehow
-`join_all` was helping us `.await` all of them together.
+we `.await` them one-at-a-time, they do their work one-at-a-time. But somehow
+`join_all` lets us `.await` all of them at the same time.
 
-[^tasks]: "Tasks" are futures that run in the background. We'll get to tasks in
+[^tasks]: "Tasks" are futures that run in the background. We'll get to those in
     [Part Two].
 
 [Part Two]: async_tasks.html
 
-We've built up quite a pile of mysteries here. Let's get started solving them.
+Ok, we've got a lot of mysteries here. Let's start solving them.
 
 ---
 
