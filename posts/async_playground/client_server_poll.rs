@@ -297,9 +297,7 @@ fn main() -> io::Result<()> {
         // Clear POLL_FDS and invoke all the Wakers from POLL_WAKERS. This might wake futures that
         // aren't ready yet, but if so they'll register another wakeup.
         poll_fds.clear();
-        for waker in poll_wakers.drain(..) {
-            waker.wake();
-        }
+        poll_wakers.drain(..).for_each(Waker::wake);
         // Invoke Wakers from WAKE_TIMES if their time has come.
         while let Some(entry) = wake_times.first_entry() {
             if *entry.key() <= Instant::now() {

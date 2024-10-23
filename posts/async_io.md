@@ -707,11 +707,9 @@ every time, and tasks that aren't `Ready` will re-register themselves in
 
 ```rust
 LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
-HIGHLIGHT: 1-4
+HIGHLIGHT: 1-2
 poll_fds.clear();
-for waker in poll_wakers.drain(..) {
-    waker.wake();
-}
+poll_wakers.drain(..).for_each(Waker::wake);
 // Invoke Wakers from WAKE_TIMES if their time has come.
 while let Some(entry) = wake_times.first_entry() {
     …
