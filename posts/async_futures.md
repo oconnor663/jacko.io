@@ -285,7 +285,7 @@ each other.
     CPU-heavy work, like compression or cryptography, it's less clear what it
     means. The usual rule of thumb is that, if a function does more than "a few
     milliseconds" of CPU work, it should either offload that work using
-    something like [`tokio::task::spawn_blocking`], or insert await points
+    something like [`tokio::task::spawn_blocking`], or insert `.await` points
     using something like [`tokio::task::yield_now`].
 
 [`tokio::task::spawn_blocking`]: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
