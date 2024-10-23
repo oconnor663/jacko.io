@@ -598,7 +598,7 @@ function to populate them:[^lock_order]
 [client_server_poll_orig]: playground://async_playground/client_server_poll.rs
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
 static POLL_FDS: Mutex<Vec<libc::pollfd>> = Mutex::new(Vec::new());
 static POLL_WAKERS: Mutex<Vec<Waker>> = Mutex::new(Vec::new());
 
@@ -623,7 +623,7 @@ Now our async IO functions can call `register_pollfd` instead of `wake_by_ref`.
 `POLLIN`:
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
 HIGHLIGHT: 2
 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
     register_pollfd(context, listener, libc::POLLIN);
@@ -634,7 +634,7 @@ Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
 `write_all` handles `WouldBlock` by setting `POLLOUT`:
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
 HIGHLIGHT: 2
 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
     register_pollfd(context, stream, libc::POLLOUT);
@@ -651,7 +651,7 @@ to convert it to milliseconds:
     can wait on IO in addition to sleeping, waiting forever is valid.
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
 HIGHLIGHT: 6-15
 // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been
 // set. Polling futures that aren't ready yet is inefficient but allowed.
@@ -685,7 +685,7 @@ the main loop. It's a "foreign" function, so calling it is `unsafe`:[^fd_ub]
     polling, so spurious wakeups are no problem.
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
 let mut poll_fds = POLL_FDS.lock().unwrap();
 let mut poll_wakers = POLL_WAKERS.lock().unwrap();
 let poll_error_code = unsafe {
@@ -706,7 +706,7 @@ every time, and tasks that aren't `Ready` will re-register themselves in
 `POLL_FDS` before the next sleep.
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=504d9b309e364b9da6b1251964a4517e
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
 HIGHLIGHT: 1-2
 poll_fds.clear();
 poll_wakers.drain(..).for_each(Waker::wake);
