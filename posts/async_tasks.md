@@ -1,5 +1,5 @@
 # Async Rust, Part Two: Tasks
-###### \[DRAFT]
+###### 2024 October 23
 
 - [Introduction](async_intro.html)
 - [Part One: Futures](async_futures.html)

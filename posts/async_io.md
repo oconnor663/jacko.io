@@ -1,5 +1,5 @@
 # Async Rust, Part Three: IO
-###### \[DRAFT]
+###### 2024 October 23
 
 - [Introduction](async_intro.html)
 - [Part One: Futures](async_futures.html)
