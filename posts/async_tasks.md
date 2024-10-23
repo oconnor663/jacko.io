@@ -821,6 +821,6 @@ use `spawn` to handle network connections.
 
 <div class="prev-next-arrows">
     <div><a href="async_futures.html">← Part One: Futures</a></div>
-    <div class="space"> </div><div>
-    <a href="async_io.html"> Part Three: IO →</a>
+    <div class="space"> </div>
+    <div><a href="async_io.html"> Part Three: IO →</a></div>
 </div>

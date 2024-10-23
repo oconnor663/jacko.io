@@ -733,5 +733,5 @@ seem less magical. There's lots more to explore and look forward to, like
 
 <div class="prev-next-arrows">
     <div><a href="async_tasks.html">← Part Two: Tasks</a></div>
-    <div class="space"> </div><div>
+    <div class="space"> </div>
 </div>

@@ -961,6 +961,6 @@ Ok, enough of all that, on to "tasks".
 
 <div class="prev-next-arrows">
     <div><a href="async_intro.html">← Introduction</a></div>
-    <div class="space"> </div><div>
-    <a href="async_tasks.html"> Part Two: Tasks →</a>
+    <div class="space"> </div>
+    <div><a href="async_tasks.html"> Part Two: Tasks →</a></div>
 </div>

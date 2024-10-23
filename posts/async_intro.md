@@ -287,6 +287,6 @@ Ok, we've got a lot of mysteries here. Let's start solving them.
 ---
 
 <div class="prev-next-arrows">
-    <div class="space"> </div><div>
+    <div class="space"> </div>
     <div><a href="async_futures.html">Part One: Futures →</a></div>
 </div>
