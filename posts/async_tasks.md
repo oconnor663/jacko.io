@@ -393,7 +393,8 @@ loop {
         let Some(mut task) = NEW_TASKS.lock().unwrap().pop() else {
             break;
         };
-        // It's important that NEW_TASKS isn't locked here.
+        // Polling this task could spawn more tasks, so it's important that
+        // NEW_TASKS isn't locked here.
         if task.as_mut().poll(&mut context).is_pending() {
             tasks.push(task);
         }
@@ -408,7 +409,7 @@ loop {
     …
 ```
 
-With all that in place, instead of hardcoding all whole task list in `main`, we
+With all that in place, instead of hardcoding the whole task list in `main`, we
 can define an `async_main` function and let it do the spawning:
 
 ```rust
@@ -793,13 +794,12 @@ discussion:[^another_deadlock]
 
 ```rust
 LINK: Playground ## playground://async_playground/tasks.rs
-HIGHLIGHT: 11-15
+HIGHLIGHT: 10-14
 // Collect new tasks, poll them, and keep the ones that are Pending.
 loop {
     let Some(mut task) = NEW_TASKS.lock().unwrap().pop() else {
         break;
     };
-    // It's important that NEW_TASKS isn't locked here.
     if task.as_mut().poll(&mut context).is_pending() {
         other_tasks.push(task);
     }
