@@ -546,9 +546,9 @@ thread to make it work, then it turns out we also need to write our own `main`.
 
 To call `poll` from `main`, we'll need a `Context` to pass in. We can make one
 with [`Context::from_waker`], which means we need a `Waker`. There are a few
-different ways to make one,[^make_a_waker] but since a busy loop doesn't need
-it to do anything, we can use a helper function called [`noop_waker`].[^noop]
-Once we've built a `Context`, we can call `poll` in a loop:
+different ways to make one,[^make_a_waker] but for now we just need a
+placeholder, so we'll use a helper function called [`noop_waker`].[^noop] Once
+we've built a `Context`, we can call `poll` in a loop:
 
 [`Context::from_waker`]: https://doc.rust-lang.org/std/task/struct.Context.html#method.from_waker
 [`noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
