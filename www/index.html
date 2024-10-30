@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>jacko.io</title>
 <style>
 body {
@@ -31,14 +32,25 @@ ul {
   filter: invert(51%) sepia(91%) saturate(6272%) hue-rotate(232deg) brightness(101%) contrast(100%);
 }
 .entry {
-  margin-top: 15px;
+  margin-top: 10px;
   line-height: 1.25;
+}
+#photo {
+  height: 200px;
+  border-radius: 20px;
+  float: right;
+  margin: 20px;
+}
+@media (max-width: 760px) {
+  #photo {
+    height: 100px;
+  }
 }
 </style>
 </head>
 <body>
 
-<a href="talk.jpg"><img alt="a photo of me giving a talk" src="talk_thumb.jpg" style="height: 200px; border-radius: 20px; float: right; margin: 20px"></a>
+<a href="talk.jpg"><img id="photo" alt="a photo of me giving a talk" src="talk_thumb.jpg"></a>
 
 <h1>Jack O'Connor</h1>
 
