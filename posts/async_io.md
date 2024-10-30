@@ -357,9 +357,17 @@ async fn server_main(mut listener: TcpListener) -> io::Result<()> {
 ```
 
 Similar to [the threads example we started with](#threads), we never join
-server tasks, so we use `unwrap` to at least print to stderr if they fail.
+server tasks, so we use `unwrap` to print to stderr if they fail.[^take_down]
 Previously we did that inside a closure, and here we do it inside an `async`
 block, which works like an anonymous `async fn` that takes no arguments.
+
+[^take_down]: In our case panicking in any task will print and then take down
+    the whole process, because we're not using background threads, and we're
+    not [catching panics]. But as we noted with `JoinHandle` in Part Two, Tokio
+    does catch panics, even in [single-threaded mode].
+
+[catching panics]: https://doc.rust-lang.org/std/panic/fn.catch_unwind.html
+[single-threaded mode]: https://docs.rs/tokio/latest/tokio/attr.main.html#current-thread-runtime
 
 Hopefully that works, but we need to translate the client before we can test
 it.
