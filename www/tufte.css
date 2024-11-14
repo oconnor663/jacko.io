@@ -501,6 +501,10 @@ label.margin-toggle:not(.sidenote-number) {
         padding-right: 5%;
     }
 
+    #preso_button {
+        display: none;
+    }
+
     hr,
     section > p,
     section > footer,
