@@ -22,8 +22,13 @@ const HEADER: &str = r#"<!DOCTYPE html>
 <title>__TITLE__</title>
 </head>
 <body>
+<div
+    id="preso_button"
+    style="height: 200px; width: 200px; position: absolute; top: 0; right: 0"
+    onclick="document.documentElement.classList.toggle('presentation')"
+></div>
 <article>
-<p><a href="/">↫ Home</a></p>
+<p class="home_link"><a href="/">↫ Home</a></p>
 <h1>__TITLE__</h1>
 <p class="subtitle">__SUBTITLE__</p>
 <section>"#;

@@ -49,6 +49,10 @@ html {
     font-size: 15px;
 }
 
+html.presentation {
+    font-size: 30px;
+}
+
 body {
     width: 87.5%;
     margin-left: auto;
@@ -59,6 +63,21 @@ body {
     color: #073642;
     max-width: 1400px;
     counter-reset: sidenote-counter;
+}
+
+.presentation body {
+    width: unset;
+    margin-left: unset;
+    margin-right: unset;
+    padding-left: unset;
+    max-width: unset;
+    margin: 16px;
+    overflow: scroll;
+}
+
+/* This doesn't cover Firefox, but setting "scrollbar-width: none" (the alleged Firefox approach) breaks this. */
+.presentation body::-webkit-scrollbar {
+    display: none;
 }
 
 /* Adds dark mode */
@@ -105,6 +124,12 @@ hr {
     padding: 0;
 }
 
+.presentation hr {
+    height: 2px;
+    width: 80%;
+    border-top-width: 2px;
+}
+
 p.subtitle {
     font-style: italic;
     margin-top: 1rem;
@@ -125,6 +150,14 @@ p.subtitle {
 article {
     padding-top: 1rem;
     padding-bottom: 5rem;
+}
+
+.presentation article {
+    padding: 0;
+}
+
+.presentation .home_link {
+    display: none;
 }
 
 section {
@@ -196,6 +229,12 @@ section > table {
     width: 55%;
 }
 
+.presentation section > p,
+.presentation section > footer,
+.presentation section > table {
+    width: 80%;
+}
+
 /* 50 + 5 == 55, to be the same width as paragraph */
 section > dl,
 section > ol,
@@ -265,6 +304,14 @@ div.code_link a {
     color: #657b83;
 }
 
+.presentation div.code_link a {
+    top: 8px;
+    right: 8px;
+    padding: 10px;
+    border-radius: 10px;
+    border-width: 2px;
+}
+
 /* Sidenotes, margin notes, figures, captions */
 img {
     max-width: 100%;
@@ -282,6 +329,13 @@ img {
     line-height: 1.3;
     vertical-align: baseline;
     position: relative;
+}
+
+.presentation .sidenote,
+.presentation .marginnote {
+    margin-right: -26%;
+    width: 25%;
+    font-size: 0.7rem;
 }
 
 /* https://github.com/edwardtufte/tufte-css/pull/171/files */
@@ -320,6 +374,11 @@ blockquote .marginnote {
     top: -0.5rem;
 }
 
+.presentation .sidenote:before {
+    font-size: 0.6rem;
+    top: -0.3rem;
+}
+
 div.fullwidth,
 table.fullwidth {
     width: 100%;
@@ -352,6 +411,11 @@ h3 > code {
     font-size: 1.0rem;
 }
 
+.presentation .marginnote code,
+.presentation .sidenote code {
+    font-size: 0.65rem;
+}
+
 pre > code {
     line-height: 1.2;
     width: 52.5%;
@@ -365,8 +429,16 @@ pre > code {
     padding: 0.4% 0.75%;
 }
 
+.presentation pre > code {
+    width: 77.5%;
+}
+
 pre.fullwidth > code {
     width: 90%;
+}
+
+.presentation pre.fullwidth > code {
+    width: 109%;
 }
 
 .fullwidth {
@@ -379,6 +451,10 @@ pre.fullwidth > code {
     flex-direction: row;
     width: 55%;
     font-size: 1.4rem;
+}
+
+.presentation .prev-next-arrows {
+    width: 80%;
 }
 
 .prev-next-arrows .space {
