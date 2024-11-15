@@ -416,7 +416,7 @@ can define an `async_main` function and let it do the spawning:
 LINK: Playground ## playground://async_playground/tasks_no_join.rs
 HIGHLIGHT: 1-6,11
 async fn async_main() {
-    // The main loop currently waits for all tasks to finish.
+    // The main() loop currently waits for all tasks to finish.
     for n in 1..=10 {
         spawn(foo(n));
     }
