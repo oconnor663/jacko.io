@@ -693,12 +693,18 @@ If a task at the front is waiting on a task at the back, we might end up with
 `Pending` tasks and yet no wakeups scheduled.
 
 That's exactly what's happened to us. Our main task is probably blocking on the
-first `JoinHandle`. The main loop wakes up, it polls the main task, and that
-`JoinHandle` is still `Pending`. Then it polls all the `other_tasks`. Each of
-them prints an "end" message, signals its `JoinHandle`, and returns `Ready`. At
-that point, we need to poll the main task again instead of trying to sleep. How
-can we communicate that to the main loop? We could make another `static` flag,
-but this time we have a better option. We'll use our `Waker`.
+first `JoinHandle`. The main loop wakes up and polls the main task, and that
+`JoinHandle` is still `Pending`. Then it polls all the `other_tasks`, and each
+of them prints an "end" message, signals its `JoinHandle`, and returns `Ready`.
+At that point, we need to poll the main task again instead of trying to sleep.
+How can we communicate that to the main loop?[^shortcut] We could make another
+`static` flag, but this time we have a better option. We'll use our `Waker`.
+
+[^shortcut]: It might be tempting to remove the `.expect(…)` and instead
+    `continue` the main loop when `WAKE_TIMES` is empty. That would fix this
+    example without any new communication, but more complicated examples would
+    still have timing bugs. If some tasks sleep longer than others, we might
+    need to re-poll immediately even when `WAKE_TIMES` isn't empty.
 
 We've been using [`futures::task::noop_waker`] to supply a dummy `Waker` since
 Part One. When `Sleep` was the only source of blocking, there was no way for
@@ -783,8 +789,8 @@ fn main() {
     …
 ```
 
-Now we can finally add the check in the main loop that started this whole
-discussion:[^another_deadlock]
+And if that `AwakeFlag` is set, the main loop should
+re-poll:[^another_deadlock]
 
 [^another_deadlock]: The reason I defined `check_and_clear` above is that we
     can create another deadlock if we lock `awake_flag` here but don't drop the
