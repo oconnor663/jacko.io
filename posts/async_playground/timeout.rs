@@ -24,13 +24,13 @@ impl<F: Future> Future for Timeout<F> {
         mut self: Pin<&mut Self>,
         context: &mut Context,
     ) -> Poll<Self::Output> {
-        // Check whether the inner future is finished.
-        if let Poll::Ready(output) = self.inner.as_mut().poll(context) {
-            return Poll::Ready(Some(output));
-        }
         // Check whether time is up.
         if self.sleep.as_mut().poll(context).is_ready() {
             return Poll::Ready(None);
+        }
+        // Check whether the inner future is finished.
+        if let Poll::Ready(output) = self.inner.as_mut().poll(context) {
+            return Poll::Ready(Some(output));
         }
         // Still waiting.
         Poll::Pending
