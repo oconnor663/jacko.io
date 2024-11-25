@@ -512,8 +512,12 @@ label.margin-toggle:not(.sidenote-number) {
         width: 100%;
     }
 
-    pre > code {
+    pre > code, pre.fullwidth > code {
         width: 97%;
+    }
+
+    .fullwidth {
+        max-width: unset;
     }
 
     section > dl,
