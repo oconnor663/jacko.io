@@ -47,17 +47,24 @@ with Liu Cixin. Crouching Tiger Hidden Dragon actress Zhang Ziyi is _jahng
 zuh&#8288;-&#8288;yee_. The province of Sichuan is
 _suh&#8288;-&#8288;chwahn_.[^szechuan]
 
-[^lucy]: _Uh_ is a poor approximation of this "i". The closest sound that's
-    remotely familiar to Americans is [Lucille Ball's trademark "eugh"][lucy].
+[^lucy]: Unfortunately _uh_ is a poor approximation of this "i". Some folks
+    suggest _ih_, but I think _uh_ has the advantage that English speakers tend
+    to de-emphasize it. The best approximation that's remotely familiar to
+    Americans is [Lucille Ball's trademark "eugh"][lucy], but we can't easily
+    put that in a sentence.
 
 [lucy]: https://www.youtube.com/watch?v=KkOur9y5rVc
 
 [^szechuan]: "Szechuan" and similar spellings predate the pinyin system.
 
 There are exactly four consonant-vowel pairs where "i" sounds like _ur_: "zhi",
-"chi", "shi", and "ri", pronounced _jur_, _chur_, _shur_, and _rur_. Qin Shi
-Huang, who became the first emperor of China in 221 BC, is _cheen shur hwahng_.
-The website Zhihu, the Chinese version of Quora, is _jur&#8288;-&#8288;hoo_.
+"chi", "shi", and "ri", pronounced _jur_, _chur_, _shur_, and _rur_.[^regional]
+Qin Shi Huang, who became the first emperor of China in 221 BC, is _cheen shur
+hwahng_. The website Zhihu, the Chinese version of Quora, is
+_jur&#8288;-&#8288;hoo_.
+
+[^regional]: This "i" varies a lot between different regional accents. _Ur_ is
+    the Beijing/northern/official pronunciation.
 
 Finally, when "i" comes after "u" it sounds like _ay_. The Sui dynasty is
 pronounced _sway_.
