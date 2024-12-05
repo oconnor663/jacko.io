@@ -7,47 +7,47 @@
 <item>
 <title>Async Rust in Three Parts</title>
 <link>https://jacko.io/async_intro.html</link>
-<pubDate>23 Oct 2024</pubDate>
+<pubDate>23 Oct 2024 12:00 PST</pubDate>
 </item>
 
 <item>
 <title>Rust can Compete with Python</title>
 <description>considering Rust when speed doesn't matter</description>
 <link>https://www.youtube.com/watch?v=OQTwvycftJU</link>
-<pubDate>25 Jul 2024</pubDate>
+<pubDate>25 Jul 2024 12:00 PST</pubDate>
 </item>
 
 <item>
 <title>A First Look at Lifetimes in Rust</title>
 <link>https://www.youtube.com/watch?v=-gkvOoxgp8E</link>
-<pubDate>26 Feb 2024</pubDate>
+<pubDate>26 Feb 2024 12:00 PST</pubDate>
 </item>
 
 <item>
 <title>Object Soup is Made of Indexes</title>
 <description>how to do shared, mutable objects the Rust way</description>
 <link>https://jacko.io/object_soup.html</link>
-<pubDate>23 Oct 2023</pubDate>
+<pubDate>23 Oct 2023 12:00 PST</pubDate>
 </item>
 
 <item>
 <title>Safety and Soundness in Rust</title>
 <link>https://jacko.io/safety_and_soundness.html</link>
-<pubDate>5 Mar 2023</pubDate>
+<pubDate>05 Mar 2023 12:00 PST</pubDate>
 </item>
 
 <item>
 <title>Unsafe Rust is not C</title>
 <description>a look at tricky pointer aliasing rules in both languages</description>
 <link>https://www.youtube.com/watch?v=DG-VLezRkYQ</link>
-<pubDate>29 Aug 2022</pubDate>
+<pubDate>29 Aug 2022 12:00 PST</pubDate>
 </item>
 
 <item>
 <title>A Firehose of Rust</title>
 <description>for busy people who know some C++</description>
 <link>https://www.youtube.com/watch?v=IPmRDS0OSxM</link>
-<pubDate>1 Jun 2021</pubDate>
+<pubDate>01 Jun 2021 12:00 PST</pubDate>
 </item>
 
 </channel>
