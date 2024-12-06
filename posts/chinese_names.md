@@ -48,7 +48,7 @@ with Liu Cixin. Crouching Tiger Hidden Dragon actress Zhang Ziyi is _jahng
 zuh&#8288;-&#8288;yee_. The province of Sichuan is
 _suh&#8288;-&#8288;chwahn_.[^szechuan]
 
-[^lucy]: [Here's "Sichuan" pronounced by a native speaker][sichuan]. Clearly
+[^lucy]: Here's "Sichuan" [pronounced by a native speaker][sichuan]. Clearly
     _uh_ is a poor approximation of this "i". Some folks suggest _ih_, but
     that's not much closer, and I think _uh_ has the advantage that English
     speakers tend to de-emphasize it. The best approximation that's remotely
