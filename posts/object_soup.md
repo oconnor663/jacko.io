@@ -89,12 +89,11 @@ error[E0382]: borrow of moved value: `bob`
   --> src/main.rs:20:5
    |
 18 |     let mut bob = Person::new("Bob");
-   |         ------- move occurs because `bob` has type `Person`, which
-   |                 does not implement the `Copy` trait
+   |         ------- move occurs because `bob` has type `Person`, which does not implement the `Copy` trait
 19 |     alice.add_friend(bob);
    |                      --- value moved here
 20 |     bob.add_friend(alice); // error: borrow of moved value: `bob`
-   |     ^^^^^^^^^^^^^^^^^^^^^ value borrowed here after move
+   |     ^^^ value borrowed here after move
 ```
 
 Passing Bob to `add_friend` by value moves him, because `Person` isn't
@@ -141,8 +140,7 @@ bob.add_friend(&alice);
 We get a compiler error when we try to modify Bob:
 
 ```
-error[E0502]: cannot borrow `bob` as mutable because it is also borrowed
-              as immutable
+error[E0502]: cannot borrow `bob` as mutable because it is also borrowed as immutable
   --> src/main.rs:20:5
    |
 19 |     alice.add_friend(&bob);
@@ -175,8 +173,8 @@ error[E0499]: cannot borrow `alice` as mutable more than once at a time
   --> src/main.rs:20:33
    |
 20 |     alice.friends[0].add_friend(&mut alice);
-   |     -------------    ---------- ^^^^^^^^^^ second mutable borrow
-   |     |                |                     occurs here
+   |     -------------    ---------- ^^^^^^^^^^ second mutable borrow occurs here
+   |     |                |
    |     |                first borrow later used by call
    |     first mutable borrow occurs here
 ```
@@ -303,8 +301,8 @@ herself][on_herself], it panics:
 [on_herself]: https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Acell%3A%3ARefCell%3B%0Ause+std%3A%3Arc%3A%3ARc%3B%0A%0Astruct+Person+%7B%0A++++name%3A+String%2C%0A++++friends%3A+Vec%3CRc%3CRefCell%3CPerson%3E%3E%3E%2C%0A%7D%0A%0Aimpl+Person+%7B%0A++++fn+new%28name%3A+%26str%29+-%3E+Person+%7B%0A++++++++Person+%7B+name%3A+name.into%28%29%2C+friends%3A+Vec%3A%3Anew%28%29+%7D%0A++++%7D%0A%0A++++fn+add_friend%28%26mut+self%2C+other%3A+%26Rc%3CRefCell%3CPerson%3E%3E%29+%7B%0A++++++++if+other.borrow%28%29.name+%21%3D+self.name+%7B%0A++++++++++++self.friends.push%28Rc%3A%3Aclone%28other%29%29%3B%0A++++++++%7D%0A++++%7D%0A%7D%0A%0Afn+main%28%29+%7B%0A++++let+alice+%3D+Rc%3A%3Anew%28RefCell%3A%3Anew%28Person%3A%3Anew%28%22Alice%22%29%29%29%3B%0A++++let+bob+%3D+Rc%3A%3Anew%28RefCell%3A%3Anew%28Person%3A%3Anew%28%22Bob%22%29%29%29%3B%0A++++alice.borrow_mut%28%29.add_friend%28%26bob%29%3B%0A++++bob.borrow_mut%28%29.add_friend%28%26alice%29%3B%0A++++alice.borrow_mut%28%29.add_friend%28%26alice%29%3B++%2F%2F+panic%3A+already+mutably+borrowed%0A%7D
 
 ```
-thread 'main' panicked at 'already mutably borrowed: BorrowError',
-src/main.rs:15:18
+thread 'main' panicked at src/main.rs:15:18:
+already mutably borrowed: BorrowError
 ```
 
 The problem is that we "locked" the `RefCell` to get `&mut self`, and that
