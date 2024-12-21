@@ -420,7 +420,7 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
                 other => unimplemented!("{:?}", other),
             },
             Event::End(tag) => match tag {
-                TagEnd::BlockQuote => output.push_html("</blockquote>"),
+                TagEnd::BlockQuote(_) => output.push_html("</blockquote>"),
                 TagEnd::Paragraph => output.push_html("</p>"),
                 TagEnd::Heading(level) => {
                     if level == HeadingLevel::H1 {

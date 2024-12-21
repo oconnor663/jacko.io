@@ -9,7 +9,7 @@ debug = true
 [dependencies]
 anyhow = "1.0.69"
 html-escape = "0.2.13"
-pulldown-cmark = "0.11.0"
+pulldown-cmark = "0.12"
 serde = { version = "1.0.208", features = ["derive"] }
 syntect = "5.0.0"
 toml = "0.8.19"
