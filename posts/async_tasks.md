@@ -166,22 +166,22 @@ looks like this:
 ```rust
 LINK: Playground ## playground://async_playground/tasks_no_spawn.rs
 HIGHLIGHT: 3-13
-    let waker = futures::task::noop_waker();
-    let mut context = Context::from_waker(&waker);
-    loop {
-        // Poll each task, removing any that are Ready.
-        let is_pending = |task: &mut DynFuture| {
-            task.as_mut().poll(&mut context).is_pending()
-        };
-        tasks.retain_mut(is_pending);
+let waker = futures::task::noop_waker();
+let mut context = Context::from_waker(&waker);
+loop {
+    // Poll each task and remove any that are Ready.
+    let is_pending = |task: &mut DynFuture| {
+        task.as_mut().poll(&mut context).is_pending()
+    };
+    tasks.retain_mut(is_pending);
 
-        // If there are no tasks left, we're done.
-        if tasks.is_empty() {
-            break;
-        }
+    // If there are no tasks left, we're done.
+    if tasks.is_empty() {
+        break;
+    }
 
-        // Otherwise handle WAKE_TIMES and sleep as in Part One...
-        …
+    // Otherwise handle WAKE_TIMES and sleep as in Part One...
+    …
 ```
 
 This works fine, though it might not feel like we've accomplished much. Mostly
