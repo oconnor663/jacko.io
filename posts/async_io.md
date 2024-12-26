@@ -709,8 +709,8 @@ if poll_error_code < 0 {
 ```
 
 Last of all, when we wake up and `libc::poll` returns, we need to clear
-`POLL_FDS` invoke all the `POLL_WAKERS`. The main loop still polls every task
-every time, and tasks that aren't `Ready` will re-register themselves in
+`POLL_FDS` and invoke all the `POLL_WAKERS`. The main loop still polls every
+task every time, and tasks that aren't `Ready` will re-register themselves in
 `POLL_FDS` before the next sleep.
 
 ```rust
