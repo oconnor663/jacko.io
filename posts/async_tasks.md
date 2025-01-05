@@ -250,7 +250,7 @@ it's `Send`:
 
 [^send_and_sync]: `Send` and `Sync` are the [thread safety marker
     traits][send_and_sync] in Rust. Another way of putting this requirement is
-    that a `Mutex` is only safe to share with other threads if the obejct
+    that a `Mutex` is only safe to share with other threads if the object
     inside of it is safe to move to other threads.
 
 [send_and_sync]: https://doc.rust-lang.org/book/ch16-04-extensible-concurrency-sync-and-send.html
