@@ -736,9 +736,11 @@ private implementation details of our main loop. Here's our glorified `bool`:
 [^clone]: `Arc` is there because `Waker` is `Clone`. It would be nice if we
     could address that more directly with a bound like `W: Wake + Clone` on the
     `From` impl, but that turns out not to work because of a requirement of
-    `dyn Trait` objects called ["object safety"][object_safe].
+    `dyn Trait` objects called ["object safety"][object_safe] or (very
+    recently) ["dyn compatibility"][dyn_compatible].
 
 [object_safe]: https://huonw.github.io/blog/2015/01/object-safety
+[dyn_compatible]: https://github.com/rust-lang/lang-team/issues/286
 
 [^atomic]: [`AtomicBool`] would be more efficient, but again `Mutex` is more
     familiar and good enough. If you want a three hour deep dive on atomics,
