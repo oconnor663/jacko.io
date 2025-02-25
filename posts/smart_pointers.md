@@ -1,14 +1,15 @@
 # Smart Pointers Can't Solve Use-After-Free
 ###### 2025 February 24
 
-"If we use smart pointers everywhere, can C++ be as memory-safe as [Circle] or
-Rust?"
+A common question: "If we use smart pointers everywhere, can C++ be as 'safe'
+as [Circle] or Rust?"
 
 [Circle]: https://safecpp.org/draft.html
 
-No. The immediate problem is that you can't use smart pointers everywhere,
-because there are internal raw pointers in types you don't control.[^want] For
-example, here's an iterator invalidation mistake with `std::vector`:
+There are several reasons the answer is no, but the immediate reason is that
+you can't use smart pointers everywhere, because there are internal raw
+pointers in types you don't control.[^want] For example, here's an iterator
+invalidation mistake with `std::vector`:
 
 [^want]: For a language that uses smart pointers everywhere automatically, see
     [Swift].
