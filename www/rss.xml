@@ -5,7 +5,7 @@
 <description>Jack O'Connor's blog</description>
 
 <item>
-<title>Smart Pointers Can't Solve Use-After-Free in C++</title>
+<title>Smart Pointers Can't Solve Use-After-Free</title>
 <link>https://jacko.io/smart_pointers.html</link>
 <pubDate>24 Feb 2025 15:00 PST</pubDate>
 </item>

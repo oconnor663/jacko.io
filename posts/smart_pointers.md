@@ -1,4 +1,4 @@
-# Smart Pointers Can't Solve Use-After-Free in C++
+# Smart Pointers Can't Solve Use-After-Free
 ###### 2025 February 24
 
 "If we use smart pointers everywhere, can C++ be as memory-safe as [Circle] or
