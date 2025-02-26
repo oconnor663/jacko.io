@@ -69,8 +69,11 @@ READ of size 4 at 0x502000000010 thread T0
 
 You can even make the same mistake with `std::lock_guard` (C++11):[^tsan]
 
-[^tsan]: TSan and Valgrind both catch this one, but ASan doesn't. I have no
-    idea why. Does anyone know?
+[^tsan]: TSan and Valgrind both catch this one, but ASan doesn't. [ASan doesn't
+    instrument `pthread_mutex_unlock`][lobsters_comment], but TSan replaces it,
+    and I suppose Valgrind instruments everything at runtime.
+
+[lobsters_comment]: https://lobste.rs/s/e8cnqe/smart_pointers_can_t_solve_use_after_free#c_4ktple
 
 ```c++
 std::shared_ptr<std::mutex> my_mutex = std::make_shared<std::mutex>();
