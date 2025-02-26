@@ -17,7 +17,7 @@ invalidation mistake with `std::vector`:
 [Swift]: https://docs.swift.org/swift-book/documentation/the-swift-programming-language/automaticreferencecounting/
 
 ```c++
-std::vector<int> my_vector = {};
+std::vector<int> my_vector = {1, 2, 3};
 for (auto element : my_vector) {
     if (element == 2) {
         my_vector.push_back(4);
