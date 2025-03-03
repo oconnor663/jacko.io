@@ -33,7 +33,7 @@ The Xia dynasty is pronounced _shah_.
 
 "C" sounds like _ts_, as in "hats" or "pizza". Liu Cixin, author of The
 Three-Body Problem, is _lee&#8288;-&#8288;oh tsuh&#8288;-&#8288;sheen_. (More
-about that "ci" vowel below.)
+about that _uh_ vowel below.)
 
 Other consonants are close enough to how they're spelled.
 
