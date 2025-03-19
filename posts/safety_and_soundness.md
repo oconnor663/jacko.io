@@ -21,13 +21,13 @@ move on to the next section, and then come back for another look at the end.
 > Rust has a list of [behaviors considered
 > undefined](https://doc.rust-lang.org/reference/behavior-considered-undefined.html).[^formal_spec]
 > A "sound" function is one that maintains the following invariant: any program
-> that only calls sound functions and doesn't contain any other `unsafe` code,
-> can't commit UB.[^self_referential] A function that doesn't use any `unsafe`
-> code, either directly or indirectly, is guaranteed to be
-> sound.[^soundness_holes] A function that doesn't use any `unsafe` code
-> directly and only calls other sound functions, is also sound by definition.
+> that only calls sound functions, and doesn't contain any other `unsafe` code,
+> can't commit UB.[^self_referential] Functions that don't use any `unsafe`
+> code, either directly or indirectly, are guaranteed to be
+> sound.[^soundness_holes] Functions that don't use any `unsafe` code
+> directly, and only call other sound functions, are also sound by definition.
 > But functions and modules that use `unsafe` code directly could be unsound,
-> and a caller of an unsound function could also be unsound. Any unsoundness in
+> and callers of an unsound function could also be unsound. Any unsoundness in
 > the safe, public API of a module is a bug.[^module_soundness]
 
 ## The medium-length answer
