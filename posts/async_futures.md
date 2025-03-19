@@ -1,5 +1,5 @@
 # Async Rust, Part One: Futures
-###### 2024 October 23
+###### 2024 October 23<sup>rd</sup>
 
 - [Introduction](async_intro.html)
 - Part One: Futures (you are here)
