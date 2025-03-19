@@ -77,7 +77,17 @@ always be sound.
 [in_the_caller]: https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&code=use+std%3A%3Amem%3A%3AMaybeUninit%3B%0Ause+std%3A%3Aptr%3A%3Acopy_nonoverlapping%3B%0A%0Afn+foo1%28_index%3A+usize%29+%7B%0A++++%2F%2F+The+body+here+doesn%27t+matter.+In+this+example+it%27s+empty.%0A%7D%0A%0Afn+main%28%29+%7B%0A++++%2F%2F+Note+that+we+*don%27t*+use+mem%3A%3Aunitialized%28%29+or+MaybeUninit%3A%3Aassume_init%28%29%0A++++%2F%2F+here%2C+because+we+want+to+demonstrate+UB+on+line+22+below%2C+and+either+of%0A++++%2F%2F+those+approaches+would+actually+be+UB+right+here%2C+because+returning+an%0A++++%2F%2F+uninitialized+integer+is+considered+%22using%22+it+%28today%29.%0A++++let+mut+index+%3D+0%3B%0A%0A++++%2F%2F+Copy+an+uninitialized+value+into+%60index%60.+Because+%60copy_nonoverlapping%60%0A++++%2F%2F+is+allowed+to+handle+uninitialized+values%2C+this+isn%27t+per+se+UB+%28today%29.%0A++++%2F%2F+The+C+equivalent+of+%60copy_nonoverlapping%60+is+%60memcpy%60.%0A++++unsafe+%7B%0A++++++++copy_nonoverlapping%28MaybeUninit%3A%3Auninit%28%29.as_ptr%28%29%2C+%26mut+index%2C+1%29%3B%0A++++%7D%0A%0A++++%2F%2F+Even+though+the+body+of+%60foo1%60+is+empty%2C+calling+it+with+an+uninitialized%0A++++%2F%2F+argument+is+UB+%28today%29.+If+you+run+this+with+Tools-%3EMiri+above%2C+it+fails%0A++++%2F%2F+on+this+line.%0A++++foo1%28index%29%3B%0A%7D%0A
 
 Now consider a slightly different function, `foo2`, which doesn't do a bounds
-check:
+check:[^unsafe_block_in_unsafe_function]
+
+[^unsafe_block_in_unsafe_function]: Rust originally and currently treats
+    `unsafe` functions as though their entire body is wrapped in an `unsafe`
+    block. Prior to Rust 1.65, there was even a warning for "unnecessary"
+    `unsafe` blocks in `unsafe` functions. However, minimizing the scope of
+    `unsafe` blocks has always been recommended, and eventually folks decided
+    that explicit `unsafe` blocks in `unsafe` functions would be better. As of
+    the 2024 Edition, `foo2` [generates a warning].
+
+[generates a warning]: https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&code=static+BYTES%3A+%26%5Bu8%5D+%3D+b%22hello+world%22%3B%0A%0Apub+unsafe+fn+foo2%28index%3A+usize%29+-%3E+u8+%7B%0A++++*BYTES.as_ptr%28%29.add%28index%29%0A%7D
 
 ```rust
 unsafe fn foo2(index: usize) -> u8 {
