@@ -1,5 +1,5 @@
 # Object Soup is Made of Indexes
-###### 2023 October 23<sup>rd</sup>
+###### 2023 October 23ʳᵈ
 
 When objects come and go and change all the time, and any one might point to
 any other, I call that "object soup".[^graph] It's hard to write object soup in

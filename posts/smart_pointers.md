@@ -1,5 +1,5 @@
 # Smart Pointers Can't Solve Use-After-Free
-###### 2025 February 24<sup>th</sup>
+###### 2025 February 24ᵗʰ
 
 A common question: "If we use smart pointers everywhere, can C++ be as 'safe'
 as [Circle] or Rust?"
