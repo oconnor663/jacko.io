@@ -1,13 +1,11 @@
 use futures::future;
-use rand::prelude::*;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 async fn foo(_n: u64) {
-    let mut rng = rand::thread_rng();
-    let sleep_seconds = rng.gen_range(0.0..100.0);
+    let sleep_seconds = rand::random_range(0.0..100.0);
     tokio::time::sleep(Duration::from_secs_f32(sleep_seconds)).await;
     println!("foo finished in {sleep_seconds:.3} seconds");
 }

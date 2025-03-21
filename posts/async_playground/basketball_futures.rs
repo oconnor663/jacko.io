@@ -56,8 +56,7 @@ async fn pass_basketballs_around(
             ball.passes += 1;
             let sender = {
                 // Scope the ThreadRng so that this future remains Send.
-                let mut rng = rand::thread_rng();
-                ball_senders.choose(&mut rng).unwrap()
+                ball_senders.choose(&mut rand::rng()).unwrap()
             };
             sender.send(ball).await.unwrap();
         } else {

@@ -65,7 +65,7 @@ fn pass_basketballs_around(
     trash_sender: &Sender<Ball>,
     passes_per_ball: u64,
 ) {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     // Wait for all threads to start. The main thread also waits on this barrier, so that it
     // doesn't measure thread startup time.
     start_barrier.wait();
