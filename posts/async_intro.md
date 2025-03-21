@@ -123,7 +123,7 @@ different.
     overhead affects performance as the number of threads grows. It's longer
     and more complicated than the other examples here, and it's ok to skip it.
 
-[basketball_threads]: https://play.rust-lang.org/?version=stable&mode=release&edition=2021&gist=fd952dba2f51ee595cd9ff6dbbc08c38
+[basketball_threads]: https://play.rust-lang.org/?version=stable&mode=release&edition=2024&gist=03b511a9cbd388164a8e15e64f2cba31
 [basketball_threads_orig]: playground://async_playground/basketball_threads.rs?mode=release
 
 [^thread_pool]: A thread pool can be a good approach for CPU-intensive work,
