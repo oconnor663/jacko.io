@@ -21,13 +21,13 @@ std::vector<int> my_vector = {1, 2, 3};
 for (auto element : my_vector) {
     if (element == 2) {
         my_vector.push_back(4);
-        /* The next loop iteration reads a dangling pointer. */
+        // The next loop iteration reads a dangling pointer.
     }
 }
 ```
 
 ```
-LINK: Godbolt https://godbolt.org/z/xds8Eh51W
+LINK: Godbolt https://godbolt.org/z/Gnvc96zrK
 ==1==ERROR: AddressSanitizer: heap-use-after-free on address 0x502000000018
 READ of size 4 at 0x502000000018 thread T0
 ```
@@ -44,7 +44,7 @@ or putting the `vector` itself in a `shared_ptr`, [doesn't help].[^doesnt_help]
     frees the old array. The problem is that the `begin` and `end` iterators
     created by the `for` loop are still pointing to the old array.
 
-[doesn't help]: https://godbolt.org/z/sn6z7c8he
+[doesn't help]: https://godbolt.org/z/83zbz377r
 
 [^doesnt_help]: A `shared_ptr<int>` can't become dangling, but a
     `shared_ptr<int>*` (i.e. a pointer _to_ a `shared_ptr<int>`) can. It's
@@ -57,12 +57,12 @@ You can make the same mistake with `std::span` (C++20):
 std::vector<int> my_vector{1, 2, 3};
 std::span<int> my_span = my_vector;
 my_vector.push_back(4);
-/* This line reads a dangling pointer. */
+// This line reads a dangling pointer.
 int first = my_span[0];
 ```
 
 ```
-LINK: Godbolt https://godbolt.org/z/sn6z7c8he
+LINK: Godbolt https://godbolt.org/z/rs9G1qETe
 ==1==ERROR: AddressSanitizer: heap-use-after-free on address 0x502000000010
 READ of size 4 at 0x502000000010 thread T0
 ```
@@ -79,11 +79,11 @@ You can even make the same mistake with `std::lock_guard` (C++11):[^tsan]
 std::shared_ptr<std::mutex> my_mutex = std::make_shared<std::mutex>();
 std::lock_guard my_guard(*my_mutex);
 my_mutex.reset();
-/* my_guard calls my_mutex->unlock() in its destructor. */
+// my_guard calls my_mutex->unlock() in its destructor.
 ```
 
 ```
-LINK: Godbolt https://godbolt.org/z/MzdjvMbqE
+LINK: Godbolt https://godbolt.org/z/a7q46jvad
 WARNING: ThreadSanitizer: heap-use-after-free (pid=1)
   Atomic read of size 1 at 0x721000000010 by main thread
 ```

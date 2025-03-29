@@ -278,7 +278,7 @@ impl Output {
 
             // syntax highlighting
             // https://github.com/trishume/syntect/blob/c61ce60c72d67ad4e3dd06d60ff3b13ef4d2698c/examples/synhtml.rs
-            let syntax_set = SyntaxSet::load_defaults_newlines();
+            let syntax_set = SyntaxSet::load_defaults_nonewlines();
             let syntax = syntax_set
                 .find_syntax_by_name(&capitalized_language)
                 .expect("unknown language name");
