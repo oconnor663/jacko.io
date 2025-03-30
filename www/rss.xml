@@ -5,6 +5,12 @@
 <description>Jack O'Connor's blog</description>
 
 <item>
+<title>Two Attacks on Naive Tree Hashes</title>
+<link>https://jacko.io/tree_hashing.html</link>
+<pubDate>30 Mar 2025 13:30 PST</pubDate>
+</item>
+
+<item>
 <title>Smart Pointers Can't Solve Use-After-Free</title>
 <link>https://jacko.io/smart_pointers.html</link>
 <pubDate>24 Feb 2025 15:00 PST</pubDate>
