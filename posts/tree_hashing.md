@@ -141,9 +141,10 @@ def tree_hash(input_bytes, is_root=True):
     if len(input_bytes) <= LEAF_SIZE:
         return node_hash(input_bytes, is_root, is_parent=False)
     half = len(input_bytes) // 2
-    left = tree_hash(input_bytes[:half], is_root=False)
-    right = tree_hash(input_bytes[half:], is_root=False)
-    return node_hash(left + right, is_root, is_parent=True)
+    left_subtree_hash = tree_hash(input_bytes[:half], is_root=False)
+    right_subtree_hash = tree_hash(input_bytes[half:], is_root=False)
+    parent_node = left_subtree_hash + right_subtree_hash
+    return node_hash(parent_node, is_root, is_parent=True)
 ```
 
 For the formal definitions and proofs of these rules, see [_Sufficient
