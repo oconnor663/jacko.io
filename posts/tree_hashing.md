@@ -1,5 +1,5 @@
 # Two Attacks on Naive Tree Hashes
-###### 2025 March 30ᵗʰ
+###### 2025 March 30<sup>th</sup>
 
 If you're building a tree hash,[^merkle] and you want it to have the same
 security properties as a cryptographic hash like SHA-3 or BLAKE3, there are a

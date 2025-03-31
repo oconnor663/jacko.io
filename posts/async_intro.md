@@ -1,5 +1,5 @@
 # Async Rust in Three Parts
-###### 2024 October 23ʳᵈ
+###### 2024 October 23<sup>rd</sup>
 
 - Introduction (you are here)
   - [Threads](#threads)

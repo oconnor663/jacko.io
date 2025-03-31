@@ -1,5 +1,5 @@
 # How to Pronounce Chinese Names a Little Better
-###### 2024 December 5ᵗʰ
+###### 2024 December 5<sup>th</sup>
 
 Mainland China uses the pinyin system to write Mandarin words and names with
 English letters.[^exceptions] Pinyin wasn't designed to be intuitive for
