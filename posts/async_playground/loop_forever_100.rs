@@ -20,6 +20,7 @@ impl Future for Sleep {
         if Instant::now() >= self.wake_time {
             Poll::Ready(())
         } else {
+            // DELETED LINE: context.waker().wake_by_ref();
             Poll::Pending
         }
     }
