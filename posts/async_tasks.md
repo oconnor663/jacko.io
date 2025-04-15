@@ -567,12 +567,11 @@ async fn wrap_with_join_state<F: Future>(
 Now we can build a `JoinState` and apply that wrapper function in `spawn`, so
 that it accepts any `Output` type and returns a `JoinHandle`:[^send_bound]
 
-[^send_bound]: `T` will need to be `Send` and `'static` just like `F`. The
-    future returned by `wrap_with_join_state` needs to be coercible to
-    `DynFuture`, which means the `JoinState<T>` that it contains needs to be
-    `Send` and `'static`, which means T needs to be `Send` and `'static`. This
-    time around I'll skip the "discovery" phase and just write the bounds
-    correctly the first time.
+[^send_bound]: The future returned by `wrap_with_join_state` needs to be
+    coercible to `DynFuture`, which means the `JoinState<T>` that it contains
+    needs to be `Send` and `'static`, which means T needs to be `Send` and
+    `'static`. This time around I'll skip the "discovery" phase and just write
+    the bounds correctly the first time.
 
 ```rust
 LINK: Playground ## playground://async_playground/tasks_noop_waker.rs

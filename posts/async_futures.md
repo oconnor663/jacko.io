@@ -281,7 +281,7 @@ one future at the same time. It's what lets them make progress without blocking
 each other.
 
 [^immediately]: "Immediately" means that we shouldn't do any blocking sleeps or
-    blocking IO a `poll` function or in an `async fn`. But when we're doing
+    blocking IO in a `poll` function or an `async fn`. But when we're doing
     CPU-heavy work, like compression or cryptography, it's less clear what it
     means. The usual rule of thumb is that, if a function does more than "a few
     milliseconds" of CPU work, it should either offload that work using
@@ -526,8 +526,8 @@ What we really want is to invoke the `Waker` later, when it's actually time to
 wake up, but we can't use `thread::sleep` in `poll`. One thing we could do is
 spawn another thread to `thread::sleep` for us and then call `wake`.[^send] If
 we [did that in every call to `poll`][same_crash], we'd run into the same
-too-many-threads crash from the introduction. But we could work around that by
-[spawning a shared thread and and using a channel to send `Waker`s to
+too-many-threads crash from the introduction. However, we could work around
+that by [spawning a shared thread and and using a channel to send `Waker`s to
 it][shared_thread]. That's actually a viable implementation, but there's
 something unsatisfying about it. The main thread of our program is already
 spending most of its time sleeping. Why do we need two sleeping threads? Why
