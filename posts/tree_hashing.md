@@ -23,7 +23,7 @@ attacks:[^structure]
 
 [update]: https://docs.python.org/3/library/hashlib.html#hashlib.hash.update
 [the BLAKE3 paper]: https://github.com/BLAKE3-team/BLAKE3-specs/blob/master/blake3.pdf
-[Binary Numeral Trees]: https://github.com/BLAKE3-team/BLAKE3-specs/blob/master/blake3.pdf
+[Binary Numeral Trees]: https://eprint.iacr.org/2021/038.pdf
 
 ```python
 from hashlib import sha3_256
