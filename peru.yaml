@@ -17,5 +17,7 @@ rule slides_v2:
 git module rust_python_talk:
     url: https://github.com/oconnor663/rust_python_talk
 
+# linked to in the description of https://www.youtube.com/watch?v=93vdX_O-XhY
 git module rust_c_talk:
     url: https://github.com/oconnor663/rust_c
+    rev: fef149c12d04314766f30961d8fdc563af5bb8f2
