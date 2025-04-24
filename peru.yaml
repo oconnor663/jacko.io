@@ -4,6 +4,7 @@ imports:
     cpp_rust_talk_v1|slides_v2: www/firehose_of_rust
     rust_python_talk: www/rust_python
     rust_c_talk: www/rust_c
+    rust_c_talk_v2: www/ffi
 
 git module bao_presentation:
     url: https://github.com/oconnor663/bao_presentation
@@ -17,7 +18,10 @@ rule slides_v2:
 git module rust_python_talk:
     url: https://github.com/oconnor663/rust_python_talk
 
-# linked to in the description of https://www.youtube.com/watch?v=93vdX_O-XhY
+# The description of https://www.youtube.com/watch?v=93vdX_O-XhY links to this version.
 git module rust_c_talk:
     url: https://github.com/oconnor663/rust_c
     rev: fef149c12d04314766f30961d8fdc563af5bb8f2
+
+git module rust_c_talk_v2:
+    url: https://github.com/oconnor663/rust_c
