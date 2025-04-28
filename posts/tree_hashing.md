@@ -122,9 +122,19 @@ leads us to two rules for secure tree hashes:
 1. Leaf hashes and parent hashes must never be the same.
 2. Root hashes and non-root hashes must never be the same.
 
-One way to satisfy these rules is to prefix or suffix all our SHA-3 inputs.
-Here's a modified `tree_hash` that has collision resistance[^assuming] and
-doesn't allow length extension:
+One way to satisfy these rules is to prefix or suffix[^prefix_suffix] all our
+SHA-3 inputs. Here's a modified `tree_hash` that has collision
+resistance[^assuming] and doesn't allow length extension:
+
+[^prefix_suffix]: Prefixing is marginally better for security, because a
+    collision on one node type doesn't automatically lead to collisions on
+    other types. (See also HMAC-MD5, which is still [technically unbroken].) On
+    the other hand, suffixing lets us start hashing the first leaf even if we
+    don't know whether it's the root, and our implementation doesn't need a
+    leaf-size buffer. A real tree hash might prefix the leaf/parent
+    distinguisher but suffix the root/non-root distinguisher.
+
+[technically unbroken]: https://crypto.stackexchange.com/questions/9336/is-hmac-md5-considered-secure-for-authenticating-encrypted-data
 
 [^assuming]: as long as SHA-3 remains collision resistant
 
