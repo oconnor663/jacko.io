@@ -9,9 +9,9 @@
   - [Non-blocking](#non_blocking)
   - [Poll](#poll)
 
-Of course async/await wasn't invented for sleeping. Our goal all along has been
-IO, especially network IO. Now that we have futures and tasks, we can start
-doing some real work.
+Of course async/await isn't just for sleeping. Our goal all along has been IO,
+especially network IO. Now that we have futures and tasks, we can start doing
+some real work.
 
 Let's go back to ordinary, non-async Rust for a moment. We'll start with a toy
 server program and a client that talks to it. Then we'll use threads to combine
