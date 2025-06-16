@@ -30,7 +30,7 @@ goal will be to get a good look at the machinery, so that async code doesn't
 feel like magic. We'll start by translating ("desugaring") async examples into
 ordinary Rust, and gradually we'll build our own async "runtime".[^runtime]
 I'll assume that you've written some Rust before and that you've read [The Rust
-Programming Language][The Book] ("The Book") or similar.[^ch20]
+Programming Language][The Book] ("The Book") or similar.[^ch21]
 
 [^runtime]: For now, a "runtime" is a library or framework that we use to write
     async programs. Building our own futures, tasks, and IO will gradually make
@@ -38,10 +38,15 @@ Programming Language][The Book] ("The Book") or similar.[^ch20]
 
 [The Book]: https://doc.rust-lang.org/book
 
-[^ch20]: The multithreaded web server project in [Chapter&nbsp;20][ch20] is
-    especially relevant.
+[^ch21]: The multithreaded web server project in [Chapter&nbsp;21][ch21] is
+    especially relevant. **Update:** In February 2025 The Book added [a new
+    chapter on async/await][ch17] that's even more relevant. It takes a
+    higher-level view, including HTTP and streams for example, while this
+    series takes a lower-level view. I heartily recommend reading the new
+    chapter, but it's not a prerequisite.
 
-[ch20]: https://doc.rust-lang.org/book/ch20-00-final-project-a-web-server.html
+[ch17]: https://doc.rust-lang.org/book/ch17-00-async-await.html
+[ch21]: https://doc.rust-lang.org/book/ch21-00-final-project-a-web-server.html
 
 Let's get started by doing more than one thing at a time with threads. This
 will go well at first, but we'll run into trouble as the number of threads
