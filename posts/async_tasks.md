@@ -819,7 +819,16 @@ if awake_flag.check_and_clear() {
 // Otherwise handle WAKERS and sleep as in Part One...
 ```
 
-It works! We've implemented tasks.
+It works! We've implemented tasks.[^spawn_wake]
+
+[^spawn_wake]: Our `wake` and `spawn` functions are thread-safe, but if we call
+    them from a background thread while the main thread is sleeping, we don't
+    currently have a way to wake the main thread up. As I mentioned briefly in
+    Part One, we could use [`thread::park_timeout`] instead of sleeping to
+    support this, but that would complicate things when we get to `libc::poll`
+    in Part Three. I'm going to call this a "known limitation" and move on.
+
+[`thread::park_timeout`]: https://doc.rust-lang.org/std/thread/fn.park_timeout.html
 
 We're about to move beyond sleeping and printing to look at real IO, and we'll
 use `spawn` to handle network connections.
