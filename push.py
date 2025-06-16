@@ -1,5 +1,12 @@
 #! /usr/bin/env python3
 
+# /// script
+# requires-python = ">=3.8"
+# dependencies = [
+#     "duct",
+# ]
+# ///
+
 from duct import cmd
 import os
 from pathlib import Path
