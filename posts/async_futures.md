@@ -546,7 +546,8 @@ isn't there a way to tell our main thread to wake up at a specific time?
 
 Well to be fair, there is a way, that's what `tokio::time::sleep` is. But if we
 really want to write our own `sleep`, and we don't want to spawn an extra
-thread to make it work, then it turns out we also need to write our own `main`.
+thread to make it work, then it turns out we also need to get rid of
+`#[tokio::main]` and write our own `main` function.
 
 [same_crash]: playground://async_playground/sleep_many_threads.rs
 [shared_thread]: playground://async_playground/sleep_one_thread.rs
