@@ -29,10 +29,10 @@ What are `async` functions and the "futures" they return? What does
     does. The short answer is it's a ["procedural macro"][proc_macro] that sets
     up the Tokio "runtime" and then calls our `async fn main` in that
     "environment". We're not going to get into proc macros in this series, but
-    we'll start to get an idea of what an "environment" means here when we
-    create a global list of `Waker`s towards the end of this post, and we'll
-    keep building on that with "tasks" in [Part Two] and "file descriptors" in
-    [Part Three].
+    we'll start to get an idea of what goes into an async "environment" when we
+    create a global set of `Waker`s in the [Main](#main) section below, and
+    we'll keep building on that with "tasks" in [Part Two] and "file
+    descriptors" in [Part Three].
 
 [Part Two]: async_tasks.html
 [Part Three]: async_io.html
