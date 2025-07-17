@@ -308,14 +308,23 @@ while it's waiting.
 
 `Foo` uses the `started` flag to make sure it only prints the start message
 once, no matter how many times `poll` is called. It doesn't need an `ended`
-flag, though, because `poll` won't be called again after it returns `Ready`.
-The `started` flag makes `Foo` a "state machine" with two states. In general an
-`async` function needs one starting state and another state for each of its
-`.await` points, so that its `poll` function can know where to "resume
-execution". If we had more than two states, we could use an `enum` instead of a
-`bool`. When we write an `async fn`, the compiler takes care of all of this for
-us, and that convenience is the main reason that async/await exists as a
-language feature.[^unsafe_stuff]
+flag, though, because `poll` won't be called again after it returns
+`Ready`.[^two_reasons] The `started` flag makes `Foo` a "state machine" with
+two states. In general an `async` function needs one starting state and another
+state for each of its `.await` points, so that its `poll` function can know
+where to "resume execution". If we had more than two states, we could use an
+`enum` instead of a `bool`. When we write an `async fn`, the compiler takes
+care of all of this for us, and that convenience is the main reason that
+async/await exists as a language feature.[^unsafe_stuff]
+
+[^two_reasons]: That's what keeps us from printing the end message more than
+    once, and also from breaking the rule about polling the `Sleep` future
+    again after it returns `Ready`. `Sleep` happens to be lenient about this
+    (it'll just return `Ready` again), but compiler-generated `async fn`
+    futures panic if we break that rule, and [some futures][fuse] never return
+    `Ready` again.
+
+[fuse]: https://docs.rs/futures/latest/futures/future/trait.FutureExt.html#method.fuse
 
 [^unsafe_stuff]: Async/await also makes it possible to do certain things in
     safe code that would be `unsafe` in `poll`. We'll see that in the
