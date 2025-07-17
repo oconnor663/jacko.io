@@ -83,9 +83,9 @@ These programs can't talk to each other on the Playgroud. You might want to
 take the time to run them on your computer, or even better on two different
 computers on your WiFi network.[^localhost] If you haven't done this before,
 seeing it work on a real network is pretty cool. Reviewing the web server
-project from [Chapter&nbsp;20 of The Book][ch20] might be helpful too.
+project from [Chapter&nbsp;21 of The Book][ch21] might be helpful too.
 
-[ch20]: https://doc.rust-lang.org/book/ch20-00-final-project-a-web-server.html
+[ch21]: https://doc.rust-lang.org/book/ch21-00-final-project-a-web-server.html
 [part_two_impl]: playground://async_playground/tasks.rs
 
 [^localhost]: In that case you'll need to change `localhost` in the client to
