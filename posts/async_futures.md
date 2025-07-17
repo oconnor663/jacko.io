@@ -318,10 +318,10 @@ care of all of this for us, and that convenience is the main reason that
 async/await exists as a language feature.[^unsafe_stuff]
 
 [^two_reasons]: That's what keeps us from printing the end message more than
-    once, and also from breaking the rule about polling the `Sleep` future
-    again after it returns `Ready`. `Sleep` happens to be lenient about this
-    (it'll just return `Ready` again), but compiler-generated `async fn`
-    futures panic if we break that rule, and [some futures][fuse] never return
+    once, and also from breaking the very same rule by polling the `Sleep`
+    future again after it returned `Ready`. `Sleep` happens to be lenient about
+    this (it'll just return `Ready` again), but compiler-generated `async fn`
+    futures panic if we break this rule, and [some futures][fuse] never return
     `Ready` again.
 
 [fuse]: https://docs.rs/futures/latest/futures/future/trait.FutureExt.html#method.fuse
