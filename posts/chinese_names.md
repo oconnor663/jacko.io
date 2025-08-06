@@ -50,12 +50,12 @@ _suh&#8288;-&#8288;chwahn_.[^szechuan]
 
 [^lucy]: Here's "Sichuan" [pronounced by a native speaker][sichuan]. Clearly
     _uh_ is a poor approximation of this "i". The American "could"/"foot" vowel
-    (which actually matches the "e" in e.g. Henan and Zhejiang provinces) is
-    closer, but there's no phonetic spelling for it that won't confuse
-    untrained speakers. The best approximation of this "i" that's remotely
-    familiar to Americans might be [Lucille Ball's trademark "eugh"(?)][lucy],
-    but that's hard to say and impossible to spell. An advantage of starting
-    with _uh_ is that we tend to de-emphasize it, minimizing the damage.
+    (which actually matches the "e" in e.g. Henan province) is closer, but
+    there's no phonetic spelling for it that won't confuse untrained speakers.
+    The best approximation of this "i" that's remotely familiar to Americans
+    might be [Lucille Ball's trademark "eugh"(?)][lucy], but that's hard to say
+    and impossible to spell. An advantage of starting with _uh_ is that we tend
+    to de-emphasize it, minimizing the damage.
 
 [sichuan]: https://youtu.be/5I6Shx3K_tU?t=6
 [lucy]: https://youtu.be/KkOur9y5rVc?t=16
