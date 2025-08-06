@@ -58,7 +58,7 @@ _suh&#8288;-&#8288;chwahn_.[^szechuan]
     with _uh_ is that we tend to de-emphasize it, minimizing the damage.
 
 [sichuan]: https://youtu.be/5I6Shx3K_tU?t=6
-[lucy]: https://www.youtube.com/watch?v=KkOur9y5rVc
+[lucy]: https://youtu.be/KkOur9y5rVc?t=16
 
 [^szechuan]: "Szechuan" and similar spellings predate the pinyin system.
 
