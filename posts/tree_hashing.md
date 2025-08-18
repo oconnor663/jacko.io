@@ -119,8 +119,8 @@ leads us to two rules for secure tree hashes:
 [^cv]: In the literature, interior/non-root hashes are often called "chaining
     values".
 
-1. Leaf hashes and parent hashes must never be the same.
-2. Root hashes and non-root hashes must never be the same.
+1. Leaf hashes and parent hashes must never use exactly the same input.
+2. Root hashes and non-root hashes must never use exactly the same input.
 
 One way to satisfy these rules is to prefix or suffix[^prefix_suffix] all our
 SHA-3 inputs. Here's a modified `tree_hash` that has collision
