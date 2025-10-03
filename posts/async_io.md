@@ -67,12 +67,17 @@ fn main() -> io::Result<()> {
 }
 ```
 
-This client opens a connection to the server and copies all the bytes it
-receives to standard output, as soon as they arrive. It doesn't explicitly
-sleep, but it still takes a second, because the server takes a second to finish
-responding. Under the covers, [`io::copy`] is a convenience wrapper around the
-standard [`Read::read`] and [`Write::write`] methods, and `read` blocks until
-input arrives.
+This client opens a connection to the server[^no_request] and copies all the
+bytes it receives to standard output, as soon as they arrive. It doesn't
+explicitly sleep, but it still takes a second, because the server takes a
+second to finish responding. Under the covers, [`io::copy`] is a convenience
+wrapper around the standard [`Read::read`] and [`Write::write`] methods, and
+`read` blocks until input arrives.
+
+[^no_request]: Our server starts sending response bytes as soon as our client
+    connects to it, which makes this example as simple as possible. In real
+    world protocols like HTTP, though, the client would need to send a request
+    first.
 
 [`io::copy`]: https://doc.rust-lang.org/stable/std/io/fn.copy.html
 [`Read::read`]: https://doc.rust-lang.org/stable/std/io/trait.Read.html#tymethod.read
