@@ -275,7 +275,9 @@ Python][friend_self_python]:[^same_name]
 
 [friend_self_python]: <https://godbolt.org/#g:!((g:!((g:!((h:codeEditor,i:(filename:'1',fontScale:14,fontUsePx:'0',j:1,lang:python,selection:(endColumn:22,endLineNumber:13,positionColumn:22,positionLineNumber:13,selectionStartColumn:22,selectionStartLineNumber:13,startColumn:22,startLineNumber:13),source:'class+Person:%0A++++def+__init__(self,+name):%0A++++++++self.name+%3D+name%0A++++++++self.friends+%3D+%5B%5D%0A%0A++++def+add_friend(self,+other):%0A++++++++if+other.name+!!%3D+self.name:%0A++++++++++++self.friends.append(other)%0A%0Aalice+%3D+Person(%22Alice%22)%0Abob+%3D+Person(%22Bob%22)%0Aalice.add_friend(bob)%0Abob.add_friend(alice)'),l:'5',n:'0',o:'Python+source+%231',t:'0')),k:50,l:'4',m:48.281033364974206,n:'0',o:'',s:0,t:'0'),(g:!((h:executor,i:(argsPanelShown:'1',compilationPanelShown:'0',compiler:python311,compilerName:'',compilerOutShown:'0',execArgs:'',execStdin:'',fontScale:14,fontUsePx:'0',j:1,lang:python,libs:!(),options:'',overrides:!(),runtimeTools:!(),source:1,stdinPanelShown:'1',wrap:'1'),l:'5',n:'0',o:'Executor+Python+3.11+(Python,+Editor+%231)',t:'0')),header:(),k:50,l:'4',n:'0',o:'',s:0,t:'0')),l:'2',n:'0',o:'',t:'0')),version:4>
 
-[^same_name]: No two people ever have the same name. It's fine.
+[^same_name]: No two people ever have the same name. [It's fine.][falsehoods]
+
+[falsehoods]: https://www.kalzumeus.com/2010/06/17/falsehoods-programmers-believe-about-names/
 
 ```python
 def add_friend(self, other):
