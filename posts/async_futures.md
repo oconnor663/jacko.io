@@ -910,7 +910,20 @@ fn timeout<F: Future>(duration: Duration, inner: F) -> Timeout<F> {
 ```
 
 This `timeout` wrapper works with _any_ async function. Regular functions have
-no equivalent.
+no equivalent.[^footgun]
+
+[^footgun]: Cancellation is a superpower, but it [can also be a
+    footgun][too_easy]. Every `.await` is a potential cancellation point, so
+    simple logic like "do A then B" can surprise you by quitting halfway
+    through, if the caller happens to use a `timeout` or a
+    [`select!`][select_macro]. That's sort of like an error or a panic showing
+    up halfway through, but those are more likely to terminate the program or
+    leave noisy logs, while cancellation is silent. Also, errors and panics
+    come from the call*ee* ("the devil you know"), while cancellation comes
+    from the call*er* ("the devil you don't").
+
+[too_easy]: https://sunshowers.io/posts/cancelling-async-rust/
+[select_macro]: https://docs.rs/futures/latest/futures/macro.select.html
 
 ## Bonus: Recursion
 
