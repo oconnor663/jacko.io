@@ -178,9 +178,9 @@ futures. We'll come back to it in the [Pin](#bonus__pin) section below.
     ["reborrows"][reborrowing] `&mut T` whenever we pass a long-lived mutable
     reference to a function that only needs a short-lived one, so that the
     long-lived reference isn't consumed unnecessarily. (`&mut` references [are
-    not `Copy`][not_copy].) However, neither of those convenience features work
-    through `Pin` today, and we often need to call `as_mut` explicitly when
-    we're implementing `Future` "by hand". If [`&pin` or maybe `&pinned`
+    not `Copy`][not_copy].) However, neither of those convenience features
+    works through `Pin` today, and we often need to call `as_mut` explicitly
+    when we're implementing `Future` "by hand". If [`&pin` or maybe `&pinned`
     references][pinned_places] became a first-class language feature someday,
     that would make these examples shorter and less finicky.
 
@@ -197,7 +197,7 @@ Ok, let's focus on `Poll`. It's an enum, and it looks like this:[^option]
     `Some` are the variants that carry values, and `Pending` and `None` are the
     variants that don't. But note that their "order of appearance" is mirrored.
     An iterator returns `Some` any number of times until it eventually returns
-    `None`, while a future returns `Pending` and number of times until it
+    `None`, while a future returns `Pending` any number of times until it
     eventually returns `Ready`.
 
 [`Iterator::next`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next
@@ -243,7 +243,7 @@ answer in the [Wake](#wake) section below.
 
 [foo_printing]: playground://async_playground/foo_printing.rs
 
-Now let's look `Foo`'s implementation of the `Future` trait and the `poll`
+Now let's look at `Foo`'s implementation of the `Future` trait and the `poll`
 function. Here it is again:
 
 ```rust
@@ -536,7 +536,7 @@ wake up, but we can't use `thread::sleep` in `poll`. One thing we could do is
 spawn another thread to `thread::sleep` for us and then call `wake`.[^send] If
 we [did that in every call to `poll`][same_crash], we'd run into the same
 too-many-threads crash from the introduction. However, we could work around
-that by [spawning a shared thread and and using a channel to send `Waker`s to
+that by [spawning a shared thread and using a channel to send `Waker`s to
 it][shared_thread]. That's actually a viable implementation, but there's
 something unsatisfying about it. The main thread of our program is already
 spending most of its time sleeping. Why do we need two sleeping threads? Why
@@ -605,9 +605,9 @@ but it also means that children who never invoke their own `Waker` will never
 get polled again. This sort of thing is why a `Pending` future must _always_
 arrange to invoke its `Waker`.[^pending]
 
-[^event_loop]: This sort of thing often called an "event loop", but right now
-    all we have is sleeps, and those aren't really events. We'll build a proper
-    event loop in [Part Three].
+[^event_loop]: This sort of thing is often called an "event loop", but right
+    now all we have is sleeps, and those aren't really events. We'll build a
+    proper event loop in [Part Three].
 
 [loop_forever_10]: playground://async_playground/loop_forever_10.rs
 [loop_forever_100]: playground://async_playground/loop_forever_100.rs
@@ -959,7 +959,7 @@ error[E0733]: recursion in an async fn requires boxing
 When regular functions call each other, they allocate space dynamically on the
 "call stack". But when async functions `.await` each other, they get compiled
 into structs that contain other structs, and struct sizes are
-static.[^stackless] If an an async function calls itself, it has to `Box` the
+static.[^stackless] If an async function calls itself, it has to `Box` the
 recurring future before it `.await`s it:
 
 [^stackless]: In other words, Rust futures are "stackless coroutines". In Go on

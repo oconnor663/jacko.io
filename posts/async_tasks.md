@@ -212,9 +212,9 @@ called `NEW_TASKS`. The `spawn` function can append to `NEW_TASKS`:[^vec_deque]
 
 [^vec_deque]: We could use a `VecDeque` instead of a `Vec` if we wanted to poll
     tasks in FIFO order instead of LIFO order. We could also use a [channel],
-    which as an added benefit would would get rid of the `while let` footgun
-    below. Opening a channel isn't `const`, however, so we'd need a
-    [`OnceLock`] or similar to initialize the `static`.
+    which as an added benefit would get rid of the `while let` footgun below.
+    Opening a channel isn't `const`, however, so we'd need a [`OnceLock`] or
+    similar to initialize the `static`.
 
 [channel]: https://doc.rust-lang.org/rust-by-example/std_misc/channels.html
 [`OnceLock`]: https://doc.rust-lang.org/stable/std/sync/struct.OnceLock.html
@@ -685,7 +685,7 @@ The loop is about to `sleep`, so it asks for the next wake time, but the
 returned `Pending`, there must be at least one wake time registered, because
 the only source of blocking was `Sleep`. But now we have a second source of
 blocking: `JoinHandle`. If a `JoinHandle` is `Pending`, that could be because
-another task is sleeping and has register a wake time. However, it could also
+another task is sleeping and has registered a wake time. However, it could also
 be that that other task is about to return `Ready` as soon as we poll it, but
 we haven't polled it yet. This is sensitive to the _order_ of our tasks list.
 If a task at the front is waiting on a task at the back, we might end up with

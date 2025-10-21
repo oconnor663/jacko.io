@@ -84,7 +84,7 @@ wrapper around the standard [`Read::read`] and [`Write::write`] methods, and
 [`Write::write`]: https://doc.rust-lang.org/std/io/trait.Write.html#tymethod.write
 [`TcpStream`]: https://doc.rust-lang.org/std/net/struct.TcpStream.html
 
-These programs can't talk to each other on the Playgroud. You might want to
+These programs can't talk to each other on the Playground. You might want to
 take the time to run them on your computer, or even better on two different
 computers on your WiFi network.[^localhost] If you haven't done this before,
 seeing it work on a real network is pretty cool. Reviewing the web server
