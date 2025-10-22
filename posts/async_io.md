@@ -572,14 +572,11 @@ a type alias for `c_int`.[^windows]
 [as_raw_fd]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.as_raw_fd
 [`RawFd`]: https://doc.rust-lang.org/std/os/fd/type.RawFd.html
 
-[^windows]: Unfortunately, none of these raw file descriptor operations will
-    compile on Windows. The Windows counterpart of `as_raw_fd` is
-    [`as_raw_handle`]. This is a low enough level of detail that the Rust
-    standard library doesn't try to abstract over platform differences. The
-    Unix function isn't defined on Windows targets, and the Windows function
-    isn't defined on Unix targets. To make code like this portable, we have to
-    write it at least twice, using `#[cfg(unix)]` and `#[cfg(windows)]` to gate
-    each implementation to its target platform.
+[^windows]: Apart from `poll` not existing on Windows, none of these raw file
+    descriptor operations will compile on Windows either. The Windows
+    counterpart of `as_raw_fd` is [`as_raw_handle`]. This is a low enough level
+    of detail that the Rust standard library doesn't try to abstract over
+    platform differences.
 
 [`as_raw_handle`]: https://doc.rust-lang.org/std/os/windows/io/trait.AsRawHandle.html
 
