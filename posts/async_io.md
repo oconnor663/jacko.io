@@ -731,13 +731,15 @@ while let Some(entry) = wake_times.first_entry() {
 It works![^threads]
 
 [^threads]: Similar to the end of Part Two, our implementation is technically
-    thread-safe, but we don't have a way to wake the main loop if a background
-    thread spawns a task while it's asleep. One option for fixing this is to
-    create a [pipe] whose read end is always included in `POLL_FDS`, and then
-    write a byte to that pipe in every call to `spawn`. Another Linux-specific
-    option for this sort of thing is [`eventfd`].
+    thread-safe, but we aren't waking the main loop if a background thread
+    spawns a task while it's asleep. The classic way to do this on Unix is to
+    create an [`O_NONBLOCK` pipe] whose read end is always included in
+    `POLL_FDS`. Then writing a byte to that pipe from any thread triggers a
+    wakeup. A more modern, Linux-specific option for this sort of thing is
+    [`eventfd`]. If you've made it this far with energy to spare, getting one
+    of those approaches working is a good final exercise.
 
-[pipe]: https://doc.rust-lang.org/stable/std/io/fn.pipe.html
+[`O_NONBLOCK` pipe]: https://man7.org/linux/man-pages/man2/pipe.2.html
 [`eventfd`]: https://man7.org/linux/man-pages/man2/eventfd.2.html
 
 And that's it. We did it. Our main loop is finally an _event loop_.
