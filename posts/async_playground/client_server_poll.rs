@@ -93,6 +93,7 @@ where
     };
     let task = Box::pin(wrap_with_join_state(future, join_state));
     NEW_TASKS.lock().unwrap().push(task);
+    (&THE_PIPE.1).write(&[0]).unwrap(); // wake the main loop
     join_handle
 }
 
@@ -226,16 +227,28 @@ async fn async_main() -> io::Result<()> {
     listener.set_nonblocking(true)?;
     // Start the server on a background task.
     spawn(async { server_main(listener).await.unwrap() });
-    // Run ten clients as ten different tasks.
-    let mut task_handles = Vec::new();
-    for _ in 1..=10 {
-        task_handles.push(spawn(client_main()));
-    }
-    for handle in task_handles {
-        handle.await?;
-    }
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_secs(1));
+        for _ in 1..=10 {
+            spawn(client_main());
+        }
+    });
+    sleep(Duration::from_secs(3)).await;
     Ok(())
 }
+
+use std::io::{PipeReader, PipeWriter};
+use std::sync::LazyLock;
+
+static THE_PIPE: LazyLock<(PipeReader, PipeWriter)> =
+    LazyLock::new(|| {
+        let (reader, writer) = std::io::pipe().unwrap();
+        let fd = reader.as_raw_fd();
+        unsafe {
+            libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);
+        }
+        (reader, writer)
+    });
 
 fn main() -> io::Result<()> {
     let awake_flag = Arc::new(AwakeFlag(Mutex::new(false)));
@@ -284,6 +297,11 @@ fn main() -> io::Result<()> {
         };
         let mut poll_fds = POLL_FDS.lock().unwrap();
         let mut poll_wakers = POLL_WAKERS.lock().unwrap();
+        poll_fds.push(libc::pollfd {
+            fd: THE_PIPE.0.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        });
         let poll_error_code = unsafe {
             libc::poll(
                 poll_fds.as_mut_ptr(),
@@ -298,6 +316,7 @@ fn main() -> io::Result<()> {
         // aren't ready yet, but if so they'll register another wakeup.
         poll_fds.clear();
         poll_wakers.drain(..).for_each(Waker::wake);
+        while (&THE_PIPE.0).read(&mut [0; 1024]).is_ok() {}
         // Invoke Wakers from WAKE_TIMES if their time has come.
         while let Some(entry) = wake_times.first_entry() {
             if *entry.key() <= Instant::now() {
