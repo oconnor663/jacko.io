@@ -93,7 +93,9 @@ where
     };
     let task = Box::pin(wrap_with_join_state(future, join_state));
     NEW_TASKS.lock().unwrap().push(task);
-    (&THE_PIPE.1).write(&[0]).unwrap(); // wake the main loop
+    unsafe {
+        libc::write(THE_EVENTFD.fd, &[1u64] as *const _ as *const _, 8);
+    }
     join_handle
 }
 
@@ -237,17 +239,13 @@ async fn async_main() -> io::Result<()> {
     Ok(())
 }
 
-use std::io::{PipeReader, PipeWriter};
 use std::sync::LazyLock;
 
-static THE_PIPE: LazyLock<(PipeReader, PipeWriter)> =
-    LazyLock::new(|| {
-        let (reader, writer) = std::io::pipe().unwrap();
-        let fd = reader.as_raw_fd();
-        unsafe {
-            libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);
-        }
-        (reader, writer)
+static THE_EVENTFD: LazyLock<libc::pollfd> =
+    LazyLock::new(|| libc::pollfd {
+        fd: unsafe { libc::eventfd(0, libc::EFD_NONBLOCK) },
+        events: libc::POLLIN,
+        revents: 0,
     });
 
 fn main() -> io::Result<()> {
@@ -297,11 +295,7 @@ fn main() -> io::Result<()> {
         };
         let mut poll_fds = POLL_FDS.lock().unwrap();
         let mut poll_wakers = POLL_WAKERS.lock().unwrap();
-        poll_fds.push(libc::pollfd {
-            fd: THE_PIPE.0.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        });
+        poll_fds.push(*THE_EVENTFD);
         let poll_error_code = unsafe {
             libc::poll(
                 poll_fds.as_mut_ptr(),
@@ -316,7 +310,13 @@ fn main() -> io::Result<()> {
         // aren't ready yet, but if so they'll register another wakeup.
         poll_fds.clear();
         poll_wakers.drain(..).for_each(Waker::wake);
-        while (&THE_PIPE.0).read(&mut [0; 1024]).is_ok() {}
+        unsafe {
+            libc::read(
+                THE_EVENTFD.fd,
+                &mut [0u8; 8] as *mut _ as *mut _,
+                8,
+            );
+        }
         // Invoke Wakers from WAKE_TIMES if their time has come.
         while let Some(entry) = wake_times.first_entry() {
             if *entry.key() <= Instant::now() {
