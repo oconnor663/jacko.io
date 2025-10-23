@@ -728,13 +728,14 @@ while let Some(entry) = wake_times.first_entry() {
 It works![^threads]
 
 [^threads]: Similar to the end of Part Two, our implementation is technically
-    thread-safe, but we aren't waking the main loop if a background thread
-    spawns a task while it's asleep. The classic way to do this on Unix is to
-    create an [`O_NONBLOCK` pipe] whose read end is always included in
-    `POLL_FDS`. Then writing a byte to that pipe from any thread triggers a
-    wakeup. A more modern, Linux-specific option for this sort of thing is
-    [`eventfd`]. If you've made it this far with energy to spare, getting one
-    of those approaches working is a good final exercise.
+    thread-safe, but we don't yet have a way to wake up the main thread (i.e.
+    force `libc::poll` to return) if a background thread invokes a `Waker` or
+    spawns a task. The classic approach on Unix is to create an [`O_NONBLOCK`
+    pipe] whose read end is always included in `POLL_FDS`, and then any thread
+    can trigger a wakeup by writing a byte to that pipe. A more modern,
+    Linux-specific option for this is an [`eventfd`]. If you've made it this
+    far with energy to spare, getting one of those approaches working is a good
+    final exercise.
 
 [`O_NONBLOCK` pipe]: https://man7.org/linux/man-pages/man2/pipe.2.html
 [`eventfd`]: https://man7.org/linux/man-pages/man2/eventfd.2.html
