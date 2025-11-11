@@ -149,28 +149,26 @@ Each call to `Future::poll` receives a `Context` from the caller. When one
 passes that `Context` along. That's all we need to know until we get to the
 [Wake](#wake) section below.
 
-`Pin` is a wrapper type that wraps pointers. For now, if you'll forgive me, I'm
-going to pretend that `Pin` does _nothing at all_.[^truth] I'll pretend that
-`Box::pin` is just `Box::new`,[^boxing] that `Pin<Box<T>>` is just `Box<T>`,
-that `Pin<&mut T>` is just `&mut T`, and that `Pin<Box<T>>::as_mut` is just
-[`Box::as_mut`].[^as_mut] `Pin` actually solves a crucial problem for async
-Rust, but that problem will make more sense after we get some practice writing
-futures. We'll come back to it in the [Pin](#bonus__pin) section below.
+`Pin<&mut T>` is the pointer type we use to call `Future::poll`, `Pin<Box<T>>`
+is the owned version of that,[^boxing] and [`as_mut`][pin_as_mut] is how we
+convert between them.[^as_mut] That's all we need to know until we get to the
+[Pin][pin_section] section below. `Pin` actually solves a crucial problem for
+async Rust,[^permissions] but that problem will make more sense once we have
+some practice writing futures.
 
-[^truth]: As far as lies go, this one is pretty close to the truth. `Pin`'s job
-    is to _prevent_ certain things in safe code, namely, moving certain futures
-    after they've been polled. It's like how a shared reference prevents
-    mutation. The reference doesn't _do_ much, but it represents permission.
+[^boxing]: There are [other ways][pin_macro] to get a `Pin<&mut T>`, but we'll
+    stick with `Box::pin` throughout this series, as a shortcut to avoid
+    talking about ["pin projection"][projection]. In practice though, most
+    futures in Rust are _not_ heap allocated, at least not individually. This
+    is different from coroutines in C++20, which are [heap allocated by
+    default][cpp_coroutines].
 
-[^boxing]: I'll be using `Box::pin` a bit more than usual in this series, as a
-    shortcut to avoid talking about ["pin projection"][projection]. But note
-    that most futures in Rust are _not_ heap allocated, at least not
-    individually. This is different from coroutines in C++20, which are [heap
-    allocated by default][cpp_coroutines].
-
+[pin_macro]: https://doc.rust-lang.org/stable/std/pin/macro.pin.html
 [projection]: https://doc.rust-lang.org/std/pin/index.html#projections-and-structural-pinning
 [cpp_coroutines]: https://pigweed.dev/docs/blog/05-coroutines.html
-[`Box::as_mut`]: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.as_mut
+
+[pin_as_mut]: https://doc.rust-lang.org/std/pin/struct.Pin.html#method.as_mut
+[pin_section]: #bonus__pin
 
 [^as_mut]: We don't often call `Box::as_mut` explicitly in non-async Rust,
     because `&mut Box<T>` automatically converts to `&mut T` as needed. This is
@@ -188,6 +186,12 @@ futures. We'll come back to it in the [Pin](#bonus__pin) section below.
 [reborrowing]: https://github.com/rust-lang/reference/issues/788
 [not_copy]: https://doc.rust-lang.org/std/marker/trait.Copy.html#impl-Copy-for-%26T
 [pinned_places]: https://without.boats/blog/pinned-places/
+
+[^permissions]: `Pin` makes sure that safe code can't move certain futures
+    after they've been polled. We'll get into why that's important
+    [below][pin_section]. As for _how_ `Pin` does that, it's like how a shared
+    reference prevents mutation. It doesn't really _do_ anything (at runtime),
+    but it represents permissions in the type system (at compile time).
 
 Ok, let's focus on `Poll`. It's an enum, and it looks like this:[^option]
 
@@ -770,9 +774,9 @@ error[E0106]: missing lifetime specifier
 
 What's the lifetime of `n_ref` supposed to be? The short answer is, there's no
 good answer.[^longer] Self-referential borrows are generally illegal in Rust
-structs, and there's no syntax for what `n_ref` is trying to do. If there were,
-we'd have to answer some tricky questions about when we're allowed to mutate
-`n` and when we're allowed to move `Foo`.[^quote]
+structs, and there's no syntax for what `n_ref` is trying to do. One big
+problem is that, if `n_ref` was pointing to `n`, and then we moved the whole
+`Foo`, the _new_ `n_ref` would still be pointing to the _old_ `n`.[^quote]
 
 [^longer]: The longer answer is that we can hack a lifetime parameter onto
     `Foo`, but that makes it [impossible to do anything useful after we've
@@ -792,19 +796,18 @@ we'd have to answer some tricky questions about when we're allowed to mutate
     that it is ‘pinned in place.'" - [without.boats/blog/pin][pin_post]
 
 But then, what sort of `Future` did the compiler generate for `async fn foo`
-above? Why did that work? It turns out that Rust does [some very unsafe
-things][erase] internally to erase inexpressible lifetimes like the one on
-`n_ref`.[^unsafe_pinned] The job of the `Pin` pointer-wrapper-type is then to
-encapsulate that unsafety, so that we can write custom futures like `JoinAll`
-in safe code. The `Pin` struct works with the [`Unpin`] auto
-trait,[^auto_traits] which is implemented for most concrete types but not for
-the compiler-generated futures returned by `async` functions. Operations that
-might let us move pinned objects are either gated by `Unpin` (like
-[`DerefMut`][pin_deref_mut]) or marked `unsafe` (like [`get_unchecked_mut`]).
-It turns out that our extensive use of `Box::pin` in the examples above meant
-that all our futures were automatically `Unpin`, so `DerefMut` worked for our
-`Pin<&mut Self>` references, and we could mutate members like `self.started`
-and `self.futures` without thinking about it.
+above? Why did that work? Rust does [some very unsafe things][erase] internally
+to erase inexpressible lifetimes like the one on `n_ref`.[^unsafe_pinned] The
+job of the `Pin` pointer-wrapper-type is then to encapsulate that unsafety, so
+that we can write custom futures like `JoinAll` in safe code. The `Pin` struct
+works with the [`Unpin`] auto trait,[^auto_traits] which is implemented for
+most concrete types but not for the compiler-generated futures returned by
+`async` functions. Operations that might let us move pinned objects are either
+gated by `Unpin` (like [`DerefMut`][pin_deref_mut]) or marked `unsafe` (like
+[`get_unchecked_mut`]). It turns out that our extensive use of `Box::pin` in
+the examples above meant that all our futures were automatically `Unpin`, so
+`DerefMut` worked for our `Pin<&mut Self>` references, and we could mutate
+members like `self.started` and `self.futures` without thinking about it.
 
 [erase]: https://tmandry.gitlab.io/blog/posts/optimizing-await-1/#generators-as-data-structures
 
