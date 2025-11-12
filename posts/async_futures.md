@@ -61,7 +61,7 @@ async fn foo(n: u64) {
 ```
 
 And here's `foo` as a regular, non-async function. I'll put everything on the
-page, and then we'll break it down piece-by-piece. This is an exact, drop-in
+page, and then we'll break it down piece-by-piece. This is a drop-in
 replacement, and `main` hasn't changed at all. You can click the Playground
 button and run it:
 
@@ -139,29 +139,24 @@ pub trait Future {
 
 The trait itself is only a couple lines of code, but it comes with three new
 types: [`Pin`], [`Context`], and [`Poll`]. We're going to focus on `Poll`, so
-we'll say a bit about `Context` and `Pin` and then set them aside until later.
+we'll say a bit about `Pin` and `Context` and then set them aside until later.
 
 [`Context`]: https://doc.rust-lang.org/std/task/struct.Context.html
 [`Poll`]: https://doc.rust-lang.org/std/task/enum.Poll.html
 
-Each call to `Future::poll` receives a `Context` from the caller. When one
-`poll` function calls another, like when `Foo::poll` calls `Sleep::poll`, it
-passes that `Context` along. That's all we need to know until we get to the
-[Wake](#wake) section below.
+`Pin<&mut T>` is the pointer type we use to call `Future::poll`. The owned
+version of that is `Pin<Box<T>>`, which we construct with [`Box::pin`][^boxing]
+and borrow with [`.as_mut()`][pin_as_mut].[^as_mut] That's all we need to know
+until we get to the [Pin][pin_section] section below. `Pin` actually solves a
+crucial problem for async Rust,[^permissions] but that problem will make more
+sense once we have some practice writing futures.
 
-`Pin<&mut T>` is the pointer type we use to call `Future::poll`, `Pin<Box<T>>`
-is the owned version of that,[^boxing] and [`as_mut`][pin_as_mut] is how we
-convert between them.[^as_mut] That's all we need to know until we get to the
-[Pin][pin_section] section below. `Pin` actually solves a crucial problem for
-async Rust,[^permissions] but that problem will make more sense once we have
-some practice writing futures.
-
-[^boxing]: There are [other ways][pin_macro] to get a `Pin<&mut T>`, but we'll
-    stick with `Box::pin` throughout this series, as a shortcut to avoid
-    talking about ["pin projection"][projection]. In practice though, most
-    futures in Rust are _not_ heap allocated, at least not individually. This
-    is different from coroutines in C++20, which are [heap allocated by
-    default][cpp_coroutines].
+[^boxing]: There are [other ways][pin_macro] to pin things, but we'll stick
+    with `Box::pin` throughout this series, as a shortcut to avoid talking
+    about ["pin projection"][projection]. The original `async fn foo` actually
+    doesn't `Box` the `Sleep` future, and most futures in Rust aren't heap
+    allocated, at least not individually. This is different from coroutines in
+    C++20, which are [heap allocated by default][cpp_coroutines].
 
 [pin_macro]: https://doc.rust-lang.org/stable/std/pin/macro.pin.html
 [projection]: https://doc.rust-lang.org/std/pin/index.html#projections-and-structural-pinning
@@ -177,10 +172,10 @@ some practice writing futures.
     reference to a function that only needs a short-lived one, so that the
     long-lived reference isn't consumed unnecessarily. (`&mut` references [are
     not `Copy`][not_copy].) However, neither of those convenience features
-    works through `Pin` today, and we often need to call `as_mut` explicitly
-    when we're implementing `Future` "by hand". If [`&pin` or maybe `&pinned`
-    references][pinned_places] became a first-class language feature someday,
-    that would make these examples shorter and less finicky.
+    works through `Pin` today, and we often do need to call `Pin::as_mut`
+    explicitly when we're implementing `Future` "by hand". If [`&pin` or maybe
+    `&pinned` references][pinned_places] became a first-class language feature
+    someday, that would make these examples shorter and less finicky.
 
 [deref_coercion]: https://doc.rust-lang.org/book/ch15-02-deref.html#implicit-deref-coercions-with-functions-and-methods
 [reborrowing]: https://github.com/rust-lang/reference/issues/788
@@ -192,6 +187,11 @@ some practice writing futures.
     [below][pin_section]. As for _how_ `Pin` does that, it's like how a shared
     reference prevents mutation. It doesn't really _do_ anything (at runtime),
     but it represents permissions in the type system (at compile time).
+
+Each call to `Future::poll` receives a `Context` from the caller. When one
+`poll` function calls another, like when `Foo::poll` calls `Sleep::poll`, it
+passes that `Context` along. That's all we need to know until we get to the
+[Wake](#wake) section below.
 
 Ok, let's focus on `Poll`. It's an enum, and it looks like this:[^option]
 
