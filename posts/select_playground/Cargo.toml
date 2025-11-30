@@ -15,3 +15,11 @@ path = "select.rs"
 [[bin]]
 name = "select_loop"
 path = "select_loop.rs"
+
+[[bin]]
+name = "select_deadlock_1"
+path = "select_deadlock_1.rs"
+
+[[bin]]
+name = "select_deadlock_2"
+path = "select_deadlock_2.rs"
