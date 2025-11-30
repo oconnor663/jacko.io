@@ -23,7 +23,10 @@ use Either::*;
 impl<F1: Future, F2: Future> Future for Select<F1, F2> {
     type Output = Either<F1::Output, F2::Output>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<Self::Output> {
         if let Poll::Ready(output) = self.future1.as_mut().poll(cx) {
             return Poll::Ready(Left(output));
         }
@@ -43,8 +46,8 @@ async fn print_sleep(name: &str, sleep_ms: u64) -> &str {
 
 #[tokio::main]
 async fn main() {
-    let a = print_sleep("A", 100);
-    let b = print_sleep("B", 200);
+    let a = print_sleep("A", 1_000);
+    let b = print_sleep("B", 2_000);
     match select(a, b).await {
         Left(_) => println!("A won!"),
         Right(_) => println!("B won!"),
