@@ -106,6 +106,13 @@ join!(foo(), foo(), foo()); // ok
 
 ## Threads and Fork
 
+> How many times does<br>
+> it have to be said: Never<br>
+> call `TerminateThread`.<br>
+> \- [Larry Osterman][terminate_thread]
+
+[terminate_thread]: https://devblogs.microsoft.com/oldnewthing/20150814-00/?p=91811
+
 ## Deprecated Idioms
 
 ## Alternatives
