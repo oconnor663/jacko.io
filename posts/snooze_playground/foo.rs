@@ -12,4 +12,5 @@ async fn foo() {
 async fn main() {
     foo().await;
     foo().await;
+    foo().await;
 }

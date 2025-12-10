@@ -11,5 +11,5 @@ async fn foo() {
 
 #[tokio::main]
 async fn main() {
-    join!(foo(), foo());
+    join!(foo(), foo(), foo());
 }
