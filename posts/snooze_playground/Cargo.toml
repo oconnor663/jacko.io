@@ -43,3 +43,7 @@ path = "foo_buffered.rs"
 [[bin]]
 name = "foo_moro"
 path = "foo_moro.rs"
+
+[[bin]]
+name = "foo_select_streams"
+path = "foo_select_streams.rs"
