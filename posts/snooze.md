@@ -16,24 +16,16 @@
 [futurelock]: https://rfd.shared.oxide.computer/rfd/0609
 
 > Buffer data, not code.<br>
-> \- [_FuturesUnordered and the order of futures_][order]
+> \- [boats][order]
 
 [order]: https://without.boats/blog/futures-unordered/
 
-Async Rust has a category of footguns that has lasted longer than it should, in
-part because we haven't given it a name. I call it "snoozing".[^starvation]
-Snoozing is when we don't poll (or drop) a future promptly after it invokes its
-`Waker`.[^three_parts] I'm going to make the case that snoozing is _always_ a
-bug. From there, I'll argue that some widely used async idioms[^idioms] should
-be avoided or deprecated, because they're too prone to snoozing. Finally, I'll
-suggest some alternatives that don't have this particular footgun.
-
-[^starvation]: Snoozing is loosely similar to "starvation", but starvation
-    usually refers to when polling takes too long, either because of
-    (accidental) synchronous IO or some long-running computation. That blocks
-    an entire task plus an executor thread, or a whole single-threaded
-    executor. Snoozing is when one future isn't getting polled, even though
-    it's ready to make progress, and the task that owns it is running smoothly.
+When a future is ready to make progress, but you aren't polling it, I call that
+"snoozing".[^three_parts][^starvation] Snoozing is to blame for a lot of hangs
+and deadlocks in async Rust, including the ["Futurelock"][futurelock] case
+study from the folks at Oxide. In this post I'm going to argue that snoozing is
+_always_ a bug, and that the async patterns that expose us to it can and should
+be replaced.[^culprits]
 
 [^three_parts]: If you aren't familiar with the [`poll`] and [`Waker`]
     machinery that makes async Rust tick, I recommend reading at least part one
@@ -43,10 +35,17 @@ suggest some alternatives that don't have this particular footgun.
 [`Waker`]: https://doc.rust-lang.org/std/task/struct.Waker.html
 [three_parts]: async_intro.html
 
-[^idioms]: In particular, awaiting-by-reference (which in practice usually
-    means `select!`-by-reference) and also [buffered streams][buffered].
+[^starvation]: Snoozing is similar to "starvation", but starvation usually
+    refers to when a call to `poll` blocks instead of returning quickly, so the
+    executor can't poll anything else while it waits. Snoozing is when the
+    executor is running smoothly, but some future still isn't getting polled.
 
-[buffered]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.buffered
+[^culprits]: The main culprits are [`select!`]-by-reference,
+    [`FuturesUnordered`], and [`buffered`] streams.
+
+[`select!`]: https://tokio.rs/tokio/tutorial/select
+[`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
+[`buffered`]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.buffered
 
 ## Deadlocks
 
@@ -119,3 +118,18 @@ join!(foo(), foo(), foo()); // ok
 
 
 https://smallcultfollowing.com/babysteps/blog/2022/06/13/async-cancellation-a-case-study-of-pub-sub-in-mini-redis/
+
+async generators vs futures:
+
+It's true that a generator holding lock across a yield point can cause the same
+deadlocks as a snoozed future. But a key difference is that a future can
+interact with locks that are buried in layers of function calls and never
+appear anywhere near the bug. Whereas to hold a lock across a generator yield
+the guard has to actually be *returned* to you. It could still be abstracted
+inside some structs, but in general "does holding this object hold a lock" is
+much more visible than "does calling this function touch a lock". In other
+words, the critical section of the lock has to actually overlap with the body
+of the generator.
+
+HOWEVER, you still need to worry about snoozing a generator at some .await that
+isn't a yield point. That's really no different from snoozing a future.
