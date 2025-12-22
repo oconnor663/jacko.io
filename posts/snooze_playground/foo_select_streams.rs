@@ -13,10 +13,13 @@ async fn foo() {
 
 #[tokio::main]
 async fn main() {
-    let mut future1 = pin!(stream::once(foo()));
-    let mut future2 = pin!(stream::once(foo()));
+    let mut stream1 = pin!(stream::once(foo()));
+    let mut stream2 = pin!(stream::once(foo()));
     select! {
-        _ = future1.next() => foo().await,
-        _ = future2.next() => foo().await,
+        _ = stream1.next() => {}
+        _ = stream2.next() => {}
     }
+    println!("We make it here...");
+    foo().await;
+    println!("...but not here!");
 }

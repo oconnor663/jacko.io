@@ -92,7 +92,6 @@ async lock and does some fake work:[^nothing_wrong]
 [`OnceCell`]: https://docs.rs/tokio/latest/tokio/sync/struct.OnceCell.html
 
 ```rust
-LINK: Playground ## playground://snooze_playground/foo.rs
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep};
 
@@ -104,20 +103,51 @@ async fn foo() {
 }
 ```
 
-We can call `foo` as many times as we like without causing trouble:
-
 ```rust
-LINK: Playground ## playground://snooze_playground/foo.rs
-foo().await;
-foo().await;
-foo().await; // ok
+LINK: Playground ## playground://snooze_playground/foo_poll.rs
+let mut future = pin!(foo());
+_ = poll!(&mut future);
+foo().await; // Deadlock!
 ```
 
-And we can call `foo` concurrently, using `join!`:
+```rust
+LINK: Playground ## playground://snooze_playground/foo_select.rs
+let mut future1 = pin!(foo());
+let mut future2 = pin!(foo());
+select! {
+    _ = &mut future1 => {}
+    _ = &mut future2 => {}
+}
+foo().await; // Deadlock!
+```
 
 ```rust
-LINK: Playground ## playground://snooze_playground/foo_join.rs
-join!(foo(), foo(), foo()); // ok
+LINK: Playground ## playground://snooze_playground/foo_buffered.rs
+futures::stream::iter([foo(), foo()])
+    .buffered(2)
+    .for_each(|_| foo()) // Deadlock!
+    .await;
+```
+
+```rust
+LINK: Playground ## playground://snooze_playground/foo_unordered.rs
+let mut futures = FuturesUnordered::new();
+futures.push(foo());
+futures.push(foo());
+while let Some(_) = futures.next().await {
+    foo().await; // Deadlock!
+}
+```
+
+```rust
+LINK: Playground ## playground://snooze_playground/foo_select_streams.rs
+let mut stream1 = pin!(stream::once(foo()));
+let mut stream2 = pin!(stream::once(foo()));
+select! {
+    _ = stream1.next() => {}
+    _ = stream2.next() => {}
+}
+foo().await; // Deadlock!
 ```
 
 

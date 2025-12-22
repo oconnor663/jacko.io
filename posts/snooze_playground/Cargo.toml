@@ -29,6 +29,10 @@ name = "foo_poll_fn"
 path = "foo_poll_fn.rs"
 
 [[bin]]
+name = "foo_poll_struct"
+path = "foo_poll_struct.rs"
+
+[[bin]]
 name = "foo_select"
 path = "foo_select.rs"
 

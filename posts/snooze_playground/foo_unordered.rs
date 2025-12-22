@@ -16,6 +16,8 @@ async fn main() {
     futures.push(foo());
     futures.push(foo());
     while let Some(_) = futures.next().await {
+        println!("We make it here...");
         foo().await;
+        println!("...but not here!");
     }
 }
