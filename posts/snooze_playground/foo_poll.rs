@@ -1,3 +1,4 @@
+use futures::poll;
 use std::pin::pin;
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep};
@@ -11,9 +12,9 @@ async fn foo() {
 
 #[tokio::main]
 async fn main() {
-    let future1 = foo();
-    let mut future2 = pin!(foo());
-    _ = futures::poll!(&mut future2);
-    future1.await;
-    future2.await;
+    let mut future = pin!(foo());
+    _ = poll!(&mut future);
+    println!("We make it here...");
+    foo().await;
+    println!("...but not here!");
 }

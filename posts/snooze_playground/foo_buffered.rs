@@ -13,8 +13,10 @@ async fn foo() {
 async fn main() {
     futures::stream::iter([foo(), foo()])
         .buffered(2)
-        .for_each(|_| async {
+        .for_each(async |_| {
+            println!("We make it here...");
             foo().await;
+            println!("...but not here!");
         })
         .await;
 }
