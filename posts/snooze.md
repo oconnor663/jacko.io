@@ -20,12 +20,12 @@
 
 [order]: https://without.boats/blog/futures-unordered/
 
-When a future is ready to make progress, but you aren't polling it, I call that
-"snoozing".[^three_parts][^starvation] Snoozing is to blame for a lot of hangs
-and deadlocks in async Rust, including the ["Futurelock"][futurelock] case
-study from the folks at Oxide. In this post I'm going to argue that snoozing is
+When a future is ready to make progress, but it's not getting polled, I call
+that "snoozing".[^three_parts][^starvation] Snoozing is to blame for a lot of
+hangs and deadlocks in async Rust, including the ["Futurelock"][futurelock]
+case study from the folks at Oxide. I'm going to argue that snoozing is
 _always_ a bug, and that the async patterns that expose us to it can and should
-be replaced.[^culprits]
+be replaced.
 
 [^three_parts]: If you aren't familiar with the [`poll`] and [`Waker`]
     machinery that makes async Rust tick, I recommend reading at least part one
@@ -36,16 +36,34 @@ be replaced.[^culprits]
 [three_parts]: async_intro.html
 
 [^starvation]: Snoozing is similar to "starvation", but starvation usually
-    refers to when a call to `poll` blocks instead of returning quickly, so the
+    means a call to `poll` is blocking instead of returning quickly, and the
     executor can't poll anything else while it waits. Snoozing is when the
-    executor is running smoothly, but some future still isn't getting polled.
+    executor is running fine, but some futures still aren't getting polled.
 
-[^culprits]: The main culprits are [`select!`]-by-reference,
-    [`FuturesUnordered`], and [`buffered`] streams.
+Before we dive in, I want to be clear that snoozing and cancellation aren't the
+same thing, though they do overlap. If a snoozed future eventually wakes up,
+then clearly it wasn't cancelled. But a cancelled future can also be snoozed,
+if there's a gap between when it's last polled and when it's finally
+dropped.[^define_cancellation] Cancellation bugs are a [big topic] in async Rust,
+and it's good that we're talking about them, but cancellation _itself_ isn't a bug. Snoozing on
+the other hand is _always_ a bug, and I don't think we talk about it enough.
 
-[`select!`]: https://tokio.rs/tokio/tutorial/select
-[`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
-[`buffered`]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.buffered
+[^define_cancellation]: We often say that cancelling a future _means_ dropping
+    it, but a future that's never going to be polled again has also arguably
+    been cancelled, even if it hasn't yet been dropped. Which definition is
+    right? If we can agree that snoozing is always a bug, then we don't have to
+    worry too much about this question, because we'll always drop cancelled
+    futures promptly.
+    <br>
+    &emsp;
+    I think asking "when is a future really cancelled?" is like asking "when is
+    an object really dropped?" Is it when `drop` is called, or after `drop`
+    returns? A compiler or a debugger might need to have an opinion about this,
+    but application code doesn't, because application code doesn't see objects
+    that are halfway through `drop`. Similarly, we shouldn't let application
+    code see a future that's cancelled but not dropped.
+
+[big topic]: https://sunshowers.io/posts/cancelling-async-rust/
 
 ## Deadlocks
 
@@ -133,3 +151,9 @@ of the generator.
 
 HOWEVER, you still need to worry about snoozing a generator at some .await that
 isn't a yield point. That's really no different from snoozing a future.
+
+---
+
+Note that the example in the Futurelock blog post can be fixed by dropping the
+cancelled future promptly, but the original but that motivated the whole
+article can't be fixed that way.
