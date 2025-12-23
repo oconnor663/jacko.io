@@ -26,11 +26,9 @@ impl<'a, Fut: Future> Future for PollOnce<'a, Fut> {
 
 #[tokio::main]
 async fn main() {
-    let future1 = foo();
-    let mut future2 = pin!(foo());
-    PollOnce(future2.as_mut()).await;
+    let future = pin!(foo());
+    PollOnce(future).await;
     println!("We make it here...");
-    future1.await;
+    foo().await;
     println!("...but not here!");
-    future2.await;
 }

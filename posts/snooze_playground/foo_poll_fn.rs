@@ -12,15 +12,13 @@ async fn foo() {
 
 #[tokio::main]
 async fn main() {
-    let future1 = foo();
-    let mut future2 = pin!(foo());
+    let mut future = pin!(foo());
     std::future::poll_fn(|cx| {
-        _ = future2.as_mut().poll(cx);
+        _ = future.as_mut().poll(cx);
         Poll::Ready(())
     })
     .await;
     println!("We make it here...");
-    future1.await;
+    foo().await;
     println!("...but not here!");
-    future2.await;
 }
