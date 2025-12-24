@@ -15,10 +15,15 @@ async fn main() {
     let future1 = pin!(foo());
     let future2 = pin!(foo());
     select! {
-        _ = future1 => {}
-        _ = future2 => {}
+        _ = future1 => {
+            println!("We make it here...");
+            foo().await;
+            println!("...but not here!");
+        }
+        _ = future2 => {
+            println!("Or maybe we make it here...");
+            foo().await;
+            println!("...but not here!");
+        }
     }
-    println!("We make it here...");
-    foo().await;
-    println!("...but not here!");
 }
