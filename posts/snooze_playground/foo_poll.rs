@@ -12,8 +12,8 @@ async fn foo() {
 
 #[tokio::main]
 async fn main() {
-    let mut future = pin!(foo());
-    _ = poll!(&mut future);
+    let future = pin!(foo());
+    _ = poll!(future);
     println!("We make it here...");
     foo().await;
     println!("...but not here!");

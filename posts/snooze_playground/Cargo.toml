@@ -33,10 +33,6 @@ name = "foo_poll_struct"
 path = "foo_poll_struct.rs"
 
 [[bin]]
-name = "foo_select"
-path = "foo_select.rs"
-
-[[bin]]
 name = "foo_unordered"
 path = "foo_unordered.rs"
 
@@ -47,6 +43,14 @@ path = "foo_buffered.rs"
 [[bin]]
 name = "foo_moro"
 path = "foo_moro.rs"
+
+[[bin]]
+name = "foo_select"
+path = "foo_select.rs"
+
+[[bin]]
+name = "foo_select_arms"
+path = "foo_select_arms.rs"
 
 [[bin]]
 name = "foo_select_streams"
