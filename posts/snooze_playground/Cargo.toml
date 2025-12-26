@@ -49,9 +49,13 @@ name = "foo_select"
 path = "foo_select.rs"
 
 [[bin]]
-name = "foo_select_arms"
-path = "foo_select_arms.rs"
+name = "foo_select_arm"
+path = "foo_select_arm.rs"
 
 [[bin]]
 name = "foo_select_streams"
 path = "foo_select_streams.rs"
+
+[[bin]]
+name = "async_gen_example"
+path = "async_gen_example.rs"

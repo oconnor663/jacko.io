@@ -95,18 +95,18 @@ static LOCK: Mutex<()> = Mutex::const_new(());
 
 async fn foo() {
     let _guard = LOCK.lock().await;
-    sleep(Duration::from_millis(1)).await; // very important work
+    sleep(Duration::from_millis(10)).await; // very important work
 }
 ```
 
-As we go along, imagine that `foo` is buried three crates deep in some
-dependency we've never heard of. In real life the lock, the future that's
-holding it, and the mistake that snoozes that future might all be far apart
-from each other.[^ghidra] With that in mind, here's the minimal futurelock:
+As we go along, I want you to imagine that `foo` is buried three crates deep in
+some dependency you've never heard of. In real life the lock, the future that's
+holding it, and the mistake that snoozes that future can be far apart from each
+other.[^ghidra] With that in mind, here's the minimal futurelock:
 
 [^ghidra]: In the [original issue thread][gh9259] that inspired "Futurelock",
-    they resorted to booting up [Ghidra] and staring at core dumps. Truly the
-    stuff of nightmares.
+    they had to look at core dumps in [Ghidra] to find the bug. That's what we
+    call ["type 2 fun"](https://essentialwilderness.com/type-1-2-and-3-fun/).
 
 [gh9259]: https://github.com/oxidecomputer/omicron/issues/9259
 [Ghidra]: https://github.com/NationalSecurityAgency/ghidra
@@ -129,83 +129,73 @@ because we're only `.await`ing the second call to `foo`, we're deadlocked.
 
 [poll_struct]: playground://snooze_playground/foo_poll_struct.rs
 
-You probably won't see anyone using `poll!` like that in the wild, but here's
-effectively the same thing using
+You probably won't see anyone use `poll!` like that in the wild. What you'll
+see is effectively the same thing, but with
 [`select!`](https://docs.rs/tokio/latest/tokio/macro.select.html):[^arms]
 
-[^arms]: It works equally well to put calls to `foo` [in the `select!` arm
-    bodies][foo_select_arms].
+[^arms]: We could also put the second call to `foo` [in the `select!` arm
+    body][foo_select_arm].
 
-[foo_select_arms]: playground://snooze_playground/foo_select_arms.rs
+[foo_select_arm]: playground://snooze_playground/foo_select_arm.rs
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_select.rs
-let future1 = pin!(foo());
-let future2 = pin!(foo());
+let future = pin!(foo());
 select! {
-    _ = future1 => {}
-    _ = future2 => {}
+    _ = future => {}
+    _ = sleep(Duration::from_millis(1)) => {}
 }
 foo().await; // Deadlock!
 ```
 
-In this case `select!` polls both futures. Whichever one goes first[^random]
-acquires the lock and sleeps, while the other waits on the lock and takes a
-"place in line".[^fairness] After the sleep, `select!` finishes the first
-future and returns.[^cancel] The following call to `foo` "gets in line" behind
-the second future, and we're deadlocked again.
-
-[^random]: `select!` chooses randomly.
-
-[^fairness]: In other words, unlike `std::sync::Mutex`, [Tokio's
-    `Mutex`][tokio_mutex] is "fair". If it wasn't, we'd need to make sure the
-    second future got polled one more time and actually acquired the lock. We
-    could make that work by adding another short sleep in `foo` after the
-    critical section. To be clear, the fairness property itself is not "at
-    fault" for this deadlock.
-
-[tokio_mutex]: https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html
-
-[^cancel]: When one arm returns `Ready`, `select!` nominally cancels the
-    others. But because of how the [`pin!`] macro works, we're actually
-    selecting on these future by reference, and dropping a reference has no
-    effect.
+This `select!` also polls `future` just once, because the 1 ms sleep finishes
+first. When that arm finishes, `select!` nominally cancels the other arm, but
+because of how the [`pin!`] macro works, `future` is actually a reference to
+the anonymous type that `foo` returns. Dropping that reference has no effect.
 
 [`pin!`]: https://doc.rust-lang.org/std/pin/macro.pin.html
 
-We can also do same thing by using `select!` with [streams]:[^stream_snoozing]
+We can also provoke the same deadlock by selecting on a
+[stream]:[^stream_snoozing]
 
-[streams]: https://tokio.rs/tokio/tutorial/streams
+[stream]: https://tokio.rs/tokio/tutorial/streams
 
-[^stream_snoozing]: This is subtle. There's nothing wrong with calling
-    `.next().await` once and then not again for a while. That's not snoozing;
-    that's just normal iteration. The problem here is that we haven't paused
-    the stream at a _yield point_, where it would be if `next` had just given
-    us an item. (Note that there's no way for a stream to yield an item inside
-    `foo`'s critical section, except by committing a snoozing crime internally.
-    That's not the case here, but see `FuturesUnordered` below). These streams
-    only snooze `foo` because we snooze them. When we do that, they snooze at
-    an _await point_, i.e. some random line of async code that might not even
-    know it's in a stream. If we start a call to `next` (in general, if
-    [`poll_next`] returns `Pending`), then we either need to keep driving the
-    stream until it yields something or else drop the _whole stream_. (TODO:
-    There should probably be an exception for `Unpin` streams like channels.)
+[^stream_snoozing]: The problem of snoozing streams is especially subtle. It's
+    normal and expected to call [`next`] to pull an item from the stream, and
+    then not do that again for a while. That's just iteration, not snoozing. In
+    particular, when [`poll_next`] returns `Ready(Some(_))`, it doesn't
+    register a wakeup. Wakeups are only registered when polling returns
+    `Pending`. In generator terms, i.e. [the nightly-only `gen` and `async gen`
+    syntax][async_gen], returning an item is a _yield point_. Note that there's
+    no way for a stream to somehow "inject" a yield point into `foo`'s critical
+    section. (Other than by committing a snoozing crime internally, which isn't
+    the case here, but see `FuturesUnordered` below). But in this example, we
+    haven't paused the stream at a yield point. Instead, we've paused it at an
+    _await point_, a future that _has_ registered a wakeup and _does_ expect to
+    be polled promptly when it's ready. That's why this example counts as
+    snoozing. When we start a call to `next`, that is when `poll_next` returns
+    `Pending`, we either need to keep driving the stream until it yields an
+    item, or else we need to drop the _whole stream_. (TODO: This rules out
+    selecting on channel receivers, which probably goes to far. Maybe we can
+    make an exception for `Unpin` types? Or maybe channel receivers should
+    expose non-`Stream` APIs. I'm not sure.)
 
+[`next`]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.next
 [`poll_next`]: https://docs.rs/futures/latest/futures/stream/trait.Stream.html#tymethod.poll_next
+[async_gen]: playground://snooze_playground/async_gen_example.rs?version=nightly
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_select_streams.rs
-let mut stream1 = pin!(stream::once(foo()));
-let mut stream2 = pin!(stream::once(foo()));
+let mut stream = pin!(stream::once(foo()));
 select! {
-    _ = stream1.next() => {}
-    _ = stream2.next() => {}
+    _ = stream.next() => {}
+    _ = sleep(Duration::from_millis(1)) => {}
 }
 foo().await; // Deadlock!
 ```
 
-Speaking of streams, a related class of deadlocks that you might see in the
-wild is caused by ["buffered"] streams:
+Speaking of streams, there's another class of deadlocks caused by ["buffered"]
+streams:
 
 ["buffered"]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.buffered
 
@@ -222,16 +212,16 @@ first one finishes, control passes to the `for_each` closure. While that
 closure is running, the other `foo` in the buffer is snoozed.
 
 Buffered streams are a wrapper around either [`FuturesOrdered`] or
-[`FuturesUnordered`], and we can trigger the same bug by looping over either of
-those directly:[^stream_fault]
+[`FuturesUnordered`], and we can trigger the same deadlock by looping over
+either of those directly:[^stream_fault]
 
 [`FuturesOrdered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesOrdered.html
 [`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
 
 [^stream_fault]: Compare this example to the `stream::once` example above.
-    There we were "at fault" for snoozing the stream. But here, our program is
+    There we were "at fault" for snoozing the stream. But here our program is
     doing its best to drive each `StreamExt::next` call to completion, and the
-    real `foo` snoozer is `FuturesUnordered` itself!
+    real `foo` snoozer is `FuturesUnordered`!
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_unordered.rs
@@ -243,11 +233,14 @@ while let Some(_) = futures.next().await {
 }
 ```
 
-These patterns are common in async Rust, and many of them are ticking time
-bombs, sitting around until some unlikely timeout fires, some channel fills up,
-or some dependency adds an internal lock. This is a problem.
+Invisible deadlocks are pretty bad, but what's worse is that it's hard to
+pinpoint what exactly these examples are doing wrong. Is `foo` broken?[^no] Are
+`select!` and buffered streams broken? Are these programs "holding them wrong"?
 
-But regular non-async Rust doesn't have this sort of problem. Why not?
+[^no]: No, `foo` is not broken.
+
+I think the clearest way to start answering these questions is with another
+question: Why doesn't regular non-async Rust have these problems?
 
 ## Threads
 
@@ -285,3 +278,7 @@ isn't a yield point. That's really no different from snoozing a future.
 Note that the example in the Futurelock blog post can be fixed by dropping the
 cancelled future promptly, but the original but that motivated the whole
 article can't be fixed that way.
+
+---
+
+adding `poll_progress` to asynciterator would make buffered streams sound.

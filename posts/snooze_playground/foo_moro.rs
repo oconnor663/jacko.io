@@ -6,7 +6,7 @@ static LOCK: Mutex<()> = Mutex::const_new(());
 async fn foo() {
     println!("Is this actually concurrent?");
     let _guard = LOCK.lock().await;
-    sleep(Duration::from_millis(1)).await;
+    sleep(Duration::from_millis(10)).await;
     println!("Yes it is!");
 }
 

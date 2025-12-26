@@ -8,16 +8,15 @@ static LOCK: Mutex<()> = Mutex::const_new(());
 
 async fn foo() {
     let _guard = LOCK.lock().await;
-    sleep(Duration::from_millis(1)).await;
+    sleep(Duration::from_millis(10)).await;
 }
 
 #[tokio::main]
 async fn main() {
-    let mut stream1 = pin!(stream::once(foo()));
-    let mut stream2 = pin!(stream::once(foo()));
+    let mut stream = pin!(stream::once(foo()));
     select! {
-        _ = stream1.next() => {}
-        _ = stream2.next() => {}
+        _ = stream.next() => {}
+        _ = sleep(Duration::from_millis(1)) => {}
     }
     println!("We make it here...");
     foo().await;
