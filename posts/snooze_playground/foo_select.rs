@@ -7,16 +7,15 @@ static LOCK: Mutex<()> = Mutex::const_new(());
 
 async fn foo() {
     let _guard = LOCK.lock().await;
-    sleep(Duration::from_millis(1)).await;
+    sleep(Duration::from_millis(10)).await;
 }
 
 #[tokio::main]
 async fn main() {
-    let future1 = pin!(foo());
-    let future2 = pin!(foo());
+    let future = pin!(foo());
     select! {
-        _ = future1 => {}
-        _ = future2 => {}
+        _ = future => {}
+        _ = sleep(Duration::from_millis(1)) => {}
     }
     println!("We make it here...");
     foo().await;
