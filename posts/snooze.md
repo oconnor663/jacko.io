@@ -42,7 +42,7 @@ and convenient replacements are possible.
     when the executor is running fine, but some futures still aren't getting
     polled.
 
-[^chilling]: To me the most chilling line from that post is "There’s no one
+[^chilling]: To me the most chilling line from that post is "There's no one
     abstraction, construct, or programming pattern we can point to here and say
     'never do this'." I partly disagree. I think we *can* point the finger
     squarely at patterns like `select!` and buffered streams. But if we're
@@ -239,7 +239,7 @@ pinpoint what exactly these examples are doing wrong. Is `foo` broken?[^no] Are
 
 [^no]: No, `foo` is not broken.
 
-I want to start answering these questions with another question: Why don't we
+Let's start answering those questions with a different question: Why don't we
 have these problems when we use regular threads?
 
 ## Threads
@@ -254,9 +254,9 @@ have these problems when we use regular threads?
 In fact, we _do_ have these problems with threads, if we try to cancel them.
 The Windows `TerminateThread` function [warns us about this][terminatethread]:
 "If the target thread owns a critical section, the critical section will not be
-released."[^dangerous] The classic source of cancelled thread deadlocks on Unix
-is `fork`, which copies the address space of the parent process but only one of
-its running threads.[^fork][^signals]
+released."[^dangerous] On Unix, the classic source of cancellation deadlocks is
+`fork`, which copies the whole address space of the parent process but only one
+of its running threads.[^fork]
 
 [terminatethread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread
 
@@ -267,32 +267,68 @@ its running threads.[^fork][^signals]
     or calling exec immediately afterwards. POSIX only guarantees that a small
     list of 'async-signal-safe' functions can be used between fork and exec,
     notably excluding `malloc()` and anything else in standard libraries that
-    may allocate memory or acquire locks. Real multi-threaded programs that
-    fork are plagued by bugs arising from the practice. It is hard to imagine a
-    new proposed syscall with these properties being accepted by any sane
-    kernel maintainer." - [_A `fork()` in the road_][fork_in_the_road]
+    may allocate memory or acquire locks. Real multithreaded programs that fork
+    are plagued by bugs arising from the practice. It is hard to imagine a new
+    proposed syscall with these properties being accepted by any sane kernel
+    maintainer." - [_A `fork()` in the road_][fork_in_the_road]
 
 [fork_in_the_road]: https://www.microsoft.com/en-us/research/wp-content/uploads/2019/04/fork-hotos19.pdf
 
-Given the historical dumpster fire that is thread cancellation, it's remarkable
-that cancelling futures works as well as it does. The key is that Rust knows
-how to `drop` a future and clean up the resources it's holding. The OS knows
-very little about what any given thread is doing, though, and it relies on
-naturally exiting threads to clean up after themselves.
+Given the historical tire fire that is thread cancellation, it's remarkable
+that cancelling futures works as well as it does. The crucial difference is
+that Rust knows how to `drop` a future and clean up the resources it owns, most
+importantly the lock guards.[^unaliased] The OS can clean up after a process,
+but for threads within a process it can't see who owns what, and it can only
+hope they clean up after themselves.
 
-With all that in mind, let's make an observation: _pausing_ a thread can cause
-the same deadlocks as cancelling a thread, if the paused thread and the thread
-that's supposed to *un*pause it ever touch any of the same locks. In a way it's
-worse, because if you cancel a thread you can at least _try_ to clean up after
-it.[^pthread_cleanup_push] But of course you can't clean up after a paused
-thread, because it'll need all its resources when it resumes.
+[^unaliased]: Related to that, Rust knows that no part of an object is borrowed
+    at the point where we `drop` it.
 
-[^pthread_cleanup_push]: For example with the Unix `pthread_cancel` function,
-    you can call `pthread_cleanup_push` to register cleanup callbacks. It
-    doesn't work especially well &mdash; [glibc still leaks memory][glibc]
-    &mdash; but it's an option in theory.
+Pausing threads can also cause the same problems as cancelling them. The
+Windows docs [warn us about this too][suspendthread]: "Calling `SuspendThread`
+on a thread that owns a synchronization object, such as a mutex or critical
+section, can lead to a deadlock if the calling thread tries to obtain a
+synchronization object owned by a suspended thread."[^debuggers] On Unix, the
+classic source of pausing deadlocks is signal handlers, which hijack a thread
+whenever they run.[^signalfd][^signal_safe]
 
-[glibc]: https://eissing.org/icing/posts/rip_pthread_cancel/
+[suspendthread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-suspendthread
+
+[^debuggers]: There are no remarks about "extreme cases" this time, just "this
+    function is primarily designed for use by debuggers".
+
+[^signalfd]: "If you register a signal handler, it's called in the middle of
+    whatever code you happen to be running. This sets up some very onerous
+    restrictions on what a signal handler can do: it can't assume that any
+    locks are unlocked, any complex data structures are in a reliable state,
+    etc. The restrictions are *stronger* than the restrictions on thread-safe
+    code, since the signal handler interrupts and *stops* the original code
+    from running. So, for instance, it can't even wait on a lock, because the
+    code that's holding the lock is paused until the signal handler completes.
+    This means that a lot of convenient functions, including the `stdio`
+    functions, `malloc`, etc., are unusable from a signal handler, because they
+    take locks internally." - [_signalfd is
+    useless_](https://ldpreload.com/blog/signalfd-is-useless)
+
+[^signal_safe]: In fact this is where `fork`'s list of "async-signal-safe"
+    functions comes from. The rules for what you can do after `fork` are mostly
+    the same as the rules for what you can do in a signal handler.
+
+Even if the OS could clean up threads, it wouldn't help in these cases, because
+a paused thread needs all its resources if we eventually unpause it. And the
+same applies to Rust futures. If a snoozed future might get polled again, then
+it doesn't help that Rust knows how to `drop` it, because we can't `drop` it.
+
+Let's lump threads and futures together and call them "jobs".[^tasks] Here's
+what we can say about jobs and locks in general: If a job ever touches any
+locks, no matter how deeply buried they might be buried in the standard library
+or wherever else, then we either need to guarantee the job keeps running, or
+else we need to clean it up promptly and completely. Anything in between is a
+recipe for deadlocks.
+
+[^tasks]: We often say "tasks" as the general term for "some ongoing execution
+    of code", but that has a specific meaning in async Rust, and I don't want
+    to be confusing.
 
 ## Deprecated Idioms
 
