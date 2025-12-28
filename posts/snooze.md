@@ -194,8 +194,8 @@ select! {
 foo().await; // Deadlock!
 ```
 
-Speaking of streams, there's another class of deadlocks caused by ["buffered"]
-streams:
+Speaking of streams, there's another category of futurelocks caused by
+["buffered"] streams:
 
 ["buffered"]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.buffered
 
@@ -239,72 +239,60 @@ pinpoint what exactly these examples are doing wrong. Is `foo` broken?[^no] Are
 
 [^no]: No, `foo` is not broken.
 
-I think the clearest way to start answering these questions is with another
-question: Why don't we have these problems when we use regular threads?
+I want to start answering these questions with another question: Why don't we
+have these problems when we use regular threads?
 
 ## Threads
 
 > How many times does<br>
 > it have to be said: Never<br>
 > call `TerminateThread`.<br>
-> \- [Larry Osterman][terminate_thread]
+> \- [Larry Osterman][oldnewthing]
 
-[terminate_thread]: https://devblogs.microsoft.com/oldnewthing/20150814-00/?p=91811
+[oldnewthing]: https://devblogs.microsoft.com/oldnewthing/20150814-00/?p=91811
 
-In fact, we _can_ have these problems with threads, if we try to cancel them.
-It's remarkable that cancelling futures is normal and almost boring, while
-cancelling threads has historically been a disaster.[^kill_a_thread] The
-difference is that when Rust drops a future, it knows 1) that the future isn't
-currently borrowed, and 2) what resources the future owns. When the OS cancels
-a thread, it doesn't know anything of the sort.[^cancel_points] Besides leaking
-lots of memory, the main issue is releasing locks, particularly the `malloc`
-lock.[^malloc]
+In fact, we _do_ have these problems with threads, if we try to cancel them.
+The Windows `TerminateThread` function [warns us about this][terminatethread]:
+"If the target thread owns a critical section, the critical section will not be
+released."[^dangerous] The classic source of cancelled thread deadlocks on Unix
+is `fork`, which copies the address space of the parent process but only one of
+its running threads.[^fork][^signals]
 
-[^kill_a_thread]: The Windows `TerminateThread` function is so laughably unsafe
-    that principal engineers at Microsoft will write poetry about you if you
-    call it. The [official docs][terminate_thread] call it "a dangerous
-    function that should only be used in the most extreme cases", whatever that
-    means. On Unix, the `pthread_cancel` function has two modes. "Asynchronous"
-    mode is `TerminateThread` with less honest documentation. "Deferred" mode
-    is more nuanced. Libcurl [recently tried using][curl_in] the latter but
-    [gave up on it][curl_out], because it causes memory leaks in glibc itself.
+[terminatethread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread
 
-[terminate_thread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread
-[curl_in]: https://eissing.org/icing/posts/pthread_cancel/
-[curl_out]: https://eissing.org/icing/posts/rip_pthread_cancel/
+[^dangerous]: The docs also call it "a dangerous function that should only be
+    used in the most extreme cases," whatever that means.
 
-[^cancel_points]: In "deferred" mode, `pthread_cancel` does have some control
-    over what a cancelled thread it doing, because it only takes effect at
-    specific "cancellation points" like `read` and `sleep`. But some
-    long-running computations don't call those functions, and there's still the
-    problem of knowing what resources belong to the cancelled thread. The
-    `pthread_cleanup_push` function lets you register cleanup handlers, but
-    most code in the wild doesn't use it, and it doesn't play nicely with move
-    semantics. Calling `pthread_cancel` on a Rust thread is undefined behavior
-    in any case.
-
-[^malloc]: The `malloc` function is the source of all heap memory in a C
-    program. The Rust equivalent is `std::alloc::alloc`, but in application
-    code it's almost always hidden inside standard containers like `Box` and
-    `Vec`.
-
-I want to repeat that, because I think most folks are either learning this for
-the first time, or else learned it so long ago that it doesn't feel weird
-anymore. There are locks inside of `malloc`, and if we forcefully kill enough
-threads, our program will eventually deadlock there.[^fork]
-
-[^fork]: The most common way to run into this issue in practice is actually
-    `fork`, because it copies the whole address space of the parent process,
-    but only one of the running threads. From the child's perspective, every
-    thread except the one that called `fork` is killed. This is why you're only
-    allowed to call a short list of functions after `fork`, and why it's one of
-    the [most difficult][fork_in_the_road] Unix APIs to use correctly.
+[^fork]: "Programming guides advise not using fork in a multithreaded process,
+    or calling exec immediately afterwards. POSIX only guarantees that a small
+    list of 'async-signal-safe' functions can be used between fork and exec,
+    notably excluding `malloc()` and anything else in standard libraries that
+    may allocate memory or acquire locks. Real multi-threaded programs that
+    fork are plagued by bugs arising from the practice. It is hard to imagine a
+    new proposed syscall with these properties being accepted by any sane
+    kernel maintainer." - [_A `fork()` in the road_][fork_in_the_road]
 
 [fork_in_the_road]: https://www.microsoft.com/en-us/research/wp-content/uploads/2019/04/fork-hotos19.pdf
 
-If cancelling futures was as dangerous as cancelling threads, then obviously we
-could never allow it. And the reason I'm bringing all this up is, _pausing_ a
-future is _exactly_ as dangerous as pausing a thread.
+Given the historical dumpster fire that is thread cancellation, it's remarkable
+that cancelling futures works as well as it does. The key is that Rust knows
+how to `drop` a future and clean up the resources it's holding. The OS knows
+very little about what any given thread is doing, though, and it relies on
+naturally exiting threads to clean up after themselves.
+
+With all that in mind, let's make an observation: _pausing_ a thread can cause
+the same deadlocks as cancelling a thread, if the paused thread and the thread
+that's supposed to *un*pause it ever touch any of the same locks. In a way it's
+worse, because if you cancel a thread you can at least _try_ to clean up after
+it.[^pthread_cleanup_push] But of course you can't clean up after a paused
+thread, because it'll need all its resources when it resumes.
+
+[^pthread_cleanup_push]: For example with the Unix `pthread_cancel` function,
+    you can call `pthread_cleanup_push` to register cleanup callbacks. It
+    doesn't work especially well &mdash; [glibc still leaks memory][glibc]
+    &mdash; but it's an option in theory.
+
+[glibc]: https://eissing.org/icing/posts/rip_pthread_cancel/
 
 ## Deprecated Idioms
 
