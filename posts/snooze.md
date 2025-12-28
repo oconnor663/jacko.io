@@ -254,7 +254,7 @@ have these problems when we use regular threads?
 In fact, we _do_ have these problems with threads, if we try to cancel them.
 The Windows `TerminateThread` function [warns us about this][terminatethread]:
 "If the target thread owns a critical section, the critical section will not be
-released."[^dangerous] On Unix, the classic source of cancellation deadlocks is
+released."[^dangerous] In Unix the classic source of cancellation deadlocks is
 `fork`, which copies the whole address space of the parent process but only one
 of its running threads.[^fork]
 
@@ -276,26 +276,23 @@ of its running threads.[^fork]
 
 Given the historical tire fire that is thread cancellation, it's remarkable
 that cancelling futures works as well as it does. The crucial difference is
-that Rust knows how to `drop` a future and clean up the resources it owns, most
-importantly the lock guards.[^unaliased] The OS can clean up after a process,
-but for threads within a process it can't see who owns what, and it can only
-hope they clean up after themselves.
+that Rust knows how to `drop` a future and clean up the resources it owns,
+particularly the lock guards.[^unaliased] The OS can clean up when a process
+exits, but for threads within a process it can't see who owns what, and it can
+only hope they clean up after themselves.
 
 [^unaliased]: Related to that, Rust knows that no part of an object is borrowed
     at the point where we `drop` it.
 
-Pausing threads can also cause the same problems as cancelling them. The
-Windows docs [warn us about this too][suspendthread]: "Calling `SuspendThread`
-on a thread that owns a synchronization object, such as a mutex or critical
-section, can lead to a deadlock if the calling thread tries to obtain a
-synchronization object owned by a suspended thread."[^debuggers] On Unix, the
-classic source of pausing deadlocks is signal handlers, which hijack a thread
-whenever they run.[^signalfd][^signal_safe]
+We also have these problems if we _pause_ threads. The Windows docs [warn us
+about this too][suspendthread]: "Calling `SuspendThread` on a thread that owns
+a synchronization object, such as a mutex or critical section, can lead to a
+deadlock if the calling thread tries to obtain a synchronization object owned
+by a suspended thread." In Unix the classic source of pausing deadlocks is
+signal handlers, which hijack a thread whenever they
+run.[^signalfd][^signal_safe]
 
 [suspendthread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-suspendthread
-
-[^debuggers]: There are no remarks about "extreme cases" this time, just "this
-    function is primarily designed for use by debuggers".
 
 [^signalfd]: "If you register a signal handler, it's called in the middle of
     whatever code you happen to be running. This sets up some very onerous
@@ -314,21 +311,16 @@ whenever they run.[^signalfd][^signal_safe]
     functions comes from. The rules for what you can do after `fork` are mostly
     the same as the rules for what you can do in a signal handler.
 
-Even if the OS could clean up threads, it wouldn't help in these cases, because
-a paused thread needs all its resources if we eventually unpause it. And the
-same applies to Rust futures. If a snoozed future might get polled again, then
-it doesn't help that Rust knows how to `drop` it, because we can't `drop` it.
+Even if the OS could clean up threads, that wouldn't help here, because a
+paused thread needs all its resources if we eventually unpause it. And the same
+applies to Rust futures, if we snooze them. A snoozed future might get polled
+again, so we can't `drop` it.
 
-Let's lump threads and futures together and call them "jobs".[^tasks] Here's
-what we can say about jobs and locks in general: If a job ever touches any
-locks, no matter how deeply buried they might be buried in the standard library
-or wherever else, then we either need to guarantee the job keeps running, or
-else we need to clean it up promptly and completely. Anything in between is a
-recipe for deadlocks.
+In other words, snoozing a future is just as broken as cancelling or pausing a
+thread. In all but the most carefully controlled circumstances, we have to
+assume that we'll deadlock our whole program if we ever do it.
 
-[^tasks]: We often say "tasks" as the general term for "some ongoing execution
-    of code", but that has a specific meaning in async Rust, and I don't want
-    to be confusing.
+## What is to be done?
 
 ## Deprecated Idioms
 
