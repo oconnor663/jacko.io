@@ -41,6 +41,10 @@ name = "foo_buffered"
 path = "foo_buffered.rs"
 
 [[bin]]
+name = "foo_buffered_unfair"
+path = "foo_buffered_unfair.rs"
+
+[[bin]]
 name = "foo_moro"
 path = "foo_moro.rs"
 

@@ -119,7 +119,7 @@ foo().await; // Deadlock!
 ```
 
 [`poll!`](https://docs.rs/futures/latest/futures/macro.poll.html) is a macro
-that you rarely see outside of examples.[^struct] It polls the first `future`
+that we rarely see outside of examples.[^struct] It polls the first `future`
 exactly once, which brings it to the point where it's acquired the `LOCK` and
 started sleeping. Then we call `foo` again, it blocks on the same `LOCK`, and
 because we're only `.await`ing the second call to `foo`, we're deadlocked.
@@ -162,8 +162,8 @@ We can also provoke the same deadlock by selecting on a
 
 [^stream_snoozing]: The problem of snoozing streams is especially subtle. It's
     normal and expected to call [`next`] to pull an item from the stream, and
-    then not do that again for a while. That's just iteration, not snoozing. In
-    particular, when [`poll_next`] returns `Ready(Some(_))`, it doesn't
+    then to not do that again for a while. That's just iteration, not snoozing.
+    In particular, when [`poll_next`] returns `Ready(Some(_))`, it doesn't
     register a wakeup. Wakeups are only registered when polling returns
     `Pending`. In generator terms, i.e. [the nightly-only `gen` and `async gen`
     syntax][async_gen], returning an item is a _yield point_. Note that there's
@@ -171,14 +171,14 @@ We can also provoke the same deadlock by selecting on a
     section. (Other than by committing a snoozing crime internally, which isn't
     the case here, but see `FuturesUnordered` below). But in this example, we
     haven't paused the stream at a yield point. Instead, we've paused it at an
-    _await point_, a future that _has_ registered a wakeup and _does_ expect to
-    be polled promptly when it's ready. That's why this example counts as
-    snoozing. When we start a call to `next`, that is when `poll_next` returns
-    `Pending`, we either need to keep driving the stream until it yields an
-    item, or else we need to drop the _whole stream_. (TODO: This rules out
-    selecting on channel receivers, which probably goes to far. Maybe we can
-    make an exception for `Unpin` types? Or maybe channel receivers should
-    expose non-`Stream` APIs. I'm not sure.)
+    _await point_, which has registered a wakeup and which expects to get
+    polled promptly when it's ready. That's why this example counts as
+    snoozing. When we start a call to `next`, or in general when `poll_next`
+    returns `Pending`, we either need to keep driving the stream until it
+    yields an item, or else we need to drop the _whole stream_. (TODO: This
+    rules out selecting on channel receivers, which probably goes to far. Maybe
+    we can make an exception for `Unpin` types? Or maybe channel receivers
+    should expose non-`Stream` APIs. I'm not sure.)
 
 [`next`]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.next
 [`poll_next`]: https://docs.rs/futures/latest/futures/stream/trait.Stream.html#tymethod.poll_next
@@ -209,7 +209,17 @@ futures::stream::iter([foo(), foo()])
 
 Here the buffer starts polling both of its `foo` futures concurrently. When the
 first one finishes, control passes to the `for_each` closure. While that
-closure is running, the other `foo` in the buffer is snoozed.
+closure is running, the other `foo` in the buffer is snoozed.[^fair]
+
+[^fair]: In this case the second buffered `foo` doesn't actually advance to the
+    point where it acquires the `LOCK`. We still get a reliable deadlock here,
+    though, because Tokio's `Mutex` is "fair". When `Mutex::lock` blocks
+    waiting for the `Mutex` to be released, it takes a "place in line", and
+    other callers can't jump ahead unless it's cancelled. To [make this example
+    work with an unfair mutex][unfair], we could add a 1 ms sleep in `foo`
+    after the critical section.
+
+[unfair]: playground://snooze_playground/foo_buffered_unfair.rs
 
 Buffered streams are a wrapper around either [`FuturesOrdered`] or
 [`FuturesUnordered`], and we can trigger the same deadlock by looping over
@@ -254,7 +264,7 @@ have these problems when we use regular threads?
 In fact, we _do_ have these problems with threads, if we try to cancel them.
 The Windows `TerminateThread` function [warns us about this][terminatethread]:
 "If the target thread owns a critical section, the critical section will not be
-released."[^dangerous] In Unix the classic source of cancellation deadlocks is
+released."[^dangerous] The classic source of cancellation deadlocks on Unix is
 `fork`, which copies the whole address space of the parent process but only one
 of its running threads.[^fork]
 
@@ -277,8 +287,8 @@ of its running threads.[^fork]
 Given the historical tire fire that is thread cancellation, it's remarkable
 that cancelling futures works as well as it does. The crucial difference is
 that Rust knows how to `drop` a future and clean up the resources it owns,
-particularly the lock guards.[^unaliased] The OS can clean up when a process
-exits, but for threads within a process it can't see who owns what, and it can
+particularly the lock guards.[^unaliased] The OS can clean up a process when it
+exits, but it can't tell which threads within a process own what, and it can
 only hope they clean up after themselves.
 
 [^unaliased]: Related to that, Rust knows that no part of an object is borrowed
@@ -288,7 +298,7 @@ We also have these problems if we _pause_ threads. The Windows docs [warn us
 about this too][suspendthread]: "Calling `SuspendThread` on a thread that owns
 a synchronization object, such as a mutex or critical section, can lead to a
 deadlock if the calling thread tries to obtain a synchronization object owned
-by a suspended thread." In Unix the classic source of pausing deadlocks is
+by a suspended thread." The classic source of pausing deadlocks on Unix is
 signal handlers, which hijack a thread whenever they
 run.[^signalfd][^signal_safe]
 
@@ -318,9 +328,11 @@ again, so we can't `drop` it.
 
 In other words, snoozing a future is just as broken as cancelling or pausing a
 thread. In all but the most carefully controlled circumstances, we have to
-assume that we'll deadlock our whole program if we ever do it.
+assume that we'll deadlock our whole program if we ever do it. Async locks
+aren't as ubiquitous as the locks in `malloc` or `std::io`, so it's harder to
+notice this problem today, but it's fundamentally the same problem.
 
-## What is to be done?
+## Pointing the finger
 
 ## Deprecated Idioms
 
