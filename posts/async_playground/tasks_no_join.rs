@@ -55,7 +55,7 @@ async fn async_main() {
 }
 
 fn main() {
-    let waker = futures::task::noop_waker();
+    let waker = Waker::noop();
     let mut context = Context::from_waker(&waker);
     let mut tasks: Vec<DynFuture> = vec![Box::pin(async_main())];
     loop {

@@ -561,18 +561,15 @@ thread to make it work, then it turns out we also need to get rid of
 To call `poll` from `main`, we'll need a `Context` to pass in. We can make one
 with [`Context::from_waker`], which means we need a `Waker`. There are a few
 different ways to make one,[^make_a_waker] but for now we just need a
-placeholder, so we'll use a helper function called [`noop_waker`].[^noop] Once
+placeholder, so we'll use a helper function called [`Waker::noop`].[^noop] Once
 we've built a `Context`, we can call `poll` in a loop:
 
 [`Context::from_waker`]: https://doc.rust-lang.org/std/task/struct.Context.html#method.from_waker
-[`noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
 
 [^make_a_waker]: We'll get to these in [the Waker section of Part
     Two](async_tasks.html#waker).
 
-[^noop]: [`noop_waker`] comes from the `futures` crate, but as of Rust 1.85,
-    [`Waker::noop`] is also available in the standard library. "Noop" is short
-    for "no operation", i.e. "do nothing".
+[^noop]: "Noop" is short for "no operation", i.e. "do nothing".
 
 [`Waker::noop`]: https://doc.rust-lang.org/std/task/struct.Waker.html#method.noop
 
@@ -584,7 +581,7 @@ fn main() {
         futures.push(foo(n));
     }
     let mut joined_future = Box::pin(future::join_all(futures));
-    let waker = futures::task::noop_waker();
+    let waker = Waker::noop();
     let mut context = Context::from_waker(&waker);
     while joined_future.as_mut().poll(&mut context).is_pending() {
         // Busy loop!
@@ -702,7 +699,7 @@ fn main() {
         futures.push(foo(n));
     }
     let mut joined_future = Box::pin(future::join_all(futures));
-    let waker = futures::task::noop_waker();
+    let waker = Waker::noop();
     let mut context = Context::from_waker(&waker);
     while joined_future.as_mut().poll(&mut context).is_pending() {
         // The joined future is Pending. Sleep until the next wake time.

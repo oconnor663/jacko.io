@@ -52,7 +52,7 @@ fn main() {
     for n in 1..=10 {
         tasks.push(Box::pin(foo(n)));
     }
-    let waker = futures::task::noop_waker();
+    let waker = Waker::noop();
     let mut context = Context::from_waker(&waker);
     loop {
         // Poll each task, removing any that are Ready.

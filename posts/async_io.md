@@ -716,7 +716,7 @@ task every time, and tasks that aren't `Ready` will re-register themselves in
 `POLL_FDS` before the next sleep.
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=a1f24e5877f83c0b741e8d27fb63ea0a
+LINK: Playground ## playground://async_playground/client_server_poll.rs
 HIGHLIGHT: 1-2
 poll_fds.clear();
 poll_wakers.drain(..).for_each(Waker::wake);

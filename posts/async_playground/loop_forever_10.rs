@@ -1,7 +1,7 @@
 use futures::future;
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 fn sleep(duration: Duration) -> Sleep {
@@ -38,7 +38,7 @@ fn main() {
         futures.push(foo(n));
     }
     let mut joined_future = Box::pin(future::join_all(futures));
-    let waker = futures::task::noop_waker();
+    let waker = Waker::noop();
     let mut context = Context::from_waker(&waker);
     while joined_future.as_mut().poll(&mut context).is_pending() {
         // Busy loop!

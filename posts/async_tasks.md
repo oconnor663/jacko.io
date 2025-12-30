@@ -19,7 +19,7 @@ loop in Part One looked like this:
 LINK: Playground ## playground://async_playground/wakers.rs
 HIGHLIGHT: 1,4,6
 let mut joined_future = Box::pin(future::join_all(futures));
-let waker = futures::task::noop_waker();
+let waker = Waker::noop();
 let mut context = Context::from_waker(&waker);
 while joined_future.as_mut().poll(&mut context).is_pending() {
     …
@@ -146,7 +146,7 @@ fn main() {
     for n in 1..=10 {
         tasks.push(Box::pin(foo(n)));
     }
-    let waker = futures::task::noop_waker();
+    let waker = Waker::noop();
     let mut context = Context::from_waker(&waker);
     …
 ```
@@ -166,7 +166,7 @@ looks like this:
 ```rust
 LINK: Playground ## playground://async_playground/tasks_no_spawn.rs
 HIGHLIGHT: 3-13
-let waker = futures::task::noop_waker();
+let waker = Waker::noop();
 let mut context = Context::from_waker(&waker);
 loop {
     // Poll each task and remove any that are Ready.
@@ -423,7 +423,7 @@ async fn async_main() {
 }
 
 fn main() {
-    let waker = futures::task::noop_waker();
+    let waker = Waker::noop();
     let mut context = Context::from_waker(&waker);
     let mut tasks: Vec<DynFuture> = vec![Box::pin(async_main())];
     …
@@ -634,7 +634,7 @@ and call the list `other_tasks`:[^eagle_eyed]
 LINK: Playground ## playground://async_playground/tasks_noop_waker.rs
 HIGHLIGHT: 4-15
 fn main() {
-    let waker = futures::task::noop_waker();
+    let waker = Waker::noop();
     let mut context = Context::from_waker(&waker);
     let mut main_task = Box::pin(async_main());
     let mut other_tasks: Vec<DynFuture> = Vec::new();
@@ -705,15 +705,14 @@ How can we communicate that to the main loop?[^shortcut] We could make another
     still have timing bugs. If some tasks sleep longer than others, we might
     need to re-poll immediately even when `WAKE_TIMES` isn't empty.
 
-We've been using [`futures::task::noop_waker`] to supply a dummy `Waker` since
-Part One. When `Sleep` was the only source of blocking, there was no way for
-one task to unblock another, and all we needed from `Waker` was a placeholder
-to satisfy the compiler. But now things have changed. Our
-`wrap_with_join_state` function is already invoking `Waker`s correctly when
-tasks finish, and we want to hear about it when that happens. How do we write
-our own `Waker`?
+We've been using [`Waker::noop`] to supply a dummy `Waker` since Part One. When
+`Sleep` was the only source of blocking, there was no way for one task to
+unblock another, and all we needed from `Waker` was a placeholder to satisfy
+the compiler. But now things have changed. Our `wrap_with_join_state` function
+is already invoking `Waker`s correctly when tasks finish, and we want to hear
+about it when that happens. How do we write our own `Waker`?
 
-[`futures::task::noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
+[`Waker::noop`]: https://doc.rust-lang.org/std/task/struct.Waker.html#method.noop
 
 `Waker` implements `From<Arc<W>>`, where `W` is anything with the [`Wake`]
 trait, which requires a `wake` method.[^RawWaker] That method takes

@@ -46,7 +46,7 @@ fn main() {
         futures.push(foo(n));
     }
     let mut joined_future = Box::pin(future::join_all(futures));
-    let waker = futures::task::noop_waker();
+    let waker = Waker::noop();
     let mut context = Context::from_waker(&waker);
     while joined_future.as_mut().poll(&mut context).is_pending() {
         // The joined future is Pending. Sleep until the next wake time.
