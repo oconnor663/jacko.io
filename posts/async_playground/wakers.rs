@@ -54,12 +54,10 @@ fn main() {
         let next_wake = wake_times.keys().next().expect("sleep forever?");
         thread::sleep(next_wake.saturating_duration_since(Instant::now()));
         // We just woke up. Invoke all the Wakers whose time has come.
-        while let Some(entry) = wake_times.first_entry() {
-            if *entry.key() <= Instant::now() {
-                entry.remove().into_iter().for_each(Waker::wake);
-            } else {
-                break;
-            }
+        while let Some(entry) = wake_times.first_entry()
+            && *entry.key() <= Instant::now()
+        {
+            entry.remove().into_iter().for_each(Waker::wake);
         }
         // Loop and poll again.
     }

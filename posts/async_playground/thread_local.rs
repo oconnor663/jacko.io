@@ -58,12 +58,10 @@ fn main() {
             thread::sleep(
                 next_wake.saturating_duration_since(Instant::now()),
             );
-            while let Some(entry) = wake_times.first_entry() {
-                if *entry.key() <= Instant::now() {
-                    entry.remove().into_iter().for_each(Waker::wake);
-                } else {
-                    break;
-                }
+            while let Some(entry) = wake_times.first_entry()
+                && *entry.key() <= Instant::now()
+            {
+                entry.remove().into_iter().for_each(Waker::wake);
             }
         });
     }

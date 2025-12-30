@@ -2,8 +2,8 @@ use futures::future;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::LazyLock;
+use std::sync::mpsc::{RecvTimeoutError, Sender, channel};
 use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -45,12 +45,10 @@ static WAKER_SENDER: LazyLock<Sender<(Instant, Waker)>> =
                 }
                 // Loop over all the wakers whose wake time has passed, removing them from the map and
                 // invoking them.
-                while let Some(entry) = wake_times.first_entry() {
-                    if *entry.key() <= Instant::now() {
-                        entry.remove().into_iter().for_each(Waker::wake);
-                    } else {
-                        break;
-                    }
+                while let Some(entry) = wake_times.first_entry()
+                    && *entry.key() <= Instant::now()
+                {
+                    entry.remove().into_iter().for_each(Waker::wake);
                 }
             }
         });

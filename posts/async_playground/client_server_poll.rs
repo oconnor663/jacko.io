@@ -299,12 +299,10 @@ fn main() -> io::Result<()> {
         poll_fds.clear();
         poll_wakers.drain(..).for_each(Waker::wake);
         // Invoke Wakers from WAKE_TIMES if their time has come.
-        while let Some(entry) = wake_times.first_entry() {
-            if *entry.key() <= Instant::now() {
-                entry.remove().into_iter().for_each(Waker::wake);
-            } else {
-                break;
-            }
+        while let Some(entry) = wake_times.first_entry()
+            && *entry.key() <= Instant::now()
+        {
+            entry.remove().into_iter().for_each(Waker::wake);
         }
     }
 }

@@ -226,7 +226,7 @@ There's `accept` and `write` on the server side, and there's `connect` and
 [client_server_busy_orig]: playground://async_playground/client_server_busy.rs
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=31c0b35d917b63b169aac7d93060b44c
 async fn accept(
     listener: &mut TcpListener,
 ) -> io::Result<(TcpStream, SocketAddr)> {
@@ -277,7 +277,7 @@ Instead, let's keep it short and hardcode that we're writing to a `TcpStream`:
 [RFC 3058]: https://rust-lang.github.io/rfcs/3058-try-trait-v2.html
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=31c0b35d917b63b169aac7d93060b44c
 async fn write_all(
     mut buf: &[u8],
     stream: &mut TcpStream,
@@ -340,7 +340,7 @@ write the async version of `server_main`:[^rely_on_pin]
     those borrows were established.
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=31c0b35d917b63b169aac7d93060b44c
 HIGHLIGHT: 1, 3-4, 6, 10, 13-14
 async fn one_response(mut socket: TcpStream, n: u64) -> io::Result<()> {
     let start_msg = format!("start {n}\n");
@@ -396,7 +396,7 @@ hardcode the printing. We'll call it `print_all`:[^copy]
 [`AsyncWrite`]: https://docs.rs/tokio/latest/tokio/io/trait.AsyncWrite.html
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=31c0b35d917b63b169aac7d93060b44c
 async fn print_all(stream: &mut TcpStream) -> io::Result<()> {
     std::future::poll_fn(|context| {
         loop {
@@ -466,7 +466,7 @@ With one real async building block and one blatant lie, we can write
 `client_main`:
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=31c0b35d917b63b169aac7d93060b44c
 async fn client_main() -> io::Result<()> {
     // XXX: Assume that connect() returns quickly.
     let mut socket = TcpStream::connect("localhost:8000")?;
@@ -479,7 +479,7 @@ async fn client_main() -> io::Result<()> {
 And finally `async_main`:
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=69f9bc4f6964a57bd92e24c2287e9636
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=31c0b35d917b63b169aac7d93060b44c
 async fn async_main() -> io::Result<()> {
     // Avoid a race between bind and connect by binding before spawn.
     let listener = TcpListener::bind("0.0.0.0:8000")?;
@@ -608,7 +608,7 @@ function to populate them:[^lock_order]
 [client_server_poll_orig]: playground://async_playground/client_server_poll.rs
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=a1f24e5877f83c0b741e8d27fb63ea0a
 static POLL_FDS: Mutex<Vec<libc::pollfd>> = Mutex::new(Vec::new());
 static POLL_WAKERS: Mutex<Vec<Waker>> = Mutex::new(Vec::new());
 
@@ -633,7 +633,7 @@ Now our async IO functions can call `register_pollfd` instead of `wake_by_ref`.
 `POLLIN`:
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=a1f24e5877f83c0b741e8d27fb63ea0a
 HIGHLIGHT: 2
 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
     register_pollfd(context, listener, libc::POLLIN);
@@ -644,7 +644,7 @@ Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
 `write_all` handles `WouldBlock` by setting `POLLOUT`:
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=a1f24e5877f83c0b741e8d27fb63ea0a
 HIGHLIGHT: 2
 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
     register_pollfd(context, stream, libc::POLLOUT);
@@ -661,7 +661,7 @@ to convert it to milliseconds:
     can wait on IO in addition to sleeping, waiting forever is valid.
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=a1f24e5877f83c0b741e8d27fb63ea0a
 HIGHLIGHT: 6-15
 // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been
 // set. Polling futures that aren't ready yet is inefficient but allowed.
@@ -695,7 +695,7 @@ the main loop. It's a "foreign" function, so calling it is `unsafe`:[^fd_ub]
     polling, so spurious wakeups are no problem.
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=a1f24e5877f83c0b741e8d27fb63ea0a
 let mut poll_fds = POLL_FDS.lock().unwrap();
 let mut poll_wakers = POLL_WAKERS.lock().unwrap();
 let poll_error_code = unsafe {
@@ -716,12 +716,12 @@ task every time, and tasks that aren't `Ready` will re-register themselves in
 `POLL_FDS` before the next sleep.
 
 ```rust
-LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=50a7e9dd92e4b6290e87d8f9434fff71
+LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=a1f24e5877f83c0b741e8d27fb63ea0a
 HIGHLIGHT: 1-2
 poll_fds.clear();
 poll_wakers.drain(..).for_each(Waker::wake);
 // Invoke Wakers from WAKE_TIMES if their time has come.
-while let Some(entry) = wake_times.first_entry() {
+while let Some(entry) = wake_times.first_entry()
     …
 ```
 
