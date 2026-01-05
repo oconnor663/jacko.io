@@ -18,7 +18,11 @@ impl<'a, Fut: Future> Future for PollOnce<'a, Fut> {
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> Poll<Self::Output> {
+    ) -> Poll<()> {
+        // The real `poll!` macro returns this value as `Output`, but that
+        // makes the return type of this method `Poll<Poll<Fut::Output>>`,
+        // which is a little confusing. We don't need it in this example,
+        // so just drop it and return `()`.
         _ = self.0.as_mut().poll(cx);
         Poll::Ready(())
     }
@@ -26,8 +30,8 @@ impl<'a, Fut: Future> Future for PollOnce<'a, Fut> {
 
 #[tokio::main]
 async fn main() {
-    let future = pin!(foo());
-    PollOnce(future).await;
+    let future1 = pin!(foo());
+    PollOnce(future1).await;
     println!("We make it here...");
     foo().await;
     println!("...but not here!");

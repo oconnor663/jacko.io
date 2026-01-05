@@ -12,9 +12,9 @@ async fn foo() {
 
 #[tokio::main]
 async fn main() {
-    let mut future = pin!(foo());
+    let mut future1 = pin!(foo());
     std::future::poll_fn(|cx| {
-        _ = future.as_mut().poll(cx);
+        _ = future1.as_mut().poll(cx);
         Poll::Ready(())
     })
     .await;

@@ -21,20 +21,11 @@
 [order]: https://without.boats/blog/futures-unordered/
 
 When a future is ready to make progress, but it's not getting polled, I call
-that "snoozing".[^three_parts][^starvation] Snoozing is to blame for a lot of
-hangs and deadlocks in async Rust, including the recent
-["Futurelock"][futurelock] case study from the folks at Oxide.[^chilling] I'm
-going to argue that snoozing is almost always a bug, that the tools and
-patterns that expose us to it should be considered harmful, and that reliable
-and convenient replacements are possible.
-
-[^three_parts]: If you aren't familiar with the [`poll`] and [`Waker`]
-    machinery that makes async Rust tick, I recommend reading at least part one
-    of [Async Rust in Three Parts][three_parts].
-
-[`poll`]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
-[`Waker`]: https://doc.rust-lang.org/std/task/struct.Waker.html
-[three_parts]: async_intro.html
+that "snoozing".[^starvation] Snoozing is to blame for a lot of hangs and
+deadlocks in async Rust, including the recent ["Futurelock"][futurelock] case
+study from the folks at Oxide.[^chilling] I'm going to argue that snoozing is
+almost always a bug, that the tools and patterns that expose us to it should be
+considered harmful, and that reliable and convenient replacements are possible.
 
 [^starvation]: Snoozing is similar to "starvation", but starvation usually
     means that a call to `poll` is blocking instead of returning quickly, which
@@ -113,21 +104,35 @@ other.[^ghidra] With that in mind, here's the minimal futurelock:
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_poll.rs
-let future = pin!(foo());
-_ = poll!(future);
+let future1 = pin!(foo());
+_ = poll!(future1);
 foo().await; // Deadlock!
 ```
 
-[`poll!`](https://docs.rs/futures/latest/futures/macro.poll.html) is a macro
-that we rarely see outside of examples.[^struct] It polls the first `future`
-exactly once, which brings it to the point where it's acquired the `LOCK` and
-started sleeping. Then we call `foo` again, it blocks on the same `LOCK`, and
-because we're only `.await`ing the second call to `foo`, we're deadlocked.
+There are two calls to `foo` here. We take `future1` from the first call and
+[`poll!`] it exactly once, which runs it to the point where it's acquired the
+`LOCK` and started sleeping.[^poll_macro] Then we call `foo` again, but this
+time we `.await` it, which means we're going to keep polling it until it's
+finished.[^three_parts] The second call wants to take the same lock, but
+`future1` can't release it until we either poll `future1` again or drop it. In
+other words, we've snoozed `future1`. We'll drop it automatically at
+end-of-scope, but we can't get to end-of-scope until the `.await` finishes, so
+instead we're deadlocked.
 
-[^struct]: If you don't trust the macro, you can do the same thing with [an
-    ordinary struct that implements `Future`][poll_struct].
+[^poll_macro]: [`poll!`] is a macro that we rarely see outside of examples. If
+    you don't trust the macro, you can do the same thing with [an ordinary
+    struct that implements `Future`][poll_struct].
 
+[`poll!`]: https://docs.rs/futures/latest/futures/macro.poll.html
 [poll_struct]: playground://snooze_playground/foo_poll_struct.rs
+
+[^three_parts]: If you aren't familiar with the [`poll`] and [`Waker`]
+    machinery that makes async Rust tick, I recommend reading at least part one
+    of [Async Rust in Three Parts][three_parts].
+
+[`poll`]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
+[`Waker`]: https://doc.rust-lang.org/std/task/struct.Waker.html
+[three_parts]: async_intro.html
 
 You probably won't see anyone use `poll!` like that in the wild. What you'll
 see is effectively the same thing, but with
@@ -140,49 +145,26 @@ see is effectively the same thing, but with
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_select.rs
-let future = pin!(foo());
+let future1 = pin!(foo());
 select! {
-    _ = future => {}
+    _ = future1 => {}
     _ = sleep(Duration::from_millis(1)) => {}
 }
 foo().await; // Deadlock!
 ```
 
-This `select!` also polls `future` just once, because the 1 ms sleep finishes
+This `select!` also polls `future1` just once, because the 1 ms sleep finishes
 first. When that arm finishes, `select!` nominally cancels the other arm, but
-because of how the [`pin!`] macro works, `future` is actually a reference to
-the anonymous type that `foo` returns. Dropping that reference has no effect.
+because of how the [`pin!`] macro works, `future1` is actually a reference to
+the anonymous type that `foo` returns. Dropping that reference has no effect,
+and we're deadlocked again.
 
 [`pin!`]: https://doc.rust-lang.org/std/pin/macro.pin.html
 
 We can also provoke the same deadlock by selecting on a
-[stream]:[^stream_snoozing]
+[stream]:
 
 [stream]: https://tokio.rs/tokio/tutorial/streams
-
-[^stream_snoozing]: The problem of snoozing streams is especially subtle. It's
-    normal and expected to call [`next`] to pull an item from the stream, and
-    then to not do that again for a while. That's just iteration, not snoozing.
-    In particular, when [`poll_next`] returns `Ready(Some(_))`, it doesn't
-    register a wakeup. Wakeups are only registered when polling returns
-    `Pending`. In generator terms, i.e. [the nightly-only `gen` and `async gen`
-    syntax][async_gen], returning an item is a _yield point_. Note that there's
-    no way for a stream to somehow "inject" a yield point into `foo`'s critical
-    section. (Other than by committing a snoozing crime internally, which isn't
-    the case here, but see `FuturesUnordered` below). But in this example, we
-    haven't paused the stream at a yield point. Instead, we've paused it at an
-    _await point_, which has registered a wakeup and which expects to get
-    polled promptly when it's ready. That's why this example counts as
-    snoozing. When we start a call to `next`, or in general when `poll_next`
-    returns `Pending`, we either need to keep driving the stream until it
-    yields an item, or else we need to drop the _whole stream_. (TODO: This
-    rules out selecting on channel receivers, which probably goes to far. Maybe
-    we can make an exception for `Unpin` types? Or maybe channel receivers
-    should expose non-`Stream` APIs. I'm not sure.)
-
-[`next`]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.next
-[`poll_next`]: https://docs.rs/futures/latest/futures/stream/trait.Stream.html#tymethod.poll_next
-[async_gen]: playground://snooze_playground/async_gen_example.rs?version=nightly
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_select_streams.rs
@@ -194,8 +176,37 @@ select! {
 foo().await; // Deadlock!
 ```
 
-Speaking of streams, there's another category of futurelocks caused by
-["buffered"] streams:
+In this case the [`Next`] future isn't a reference, and `select!` does drop it,
+but we've still snoozed the stream itself.[^stream_snoozing]
+
+[`Next`]: https://docs.rs/futures/latest/futures/stream/struct.Next.html
+
+[^stream_snoozing]: The problem of snoozing streams is especially subtle. It's
+    normal and expected to call [`next`] to pull an item from the stream, and
+    then to not do that again for a while. That's just iteration, not snoozing.
+    In particular, when [`poll_next`] returns `Ready(Some(_))`, it doesn't
+    register a wakeup. Wakeups are only registered when polling returns
+    `Pending`. In generator terms, i.e. [the nightly-only `gen` and `async gen`
+    syntax][async_gen], returning an item is a _yield point_. Note that there's
+    no way for a stream to somehow "inject" a yield point into `foo`'s critical
+    section. (Other than by committing a snoozing crime internally, which isn't
+    the case here, though see `FuturesUnordered` below). But in this example,
+    we haven't paused the stream at a yield point. Instead, we've paused it at
+    an _await point_, which has registered a wakeup and which does expect to
+    get polled promptly when it's ready. That's why this example counts as
+    snoozing. When we start a call to `next`, or in general when `poll_next`
+    returns `Pending`, we either need to keep driving the stream until it
+    yields an item, or else we need to drop the _whole stream_. (TODO: This
+    rules out selecting on channel receivers, which probably goes to far. Maybe
+    we can make an exception for `Unpin` types? Or maybe channel receivers
+    should expose non-`Stream` APIs. I'm not sure.)
+
+[`next`]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.next
+[`poll_next`]: https://docs.rs/futures/latest/futures/stream/trait.Stream.html#tymethod.poll_next
+[async_gen]: playground://snooze_playground/async_gen_example.rs?version=nightly
+
+Speaking of streams, another category of futurelocks comes from ["buffered"]
+streams:
 
 ["buffered"]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.buffered
 
@@ -212,12 +223,12 @@ first one finishes, control passes to the `for_each` closure. While that
 closure is running, the other `foo` in the buffer is snoozed.[^fair]
 
 [^fair]: In this case the second buffered `foo` doesn't actually advance to the
-    point where it acquires the `LOCK`. We still get a reliable deadlock here,
-    though, because Tokio's `Mutex` is "fair". When `Mutex::lock` blocks
-    waiting for the `Mutex` to be released, it takes a "place in line", and
-    other callers can't jump ahead unless it's cancelled. To [make this example
-    work with an unfair mutex][unfair], we could add a 1 ms sleep in `foo`
-    after the critical section.
+    point where it acquires the `LOCK`. But we still get a reliable deadlock
+    here, because Tokio's `Mutex` is "fair". When `Mutex::lock` blocks waiting
+    for the `Mutex` to be released, it takes a "place in line", and other
+    callers can't jump ahead unless it's cancelled. To [make this example work
+    with an unfair mutex][unfair], we could add a 1 ms sleep in `foo` after the
+    critical section.
 
 [unfair]: playground://snooze_playground/foo_buffered_unfair.rs
 
