@@ -688,11 +688,11 @@ the main loop. It's a "foreign" function, so calling it is `unsafe`:[^fd_ub]
     if one of the descriptors in `POLL_FDS` came from a socket that's since
     been closed. In that case the descriptor might refer to nothing, or it
     might've been reused by the kernel to refer to an unrelated file or socket.
-    Since `libc::poll` doesn't modify any of its arguments (including for
-    example reading from a file, which would advance the cursor), the worst
-    that can happen here is a "spurious wakeup", where some event for an
-    unrelated file wakes us up early. Our code already handles busy loop
-    polling, so spurious wakeups are no problem.
+    Since `libc::poll` doesn't modify the descriptors (including for example
+    reading from a file, which would advance the cursor), the worst that can
+    happen here is a "spurious wakeup", where some event for an unrelated file
+    wakes us up early. Our code already handles busy loop polling, so spurious
+    wakeups are no problem.
 
 ```rust
 LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=a1f24e5877f83c0b741e8d27fb63ea0a
