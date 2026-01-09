@@ -569,7 +569,11 @@ we've built a `Context`, we can call `poll` in a loop:
 [^make_a_waker]: We'll get to these in [the Waker section of Part
     Two](async_tasks.html#waker).
 
-[^noop]: "Noop" is short for "no operation", i.e. "do nothing".
+[^noop]: "Noop" is short for "no operation", i.e. "do nothing". `Waker::noop`
+    was stabilized in Rust 1.85, and the original version of this post used
+    [`futures::task::noop_waker`] instead.
+
+[`futures::task::noop_waker`]: https://docs.rs/futures/latest/futures/task/fn.noop_waker.html
 
 [`Waker::noop`]: https://doc.rust-lang.org/std/task/struct.Waker.html#method.noop
 
