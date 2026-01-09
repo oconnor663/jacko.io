@@ -170,12 +170,12 @@ sense once we have some practice writing futures.
     called ["deref coercion"][deref_coercion]. Similarly, Rust automatically
     ["reborrows"][reborrowing] `&mut T` whenever we pass a long-lived mutable
     reference to a function that only needs a short-lived one, so that the
-    long-lived reference isn't consumed unnecessarily. (`&mut` references [are
-    not `Copy`][not_copy].) However, neither of those convenience features
-    works through `Pin` today, and we often do need to call `Pin::as_mut`
-    explicitly when we're implementing `Future` "by hand". If [`&pin` or maybe
-    `&pinned` references][pinned_places] became a first-class language feature
-    someday, that would make these examples shorter and less finicky.
+    long-lived reference isn't consumed unnecessarily (`&mut T` [isn't
+    `Copy`][not_copy]). However, neither of those convenience features works
+    through `Pin` today, and we often do need to call `Pin::as_mut` explicitly
+    when we're implementing `Future` "by hand". If [`&pin` or maybe `&pinned`
+    references][pinned_places] became a first-class language feature someday,
+    that would make these examples shorter and less finicky.
 
 [deref_coercion]: https://doc.rust-lang.org/book/ch15-02-deref.html#implicit-deref-coercions-with-functions-and-methods
 [reborrowing]: https://github.com/rust-lang/reference/issues/788
