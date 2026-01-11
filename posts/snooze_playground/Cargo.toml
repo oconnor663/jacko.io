@@ -25,6 +25,10 @@ name = "foo_poll"
 path = "foo_poll.rs"
 
 [[bin]]
+name = "foo_poll_box"
+path = "foo_poll_box.rs"
+
+[[bin]]
 name = "foo_poll_fn"
 path = "foo_poll_fn.rs"
 
@@ -55,6 +59,10 @@ path = "foo_select.rs"
 [[bin]]
 name = "foo_select_arm"
 path = "foo_select_arm.rs"
+
+[[bin]]
+name = "foo_select_box"
+path = "foo_select_box.rs"
 
 [[bin]]
 name = "foo_select_streams"

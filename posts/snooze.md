@@ -102,18 +102,20 @@ foo().await; // Deadlock!
 ```
 
 There are two calls to `foo` here. We get `future1` from the first call and
-[`poll!`] it,[^poll_macro] which runs it to the point where it acquires the
-`LOCK` and starts sleeping. Then we call `foo` again, it gives us another
-future, and this time we `.await` it. That is, we try to poll the second `foo`
-future in a loop until it's finished.[^three_parts] But it wants to take the
-same lock, and `future1` won't release it until we either poll `future1` again
-or drop it. We've snoozed `future1`, so we're deadlocked.
+[`poll!`] it,[^poll_macro] which runs it to the point where it's acquired the
+`LOCK` and started sleeping. Then we call `foo` again, it gives us another
+future, and this time we `.await` it. In other words, we're polling the second
+`foo` future (_only_ the second one) in a _loop_ until it's
+finished.[^three_parts] But it tries to take the same lock, and `future1` isn't
+going to release that lock until we either poll `future1` again or drop it. Our
+loop will never do either of those things &mdash; we've implicitly "snoozed"
+`future1` &mdash; so we're deadlocked.
 
 [^poll_macro]: The `poll!` macro calls [`Future::poll`] exactly once. In effect
     it's a more general version of [`Mutex::try_lock`] or [`Child::try_wait`],
-    i.e. "try this blocking operation, but give up instead of blocking." We
-    could also do the same thing with [`poll_fn`] or by [writing a `Future` "by
-    hand"][poll_struct].
+    i.e. "try this potentially blocking operation, but if it would block, give
+    up instead." We could also do the same thing with [`poll_fn`] or by
+    [writing a `Future` "by hand"][poll_struct].
 
 [`poll!`]: https://docs.rs/futures/latest/futures/macro.poll.html
 [`Future::poll`]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
@@ -123,10 +125,11 @@ or drop it. We've snoozed `future1`, so we're deadlocked.
 [poll_struct]: playground://snooze_playground/foo_poll_struct.rs
 
 [^three_parts]: There is a loop, but it's not really "inside" the `.await`.
-    It's actually [in the Tokio runtime][block_on_loop]. If you haven't seen
-    the [`poll`] and [`Waker`] machinery that makes async Rust tick, I
-    recommend reading at least part one of [Async Rust in Three
-    Parts][three_parts].
+    Instead, it's [in the runtime][block_on_loop]. This "inversion of control"
+    is the very heart of async/await; that's why it's possible to run multiple
+    futures concurrently on one thread. If you haven't seen the [`poll`] and
+    [`Waker`] machinery that makes all this work, I recommend reading at least
+    part one of [Async Rust in Three Parts][three_parts].
 
 [block_on_loop]: https://github.com/tokio-rs/tokio/blob/tokio-1.49.0/tokio/src/runtime/park.rs#L283
 [`poll`]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
@@ -147,20 +150,30 @@ select! {
 foo().await; // Deadlock!
 ```
 
-This `select!` also polls `future1` just once, because the 1 ms sleep finishes
+This `select!` also polls `future1` just once, because the short sleep finishes
 first. When that arm finishes, `select!` nominally cancels the other arm, but
-because of how the [`pin!`] macro works, `future1` is actually a reference to
-the anonymous type that `foo` returns. Dropping that reference has no effect,
-and we're deadlocked again.[^arms]
+because of how the [`pin!`] macro works, `future1` is actually a _reference_ to
+the future that `foo` returns. Dropping that reference has no effect, and we're
+deadlocked again.[^box_pin][^arms]
 
 [`pin!`]: https://doc.rust-lang.org/std/pin/macro.pin.html
 
-[^arms]: We could also put the second call to `foo` [in the `select!` arm
-    body][foo_select_arm].
+[^box_pin]: Using [`Box::pin`] instead of `pin!` [fixes the deadlock][select_box]
+    in this case, because dropping the `Box` drops the future inside of it and
+    releases the lock. However, [it makes no difference][poll_box] in the first
+    example with `poll!`, because in that case we don't drop the `Box`.
+
+[`Box::pin`]: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.pin
+[select_box]: playground://snooze_playground/foo_select_box.rs
+[poll_box]: playground://snooze_playground/foo_poll_box.rs
+
+[^arms]: It doesn't matter whether we put the second call to `foo` after the
+    `select!`, like we're doing here, or [in the `select!` arm
+    body][foo_select_arm]. It's the same deadlock either way.
 
 [foo_select_arm]: playground://snooze_playground/foo_select_arm.rs
 
-We can provoke the same deadlock by selecting on a [stream]:
+We can also provoke the same deadlock by selecting on a [stream]:
 
 [stream]: https://tokio.rs/tokio/tutorial/streams
 
@@ -175,7 +188,8 @@ foo().await; // Deadlock!
 ```
 
 In this case the [`Next`] future isn't a reference, and `select!` does drop it,
-but we've snoozed the stream itself.[^stream_snoozing]
+but we've managed to snooze the stream itself and the `foo` future inside
+it.[^stream_snoozing]
 
 [`Next`]: https://docs.rs/futures/latest/futures/stream/struct.Next.html
 
@@ -239,8 +253,8 @@ either of those directly:[^stream_fault]
 
 [^stream_fault]: Contrast this example with the `stream::once` example above.
     There we were "at fault" for snoozing the stream in between yield points,
-    but here our program is trying its best to drive the stream to a yield
-    point. The real `foo` snoozer is actually `FuturesUnordered` itself!
+    but here our program faithfully drives `FuturesUnordered` to a yield point,
+    and it still snoozes the other `foo` internally.
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_unordered.rs
