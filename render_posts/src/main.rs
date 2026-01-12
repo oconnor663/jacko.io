@@ -7,7 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, ThemeSet};
-use syntect::html::{styled_line_to_highlighted_html, IncludeBackground};
+use syntect::html::{IncludeBackground, styled_line_to_highlighted_html};
 use syntect::parsing::SyntaxSet;
 use url::Url;
 
@@ -350,6 +350,7 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
             Event::InlineHtml(s) => output.push_html(&s),
             Event::SoftBreak => output.push_html("\n"),
             Event::Code(s) => {
+                output.push_html(r#"<span class="code-bg">"#);
                 for (i, word) in s.split_whitespace().enumerate() {
                     if i > 0 {
                         // Full size spaces in inline code strings are uncomfortably wide. Hack in
@@ -358,6 +359,7 @@ fn render_markdown(markdown_filepath: impl AsRef<Path>) -> anyhow::Result<String
                     }
                     output.push_html(&format!("<code>{}</code>", html_escape::encode_text(&word)));
                 }
+                output.push_html("</span>");
             }
             Event::Rule => output.push_html(&format!("\n\n<hr>")),
             Event::FootnoteReference(s) => {

@@ -396,6 +396,12 @@ code, pre > code {
     white-space: pre;
 }
 
+.code-bg {
+    background: #f4edda;
+    padding: 0 2px;
+    border-radius: 5px;
+}
+
 .faded_code {
     opacity: .4;
 }
