@@ -25,10 +25,6 @@ name = "foo_poll"
 path = "foo_poll.rs"
 
 [[bin]]
-name = "foo_poll_box"
-path = "foo_poll_box.rs"
-
-[[bin]]
 name = "foo_poll_fn"
 path = "foo_poll_fn.rs"
 
@@ -53,16 +49,12 @@ name = "foo_moro"
 path = "foo_moro.rs"
 
 [[bin]]
-name = "foo_select"
-path = "foo_select.rs"
+name = "foo_select_loop"
+path = "foo_select_loop.rs"
 
 [[bin]]
-name = "foo_select_arm"
-path = "foo_select_arm.rs"
-
-[[bin]]
-name = "foo_select_box"
-path = "foo_select_box.rs"
+name = "foo_select_value"
+path = "foo_select_value.rs"
 
 [[bin]]
 name = "foo_select_streams"

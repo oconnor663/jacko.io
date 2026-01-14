@@ -15,7 +15,7 @@ async fn foo() {
     // the first `foo` finishes below. If you comment it out, the deadlock
     // no longer appears. (The original version of this example using a
     // `tokio::sync::Mutex` didn't need this, because that mutex is fair.)
-    sleep(Duration::from_millis(1)).await;
+    sleep(Duration::from_millis(5)).await;
 }
 
 #[tokio::main]

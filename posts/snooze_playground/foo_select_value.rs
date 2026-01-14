@@ -1,4 +1,3 @@
-use std::pin::pin;
 use tokio::select;
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep};
@@ -12,13 +11,12 @@ async fn foo() {
 
 #[tokio::main]
 async fn main() {
-    let future = pin!(foo());
     select! {
-        _ = future => {}
-        _ = sleep(Duration::from_millis(1)) => {
-            println!("We make it here...");
-            foo().await;
-            println!("...but not here!");
-        }
+        _ = foo() => {}
+        _ = sleep(Duration::from_millis(5)) => {}
     }
+    foo().await;
+    println!(
+        "Passing the future to `select!` by value fixes the deadlock."
+    );
 }

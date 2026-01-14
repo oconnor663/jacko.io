@@ -16,7 +16,7 @@ async fn main() {
     let mut stream = pin!(stream::once(foo()));
     select! {
         _ = stream.next() => {}
-        _ = sleep(Duration::from_millis(1)) => {}
+        _ = sleep(Duration::from_millis(5)) => {}
     }
     println!("We make it here...");
     foo().await;

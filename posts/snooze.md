@@ -138,42 +138,47 @@ loop will never do either of those things &mdash; we've implicitly "snoozed"
 
 You probably won't see anyone use `poll!` quite like that in the wild. What
 you'll see is effectively the same thing, but with
-[`select!`](https://docs.rs/tokio/latest/tokio/macro.select.html):
+[`select!`](https://docs.rs/tokio/latest/tokio/macro.select.html):[^minimized]
+
+[^minimized]: The `select!` example in [_Futurelock_][futurelock] doesn't
+    involve a loop, but if you pull up [the PR that fixed the
+    bug][futurelock_pr], there's a loop just like this one. Looping is usually
+    what forces us to select by reference, but where possible we can and should
+    select _by value_, which drops futures promptly and [prevents this sort of
+    deadlock][select_value].
+
+[futurelock_pr]: https://github.com/oxidecomputer/omicron/pull/9268/changes#diff-26ed102e2389f81dd6551debec14f18eabf18cfa15b4e9321b20f61d3a925d12L516-L517
+[select_value]: playground://snooze_playground/foo_select_value.rs
 
 ```rust
-LINK: Playground ## playground://snooze_playground/foo_select.rs
-let future1 = pin!(foo());
-select! {
-    _ = future1 => {}
-    _ = sleep(Duration::from_millis(1)) => {}
+LINK: Playground ## playground://snooze_playground/foo_select_loop.rs
+let mut future1 = pin!(foo());
+loop {
+    select! {
+        _ = future1.as_mut() => break,
+        // Do some periodic background work while `future1` is running.
+        _ = sleep(Duration::from_millis(5)) => foo().await, // Deadlock!
+    }
 }
-foo().await; // Deadlock!
 ```
 
-This `select!` also polls `future1` just once, because the short sleep finishes
-first. When that arm finishes, `select!` nominally cancels the other arm, but
-because of how the [`pin!`] macro works, `future1` is actually a _reference_ to
-the future that `foo` returns. Dropping that reference has no effect, and we're
-deadlocked again.[^box_pin][^arms]
+This loop is trying to to run `future1` until it's finished, while waking up
+every so often to do some background work. The `select!` macro polls its
+arguments until one of them is ready,[^output] then it drops both of them and
+runs the `=>` body of the winner. However, because `future1` needs to stay
+alive for the whole loop, this `select!` is polling it _by reference_, and
+dropping that reference has no effect. Instead we snooze `future1` during the
+background work, which happens to include another call to `foo`, so we're
+deadlocked again.
 
-[`pin!`]: https://doc.rust-lang.org/std/pin/macro.pin.html
+[`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
 
-[^box_pin]: Using [`Box::pin`] instead of `pin!` [fixes the deadlock][select_box]
-    in this case, because dropping the `Box` drops the future inside of it and
-    releases the lock. However, [it makes no difference][poll_box] in the first
-    example with `poll!`, because in that case we don't drop the `Box`.
+[^output]: If we cared about these futures' outputs, we could capture them with
+    a variable name (or in general any "pattern") to the left of the `=` sign.
+    But these futures both output `()`, so we use `_` to ignore/drop those, the
+    same way `_` works in assignments, function arguments, and `match` arms.
 
-[`Box::pin`]: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.pin
-[select_box]: playground://snooze_playground/foo_select_box.rs
-[poll_box]: playground://snooze_playground/foo_poll_box.rs
-
-[^arms]: It doesn't matter whether we put the second call to `foo` after the
-    `select!`, like we're doing here, or [in the `select!` arm
-    body][foo_select_arm]. It's the same deadlock either way.
-
-[foo_select_arm]: playground://snooze_playground/foo_select_arm.rs
-
-We can also provoke the same deadlock by selecting on a [stream]:
+We can also provoke this deadlock by selecting on a [stream]:
 
 [stream]: https://tokio.rs/tokio/tutorial/streams
 
@@ -182,13 +187,13 @@ LINK: Playground ## playground://snooze_playground/foo_select_streams.rs
 let mut stream = pin!(stream::once(foo()));
 select! {
     _ = stream.next() => {}
-    _ = sleep(Duration::from_millis(1)) => {}
+    _ = sleep(Duration::from_millis(5)) => {}
 }
 foo().await; // Deadlock!
 ```
 
 In this case the [`Next`] future isn't a reference, and `select!` does drop it,
-but we've managed to snooze the stream itself and the `foo` future inside
+but we've managed to snooze the stream itself and the `foo` future inside of
 it.[^stream_snoozing]
 
 [`Next`]: https://docs.rs/futures/latest/futures/stream/struct.Next.html
