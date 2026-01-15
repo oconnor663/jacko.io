@@ -364,6 +364,9 @@ fundamentally the same problem.
 
 ## What is to be done?
 
+> This method is cancel safe.<br>
+> \- [`tokio_stream::StreamExt::next`](https://docs.rs/tokio-stream/latest/tokio_stream/trait.StreamExt.html#method.next)
+
 \[work in progress\]
 
 replacing `select!`-by-reference:
