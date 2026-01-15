@@ -1,5 +1,5 @@
 # Never snooze a future
-###### 2025 December ??<sup>th</sup>
+###### 2026 January 14<sup>th</sup> DRAFT
 
 > Huh, that's confusing, because the task ought to be able to execute other
 > futures in that case &mdash; so why are her connections stalling out without
@@ -362,36 +362,15 @@ deadlock the whole process. Async locks aren't as ubiquitous as the locks in
 `malloc` or `std::io`, so it's harder to notice this problem today, but it's
 fundamentally the same problem.
 
-## Pointing the finger
+## What is to be done?
 
-## Deprecated Idioms
+\[work in progress\]
 
-## Alternatives
+replacing `select!`-by-reference:
 
+- <https://github.com/oconnor663/join_me_maybe>
 
-https://smallcultfollowing.com/babysteps/blog/2022/06/13/async-cancellation-a-case-study-of-pub-sub-in-mini-redis/
+fixing streams:
 
-async generators vs futures:
-
-It's true that a generator holding lock across a yield point can cause the same
-deadlocks as a snoozed future. But a key difference is that a future can
-interact with locks that are buried in layers of function calls and never
-appear anywhere near the bug. Whereas to hold a lock across a generator yield
-the guard has to actually be *returned* to you. It could still be abstracted
-inside some structs, but in general "does holding this object hold a lock" is
-much more visible than "does calling this function touch a lock". In other
-words, the critical section of the lock has to actually overlap with the body
-of the generator.
-
-HOWEVER, you still need to worry about snoozing a generator at some .await that
-isn't a yield point. That's really no different from snoozing a future.
-
----
-
-Note that the example in the Futurelock blog post can be fixed by dropping the
-cancelled future promptly, but the original but that motivated the whole
-article can't be fixed that way.
-
----
-
-adding `poll_progress` to asynciterator would make buffered streams sound.
+- <https://github.com/oconnor663/roughage>
+- <https://without.boats/blog/poll-progress>
