@@ -104,12 +104,12 @@ foo().await; // Deadlock!
 There are two calls to `foo` here. We get `future1` from the first call and
 [`poll!`] it,[^poll_macro] which runs it to the point where it's acquired the
 `LOCK` and started sleeping. Then we call `foo` again, it gives us another
-future, and this time we `.await` it. In other words, we're polling the second
-`foo` future (_only_ the second one) in a _loop_ until it's
-finished.[^three_parts] But it tries to take the same lock, and `future1` isn't
-going to release that lock until we either poll `future1` again or drop it. Our
-loop will never do either of those things &mdash; we've implicitly "snoozed"
-`future1` &mdash; so we're deadlocked.
+future, and this time we `.await` it. In other words, we poll the second `foo`
+future (and _only_ the second one) in a loop until it's finished.[^three_parts]
+But it tries to take the same lock, and `future1` isn't going to release that
+lock until we either poll `future1` again or drop it. Our loop will never do
+either of those things &mdash; we've implicitly "snoozed" `future1` &mdash; so
+we're deadlocked.
 
 [^poll_macro]: The `poll!` macro calls [`Future::poll`] exactly once. In effect
     it's a more general version of [`Mutex::try_lock`] or [`Child::try_wait`],
@@ -126,9 +126,9 @@ loop will never do either of those things &mdash; we've implicitly "snoozed"
 
 [^three_parts]: There is a loop, but it's not really "inside" the `.await`.
     Instead, it's [in the runtime][block_on_loop]. This "inversion of control"
-    is the very heart of async/await; that's why it's possible to run multiple
+    is the very heart of async/await; this is why it's possible to run multiple
     futures concurrently on one thread. If you haven't seen the [`poll`] and
-    [`Waker`] machinery that makes all this work, I recommend reading at least
+    [`Waker`] machinery that makes it all work, I recommend reading at least
     part one of [Async Rust in Three Parts][three_parts].
 
 [block_on_loop]: https://github.com/tokio-rs/tokio/blob/tokio-1.49.0/tokio/src/runtime/park.rs#L283
@@ -144,8 +144,8 @@ you'll see is effectively the same thing, but with
     involve a loop, but if you pull up [the PR that fixed the
     bug][futurelock_pr], there's a loop just like this one. Looping is usually
     what forces us to select by reference, but where possible we can and should
-    select _by value_, which drops futures promptly and [prevents this sort of
-    deadlock][select_value].
+    select by value, which drops cancelled futures promptly and [prevents this
+    sort of deadlock][select_value].
 
 [futurelock_pr]: https://github.com/oxidecomputer/omicron/pull/9268/changes#diff-26ed102e2389f81dd6551debec14f18eabf18cfa15b4e9321b20f61d3a925d12L516-L517
 [select_value]: playground://snooze_playground/foo_select_value.rs
@@ -162,21 +162,23 @@ loop {
 }
 ```
 
-This loop is trying to to run `future1` until it's finished, while waking up
-every so often to do some background work. The `select!` macro polls its
-arguments until one of them is ready,[^output] then it drops both of them and
-runs the `=>` body of the winner. However, because `future1` needs to stay
-alive for the whole loop, this `select!` is polling it _by reference_, and
-dropping that reference has no effect. Instead we snooze `future1` during the
-background work, which happens to include another call to `foo`, so we're
-deadlocked again.
+This loop is trying to to run `future1` until it's finished, and meanwhile it's
+waking up every so often to do some background work. The `select!` macro polls
+both of its arguments until one of them is ready, then it drops them both and
+runs the `=>` body of the winner.[^output] We don't want `future1` to get
+dropped in each iteration of the loop, which wouldn't make sense and also
+wouldn't compile, so we select on it _by reference_. But that only keeps
+`future1` alive; it doesn't mean that `select!` keeps polling it. Our intent is
+to poll it again in the next loop iteration, but we're accidentally snoozing it
+during our background work, which happens to include another call to `foo`, so
+we're deadlocked again.
 
 [`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
 
-[^output]: If we cared about these futures' outputs, we could capture them with
-    a variable name (or in general any "pattern") to the left of the `=` sign.
-    But these futures both output `()`, so we use `_` to ignore/drop those, the
-    same way `_` works in assignments, function arguments, and `match` arms.
+[^output]: If the winner had useful output, we could capture it with a variable
+    name (or in general any "pattern") to the left of the `=` sign. But both
+    outputs here are `()`, and we use `_` to ignore them. This is the same way
+    `_` works in assignments, function arguments, and `match` arms.
 
 We can also provoke this deadlock by selecting on a [stream]:
 
