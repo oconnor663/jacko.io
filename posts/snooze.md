@@ -155,7 +155,7 @@ LINK: Playground ## playground://snooze_playground/foo_select_loop.rs
 let mut future1 = pin!(foo());
 loop {
     select! {
-        _ = future1.as_mut() => break,
+        _ = &mut future1 => break,
         // Do some periodic background work while `future1` is running.
         _ = sleep(Duration::from_millis(5)) => foo().await, // Deadlock!
     }
