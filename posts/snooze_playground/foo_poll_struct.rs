@@ -1,13 +1,12 @@
 use std::pin::{Pin, pin};
 use std::task::Poll;
-use tokio::sync::Mutex;
-use tokio::time::{Duration, sleep};
+use std::time::Duration;
 
-static LOCK: Mutex<()> = Mutex::const_new(());
+static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 async fn foo() {
     let _guard = LOCK.lock().await;
-    sleep(Duration::from_millis(10)).await;
+    tokio::time::sleep(Duration::from_millis(10)).await;
 }
 
 struct PollOnce<'a, Fut>(Pin<&'a mut Fut>);

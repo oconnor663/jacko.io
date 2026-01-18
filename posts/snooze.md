@@ -28,10 +28,10 @@ always a bug, that the tools and patterns that expose us to it should be
 considered harmful, and that reliable and convenient replacements are possible.
 
 [^starvation]: Snoozing is similar to "starvation", but starvation usually
-    means that a call to `poll` is blocking instead of returning quickly, which
-    stops the executor from polling anything else while it waits. Snoozing is
-    when the executor is running fine, but some futures still aren't getting
-    polled.
+    means that some other call to `poll` has blocked instead of returning
+    quickly, which stops the executor from polling anything else while it
+    waits. Snoozing is when the executor is running fine, but some futures
+    still aren't getting polled.
 
 [`FusedIterator`]: https://doc.rust-lang.org/std/iter/trait.FusedIterator.html
 
@@ -55,8 +55,8 @@ isn't a bug. Snoozing _is_ a bug, and I don't think we talk about it enough.
 
 Snoozing can cause mysterious latencies and timeouts, but the clearest and most
 dramatic snoozing bugs are deadlocks ("futurelocks"). Let's look at several
-examples. Our test subject today is `foo`, a toy function that takes a private
-async lock and pretends to do some work:[^nothing_wrong]
+examples. Our test subject today will be `foo`, a toy function that takes a
+private async lock and pretends to do some work:[^nothing_wrong]
 
 [^nothing_wrong]: I want to emphasize that there's nothing wrong with `foo`. We
     could make examples like these with of any form of async blocking:
@@ -71,21 +71,19 @@ async lock and pretends to do some work:[^nothing_wrong]
 [internally]: https://github.com/tokio-rs/tokio/blob/0ec0a8546105b9f250f868b77e42c82809703aab/tokio/src/sync/mpsc/bounded.rs#L162
 
 ```rust
-use tokio::sync::Mutex;
-use tokio::time::{Duration, sleep};
-
-static LOCK: Mutex<()> = Mutex::const_new(());
+static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 async fn foo() {
     let _guard = LOCK.lock().await;
-    sleep(Duration::from_millis(10)).await; // very important work
+    tokio::time::sleep(Duration::from_millis(10)).await; // pretend work
 }
 ```
 
 As we go along, I want you to imagine that `foo` is buried three crates deep in
-some dependency you've never heard of. In real life the lock, the future that's
-holding it, and the mistake that snoozes that future can be far apart from each
-other.[^ghidra] With that in mind, here's the minimal futurelock:
+some dependency you've never heard of. When these things happen in real life,
+the lock, the future that's holding it, and the mistake that snoozes that
+future can all be far apart from each other.[^ghidra] With that in mind, here's
+the minimal futurelock:
 
 [^ghidra]: In the [original issue thread][gh9259] that inspired "Futurelock",
     they had to look at core dumps in [Ghidra] to find the bug. That's what we
@@ -108,8 +106,8 @@ future, and this time we `.await` it. In other words, we poll the second `foo`
 future (and _only_ the second one) in a loop until it's finished.[^three_parts]
 But it tries to take the same lock, and `future1` isn't going to release that
 lock until we either poll `future1` again or drop it. Our loop will never do
-either of those things &mdash; we've implicitly "snoozed" `future1` &mdash; so
-we're deadlocked.
+either of those things &mdash; we've "snoozed" `future1` &mdash; so we're
+deadlocked.
 
 [^poll_macro]: The `poll!` macro calls [`Future::poll`] exactly once. In effect
     it's a more general version of [`Mutex::try_lock`] or [`Child::try_wait`],
@@ -157,27 +155,28 @@ loop {
     select! {
         _ = &mut future1 => break,
         // Do some periodic background work while `future1` is running.
-        _ = sleep(Duration::from_millis(5)) => foo().await, // Deadlock!
+        _ = tokio::time::sleep(Duration::from_millis(5)) => {
+            foo().await; // Deadlock!
+        }
     }
 }
 ```
 
-This loop is trying to to run `future1` until it's finished, and meanwhile it's
-waking up every so often to do some background work. The `select!` macro polls
-both of its arguments until one of them is ready, then it drops them both and
-runs the `=>` body of the winner.[^output] We don't want `future1` to get
-dropped in each iteration of the loop, which wouldn't make sense and also
-wouldn't compile, so we select on it _by reference_. But that only keeps
-`future1` alive; it doesn't mean that `select!` keeps polling it. Our intent is
-to poll it again in the next loop iteration, but we're accidentally snoozing it
-during our background work, which happens to include another call to `foo`, so
-we're deadlocked again.
+This loop is trying to to drive `future1` to completion, while waking up every
+so often to do some background work. The `select!` macro polls `&mut future1`
+and a [`Sleep`] future until one of them is ready, then it drops both of them
+and runs the `=>` body of the winner.[^output] The loop creates a new `Sleep`
+future each time around, but it doesn't want to restart `foo`, so it selects on
+`future1` _by reference_. But that only keeps `future1` alive; it doesn't mean
+that it keeps getting polled. The intent is to `select!` on `future1` again in
+the next loop iteration, but we're snoozing it during the background work,
+which happens to include another call to `foo`, so instead we deadlock again.
 
 [`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
 
 [^output]: If the winner had useful output, we could capture it with a variable
-    name (or in general any "pattern") to the left of the `=` sign. But both
-    outputs here are `()`, and we use `_` to ignore them. This is the same way
+    name (or in general any "pattern") to the left of the `=` sign. Both
+    outputs here are `()`, so we use `_` to ignore them. This is the same way
     `_` works in assignments, function arguments, and `match` arms.
 
 We can also provoke this deadlock by selecting on a [stream]:
@@ -189,7 +188,7 @@ LINK: Playground ## playground://snooze_playground/foo_select_streams.rs
 let mut stream = pin!(stream::once(foo()));
 select! {
     _ = stream.next() => {}
-    _ = sleep(Duration::from_millis(5)) => {}
+    _ = tokio::time::sleep(Duration::from_millis(5)) => {}
 }
 foo().await; // Deadlock!
 ```
@@ -211,14 +210,15 @@ it.[^stream_snoozing]
     into `foo`'s critical section. (Other than by committing a snoozing crime
     internally, which isn't the case here, though see `FuturesUnordered`
     below). But in this example, we haven't paused the stream at a yield point.
-    Instead, we've paused it at an _await point_, which has registered a wakeup
-    and which does expect to get polled promptly when it's ready. That's why
-    this example still counts as snoozing. When we start a call to `next`, or
-    in general when `poll_next` returns `Pending`, we either need to keep
-    driving the stream until it yields an item, or else we need to drop the
-    _whole stream_. (TODO: This rules out selecting on channel receivers, which
-    probably goes to far. Maybe we can make an exception for `Unpin` types? Or
-    maybe channel receivers should expose non-`Stream` APIs. I'm not sure.)
+    Instead, we've paused it at an _await point_, which _has_ registered a
+    wakeup and which _does_ expect to get polled promptly when it's ready.
+    That's why this example still counts as snoozing. When we start a call to
+    `next`, or in general when `poll_next` returns `Pending`, we either need to
+    keep driving the stream until it yields an item, or else we need to drop
+    _the whole stream_. (TODO: This rules out selecting on channel receivers,
+    which probably goes to far. Maybe we can make an exception for `Unpin`
+    types? Or maybe channel receivers should expose non-`Stream` APIs. I'm not
+    sure.)
 
 [`next`]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.next
 [`poll_next`]: https://docs.rs/futures/latest/futures/stream/trait.Stream.html#tymethod.poll_next
@@ -273,9 +273,10 @@ while let Some(_) = futures.next().await {
 }
 ```
 
-Invisible deadlocks are bad, but what's worse is that it's hard to pinpoint
-what exactly these examples are doing wrong.[^chilling] Is `foo` broken?[^no] Are
-`select!` and buffered streams broken? Are these programs "holding them wrong"?
+Invisible deadlocks are bad, but what's worse is that it's hard to describe
+what exactly these examples are doing wrong.[^chilling] Is `foo` broken?[^no]
+Are `select!` and buffered streams broken? Are these programs "holding them
+wrong"?
 
 [^chilling]: "There's no one abstraction, construct, or programming pattern we
     can point to here and say 'never do this'."<br>
@@ -283,10 +284,15 @@ what exactly these examples are doing wrong.[^chilling] Is `foo` broken?[^no] Ar
 
 [^no]: No, `foo` is not broken.
 
-Let's start answering those questions with a different question: Why don't we
-have these problems when we use regular threads?
+I want to answer those questions with a different question: Why don't we have
+these problems when we use regular locks and threads?
 
 ## Threads
+
+> The original designers felt strongly that no such function should exist
+> because there was no safe way to terminate a thread, and there's no point
+> having a function that cannot be called safely.<br>
+> \- [Raymond Chen][oldnewthing]
 
 > How many times does<br>
 > it have to be said: Never<br>
@@ -295,12 +301,29 @@ have these problems when we use regular threads?
 
 [oldnewthing]: https://devblogs.microsoft.com/oldnewthing/20150814-00/?p=91811
 
-In fact, we _do_ have these problems with threads, if we try to cancel them.
-The Windows `TerminateThread` function [warns us about this][terminatethread]:
-"If the target thread owns a critical section, the critical section will not be
-released."[^dangerous] The classic source of cancellation deadlocks on Unix is
-`fork`, which copies the whole address space of the parent process but only one
-of its running threads.[^fork]
+Let's think about a regular, non-async version of `foo`:
+
+```rust
+static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn foo() {
+    let _guard = LOCK.lock().unwrap();
+    std::thread::sleep(Duration::from_millis(10));
+}
+```
+
+Again there's only one lock here, and this non-async `foo` definitely releases
+it after 10 ms. It's _impossible_ for this function to participate in a
+deadlock, right?
+
+Well...sort of. Technically we can still deadlock with `foo`, if we kill the
+thread it's running on. The Windows `TerminateThread` function [warns us about
+this][terminatethread]: "If the target thread owns a critical section, the
+critical section will not be released."[^dangerous] The classic cause of this
+problem on Unix is `fork`, which copies the whole address space of the parent
+process but only one of its running threads.[^fork] There's nothing a function
+like `foo` can realistically do to protect itself from these
+problems,[^cleanup] so instead "Don't kill threads" is a general rule.
 
 [terminatethread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread
 
@@ -319,23 +342,38 @@ of its running threads.[^fork]
 
 [fork_in_the_road]: https://www.microsoft.com/en-us/research/wp-content/uploads/2019/04/fork-hotos19.pdf
 
+[^cleanup]: On Unix it's technically possible to do cleanup in these situations
+    with hooks like [`pthread_atfork`] and [`pthread_cleanup_push`], but it's
+    not practical. Preventing memory leaks, for example, would mean registering
+    callbacks for every single allocation. Even worse, we'd need to find some
+    way to do so _atomically_, so that cancellation or forking can't occur in
+    between an allocation and its registration. We can postpone cancellations
+    with [`pthread_setcancelstate`], but forking has no equivalent. And there
+    are no cleanup hooks for `TerminateThread` on Windows.
+
+[`pthread_atfork`]: https://man7.org/linux/man-pages/man3/pthread_atfork.3.html
+[`pthread_cleanup_push`]: https://man7.org/linux/man-pages/man3/pthread_cleanup_push.3.html
+[`pthread_setcancelstate`]: https://man7.org/linux/man-pages/man3/pthread_setcancelstate.3.html
+
 Given the historical tire fire that is thread cancellation, it's remarkable
 that cancelling futures works as well as it does. The crucial difference is
 that Rust knows how to `drop` a future and clean up the resources it owns,
-particularly the lock guards.[^unaliased] The OS can clean up a process when it
-exits, but it can't tell which threads within a process own what, and it can
-only hope they clean up after themselves.
+particularly the lock guards.[^unaliased] The OS can clean up a whole process
+when it exits, but it can't tell which threads within a process own what, and
+it can only trust that they clean up after themselves.
 
 [^unaliased]: Related to that, Rust knows that no part of an object is borrowed
     at the point where we `drop` it.
 
-We also have these problems if we _pause_ threads. The Windows docs [warn us
-about this too][suspendthread]: "Calling `SuspendThread` on a thread that owns
-a synchronization object, such as a mutex or critical section, can lead to a
+Similarly, another way to deadlock with the non-async `foo` is to _pause_ the
+thread it's running on. The Windows docs [warn us about this
+too][suspendthread]: "Calling `SuspendThread` on a thread that owns a
+synchronization object, such as a mutex or critical section, can lead to a
 deadlock if the calling thread tries to obtain a synchronization object owned
-by a suspended thread." The classic source of pausing deadlocks on Unix is
-signal handlers, which hijack a thread whenever they
-run.[^signalfd][^signal_safe]
+by a suspended thread." The classic cause of this problem Unix is signal
+handlers, which hijack a thread whenever they run.[^signalfd][^signal_safe]
+Again there's nothing `foo` can do to protect itself from this, so the general
+rule is "Don't pause threads."
 
 [suspendthread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-suspendthread
 
@@ -354,15 +392,22 @@ run.[^signalfd][^signal_safe]
 
 [^signal_safe]: In fact this is where `fork`'s list of "async-signal-safe"
     functions comes from. The rules for what you can do after `fork` are mostly
-    the same as the rules for what you can do in a signal handler.
+    the same as what you can do in a signal handler.
 
-Cancelling futures works reasonably well, but snoozing a future is just as
-broken as pausing a thread, because we're not letting the future clean up after
-itself, and we're also not letting it `drop`. Outside of carefully controlled
-circumstances, we have to assume that snoozing any future or stream could
-deadlock the whole process. Async locks aren't as ubiquitous as the locks in
-`malloc` or `std::io`, so it's harder to notice this problem today, but it's
-fundamentally the same problem.
+In contrast to cancellation, pausing ("snoozing") a future is no better than
+pausing a thread. Async locks aren't as common as regular ones, and futurelocks
+aren't as well understood as the classic problems with `fork` and signal
+handlers, but they're fundamentally the same problems.
+
+Were the async examples in the last section "holding it wrong"? Maybe, but only
+I think in the same sense that programs that call `TerminateThread` are
+"holding it wrong". [The only right way to hold it is not to hold
+it.][not_to_play] It arguably shouldn't exist. No async runtime has a
+`pause_task` function, because the docs would just say "Don't use this". And
+yet that's what we have, implicitly, when we use `select!`-by-reference or
+buffered streams today.
+
+[not_to_play]: https://youtu.be/MpmGXeAtWUw?t=90
 
 ## What is to be done?
 

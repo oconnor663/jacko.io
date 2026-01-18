@@ -61,5 +61,9 @@ name = "foo_select_streams"
 path = "foo_select_streams.rs"
 
 [[bin]]
+name = "foo_sync"
+path = "foo_sync.rs"
+
+[[bin]]
 name = "async_gen_example"
 path = "async_gen_example.rs"
