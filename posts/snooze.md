@@ -289,11 +289,6 @@ these problems when we use regular locks and threads?
 
 ## Threads
 
-> The original designers felt strongly that no such function should exist
-> because there was no safe way to terminate a thread, and there's no point
-> having a function that cannot be called safely.<br>
-> \- [Raymond Chen][oldnewthing]
-
 > How many times does<br>
 > it have to be said: Never<br>
 > call `TerminateThread`.<br>
@@ -410,12 +405,18 @@ handlers, but they're fundamentally the same problems.
 Were the async examples in the last section "holding it wrong"? Maybe, but only
 I think in the same sense that programs that call `TerminateThread` are
 "holding it wrong". [The only right way to hold it is not to hold
-it.][not_to_play] It arguably shouldn't exist. No async runtime has a
-`pause_task` function, because the docs would just say "Don't use this". And
-yet that's what we have, implicitly, when we use `select!`-by-reference or
-buffered streams today.
+it.][not_to_play] It arguably shouldn't exist.[^shouldnt_exist] No async
+runtime has a `pause_task` function either, because the docs would just say
+"Don't use this". And yet that's what we have, implicitly, when we use
+`select!`-by-reference or buffered streams today.
 
 [not_to_play]: https://youtu.be/MpmGXeAtWUw?t=90
+
+[^shouldnt_exist]: "The original designers felt strongly that no such function
+    should exist because there was no safe way to terminate a thread, and
+    there's no point having a function that cannot be called safely."<br>
+    \- [Raymond Chen][oldnewthing]
+
 
 ## What is to be done?
 
