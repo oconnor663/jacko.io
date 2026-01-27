@@ -12,7 +12,7 @@ async fn foo() {
 async fn main() {
     select! {
         _ = foo() => {}
-        _ = sleep(Duration::from_millis(5)) => {}
+        _ = tokio::time::sleep(Duration::from_millis(5)) => {}
     }
     foo().await;
     println!(

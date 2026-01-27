@@ -65,5 +65,9 @@ name = "foo_sync"
 path = "foo_sync.rs"
 
 [[bin]]
+name = "foo_fork"
+path = "foo_fork.rs"
+
+[[bin]]
 name = "async_gen_example"
 path = "async_gen_example.rs"
