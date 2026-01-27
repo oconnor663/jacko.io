@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 futures = "0.3.31"
+libc = "0.2.180"
 moro = "0.4.0"
 tokio = { version = "1.48.0", features = ["full"] }
 
@@ -67,6 +68,10 @@ path = "foo_sync.rs"
 [[bin]]
 name = "foo_fork"
 path = "foo_fork.rs"
+
+[[bin]]
+name = "foo_signal"
+path = "foo_signal.rs"
 
 [[bin]]
 name = "async_gen_example"
