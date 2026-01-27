@@ -398,17 +398,17 @@ do to protect itself from this, so the general rule is "Don't pause threads."
     the same as what you can do in a signal handler.
 
 In contrast to cancellation, pausing ("snoozing") a future is no better than
-pausing a thread. Async locks aren't as common as regular ones, and futurelocks
-aren't as well understood as the classic problems with `fork` and signal
-handlers, but they're fundamentally the same problems.
+pausing a thread. Async locks aren't as common as regular ones, so futurelock
+isn't as well understood as the classic problems with `fork` and signal
+handlers, but it's fundamentally the same problem.
 
-Were the async examples in the last section "holding it wrong"? Maybe, but only
-I think in the same sense that programs that call `TerminateThread` are
-"holding it wrong". [The only right way to hold it is not to hold
-it.][not_to_play] It arguably shouldn't exist.[^shouldnt_exist] No async
-runtime has a `pause_task` function either, because the docs would just say
-"Don't use this". And yet that's what we have, implicitly, when we use
-`select!`-by-reference or buffered streams today.
+Were the async examples in the last section "holding it wrong"? Maybe in the
+same sense that programs that call `TerminateThread` are holding it wrong. [The
+only right way to hold it is not to hold it.][not_to_play] It arguably
+shouldn't exist.[^shouldnt_exist] No async runtime has a `pause_task` function
+either, because the docs would just say "Don't use this". And yet that's what
+we have, implicitly, when we use `select!`-by-reference or buffered streams
+today.
 
 [not_to_play]: https://youtu.be/MpmGXeAtWUw?t=90
 
