@@ -7,7 +7,8 @@ static LOCK: sync::Mutex<()> = sync::Mutex::new(());
 
 fn foo() {
     let _guard = LOCK.lock().unwrap();
-    // Use a longer sleep in this case, to account for child process spawning time.
+    // Use a longer sleep in this example, to account for child process
+    // spawning time.
     thread::sleep(Duration::from_millis(1000));
 }
 

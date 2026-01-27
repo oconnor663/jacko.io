@@ -321,8 +321,8 @@ thread it's running on. The Windows `TerminateThread` function [warns us about
 this][terminatethread]: "If the target thread owns a critical section, the
 critical section will not be released."[^dangerous] The classic cause of this
 problem on Unix is `fork`, which copies the whole address space of the parent
-process but only one of its running threads.[^fork] There's nothing a function
-like `foo` can realistically do to protect itself from these
+process but only one of its running threads.[^fork_example][^fork] There's
+nothing a function like `foo` can realistically do to protect itself from these
 problems,[^cleanup] so instead "Don't kill threads" is a general rule.
 
 [terminatethread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread
@@ -330,6 +330,10 @@ problems,[^cleanup] so instead "Don't kill threads" is a general rule.
 [^dangerous]: The docs also call it "a dangerous function that should only be
     used in the most extreme cases". They don't elaborate on what counts as an
     extreme case.
+
+[^fork_example]: [Playground example][fork_example]
+
+[fork_example]: playground://snooze_playground/foo_fork.rs
 
 [^fork]: "Programming guides advise not using fork in a multithreaded process,
     or calling exec immediately afterwards. POSIX only guarantees that a small
@@ -371,11 +375,15 @@ too][suspendthread]: "Calling `SuspendThread` on a thread that owns a
 synchronization object, such as a mutex or critical section, can lead to a
 deadlock if the calling thread tries to obtain a synchronization object owned
 by a suspended thread." The classic cause of this problem Unix is signal
-handlers, which hijack a thread whenever they run.[^signalfd][^signal_safe]
-Again there's nothing `foo` can do to protect itself from this, so the general
-rule is "Don't pause threads."
+handlers, which hijack a thread whenever they
+run.[^signal_example][^signalfd][^signal_safe] Again there's nothing `foo` can
+do to protect itself from this, so the general rule is "Don't pause threads."
 
 [suspendthread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-suspendthread
+
+[^signal_example]: [Playground example][signal_example]
+
+[signal_example]: playground://snooze_playground/foo_signal.rs
 
 [^signalfd]: "If you register a signal handler, it's called in the middle of
     whatever code you happen to be running. This sets up some very onerous
