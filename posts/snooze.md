@@ -299,7 +299,7 @@ these problems when we use regular locks and threads?
 Let's think about a regular, non-async version of `foo`:
 
 ```rust
-static LOCK: sync::Mutex<()> = sync::Mutex::new(());
+static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn foo() {
     let _guard = LOCK.lock().unwrap();

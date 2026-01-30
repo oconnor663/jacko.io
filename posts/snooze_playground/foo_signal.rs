@@ -1,8 +1,7 @@
-use std::sync;
 use std::thread;
 use std::time::Duration;
 
-static LOCK: sync::Mutex<()> = sync::Mutex::new(());
+static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn foo() {
     let _guard = LOCK.lock().unwrap();
