@@ -60,10 +60,10 @@ private async lock and pretends to do some work:[^nothing_wrong]
 
 [^nothing_wrong]: I want to emphasize that there's nothing wrong with `foo`. We
     could make examples like these with of any form of async blocking:
-    semaphors, bounded channels, even [`OnceCell`]s. There's some [interesting
+    semaphores, bounded channels, even [`OnceCell`]s. There's some [interesting
     advice in the Tokio docs][what_kind_of_mutex] about using regular locks
     instead of async locks as much as possible, and that's good advice, but
-    consider that even `tokio::sync::mpsc` channels [use a semaphor
+    consider that even `tokio::sync::mpsc` channels [use a semaphore
     internally][internally].
 
 [what_kind_of_mutex]: https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#which-kind-of-mutex-should-you-use
@@ -168,9 +168,9 @@ and a [`Sleep`] future until one of them is ready, then it drops both of them
 and runs the `=>` body of the winner.[^output] The loop creates a new `Sleep`
 future each time around, but it doesn't want to restart `foo`, so it selects on
 `future1` _by reference_. But that only keeps `future1` alive; it doesn't mean
-that it keeps getting polled. The intent is to `select!` on `future1` again in
-the next loop iteration, but we're snoozing it during the background work,
-which happens to include another call to `foo`, so instead we deadlock again.
+that it keeps getting polled. The intent is to poll `future1` again in the next
+loop iteration, but we're snoozing it during the background work, which happens
+to include another call to `foo`, so we're deadlocked again.
 
 [`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
 
@@ -252,8 +252,8 @@ closure is running, the other `foo` in the buffer is snoozed.[^fair]
 [unfair]: playground://snooze_playground/foo_buffered_unfair.rs
 
 Buffered streams are a wrapper around either [`FuturesOrdered`] or
-[`FuturesUnordered`], and we can trigger the same deadlock by looping over
-either of those directly:[^stream_fault]
+[`FuturesUnordered`], and we can hit the same deadlock by looping over either
+of those directly:[^stream_fault]
 
 [`FuturesOrdered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesOrdered.html
 [`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
@@ -307,18 +307,19 @@ fn foo() {
 }
 ```
 
-Again there's only one lock here, and this non-async `foo` definitely releases
-it after 10 ms. It's _impossible_ for this function to participate in a
-deadlock, right?
+Again there's only one lock here, and this non-async `foo` always releases it
+after 10 ms. It should be _impossible_ for this function to participate in a
+deadlock. Right?
 
-Well...sort of. Technically we can still deadlock with `foo`, if we kill the
-thread it's running on. The Windows `TerminateThread` function [warns us about
-this][terminatethread]: "If the target thread owns a critical section, the
-critical section will not be released."[^dangerous] The classic cause of this
-problem on Unix is `fork`, which copies the whole address space of the parent
-process but only one of its running threads.[^fork_example][^fork] There's
-nothing a function like `foo` can realistically do to protect itself from these
-problems,[^cleanup] so instead "Don't kill threads" is a general rule.
+Well...sort of. I don't think we'd ever _blame_ `foo` for a deadlock. But it is
+possible to deadlock with `foo`, if we somehow kill the thread it's running on.
+The Windows `TerminateThread` function [warns us about this][terminatethread]:
+"If the target thread owns a critical section, the critical section will not be
+released."[^dangerous] The classic cause of these problems on Unix is `fork`,
+which copies the whole address space of a process but only one of its running
+threads.[^fork_example][^fork] There's nothing a function like `foo` can
+realistically do to protect itself from this,[^cleanup] so instead "Don't kill
+threads" is a general rule.
 
 [terminatethread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread
 
@@ -344,11 +345,11 @@ problems,[^cleanup] so instead "Don't kill threads" is a general rule.
 [^cleanup]: On Unix it's technically possible to do cleanup in these situations
     with hooks like [`pthread_atfork`] and [`pthread_cleanup_push`], but it's
     not practical. Preventing memory leaks, for example, would mean registering
-    callbacks for every single allocation. Even worse, we'd need to find some
-    way to do so _atomically_, so that cancellation or forking can't occur in
-    between an allocation and its registration. We can postpone cancellations
-    with [`pthread_setcancelstate`], but forking has no equivalent. And there
-    are no cleanup hooks for `TerminateThread` on Windows.
+    callbacks for every single allocation. Even worse, we'd need to do that
+    _atomically_, so that cancellation or forking can't occur in between an
+    allocation and its registration. We can postpone cancellations with
+    [`pthread_setcancelstate`], but forking has no equivalent. And there are no
+    cleanup hooks for `TerminateThread` on Windows.
 
 [`pthread_atfork`]: https://man7.org/linux/man-pages/man3/pthread_atfork.3.html
 [`pthread_cleanup_push`]: https://man7.org/linux/man-pages/man3/pthread_cleanup_push.3.html
@@ -369,10 +370,11 @@ thread it's running on. The Windows docs [warn us about this
 too][suspendthread]: "Calling `SuspendThread` on a thread that owns a
 synchronization object, such as a mutex or critical section, can lead to a
 deadlock if the calling thread tries to obtain a synchronization object owned
-by a suspended thread." The classic cause of this problem Unix is signal
+by a suspended thread." The classic cause of these problems Unix is signal
 handlers, which hijack a thread whenever they
 run.[^signal_example][^signalfd][^signal_safe] Again there's nothing `foo` can
-do to protect itself from this, so the general rule is "Don't pause threads."
+realistically do to protect itself from this, so the general rule is "Don't
+pause threads."
 
 [suspendthread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-suspendthread
 
@@ -400,12 +402,18 @@ do to protect itself from this, so the general rule is "Don't pause threads."
 In contrast to cancellation, pausing ("snoozing") a future is no better than
 pausing a thread. Async locks aren't as common as regular ones, so futurelock
 isn't as well understood as the classic problems with `fork` and signal
-handlers, but it's fundamentally the same problem.
+handlers, but it's fundamentally the same problem. Whenever a thread or a
+future waits for another in any way &mdash; whether that's with locks,
+channels, [`join`], anything &mdash; it's assuming that the other can make
+independent progress. If "forces beyond our control" can violate that
+assumption, then writing correct, concurrent programs is almost impossible.
 
-Were the async examples in the last section "holding it wrong"? Maybe in the
-same sense that programs that call `TerminateThread` are holding it wrong. [The
-only right way to hold it is not to hold it.][not_to_play] It arguably
-shouldn't exist.[^shouldnt_exist] No async runtime has a `pause_task` function
+[`join`]: https://doc.rust-lang.org/std/thread/struct.JoinHandle.html#method.join
+
+So, were the async examples in the last section "holding it wrong"? Maybe in
+the same sense that programs that call `TerminateThread` are holding it wrong.
+[The only right way to hold it is not to hold it.][not_to_play] It arguably
+shouldn't exist.[^shouldnt_exist] No async runtime has a `pause_task` function,
 either, because the docs would just say "Don't use this". And yet that's what
 we have, implicitly, when we use `select!`-by-reference or buffered streams
 today.
