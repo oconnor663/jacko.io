@@ -73,7 +73,7 @@ exactly what we'll do in [Part Three].
 [select_macro]: https://docs.rs/futures/latest/futures/macro.select.html
 [`FuturesUnordered`]: https://docs.rs/futures/latest/futures/stream/struct.FuturesUnordered.html
 
-[Part Three]: async_io.md
+[Part Three]: async_io.html
 
 So, building on [the main loop we wrote in Part One][wakers], we're going to
 write our own `spawn`. We'll do that in three steps: First we'll make space for
