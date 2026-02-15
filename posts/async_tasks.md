@@ -129,7 +129,7 @@ type DynFuture = Pin<Box<dyn Future<Output = ()>>>;
 
 Note that `DynFuture` doesn't have type parameters. We can fit _any_ boxed
 future into this _one_ type, as long as its `Output` is `()`. Now instead of
-building a `join_future` in our `main` function, we'll build a
+building a `joined_future` in our `main` function, we'll build a
 `Vec<DynFuture>`, and we'll start calling these futures "tasks":[^coercion]
 
 [^coercion]: `Box::pin(foo(n))` is still a concrete future type, but pushing it
@@ -707,7 +707,7 @@ How can we communicate that to the main loop?[^shortcut] We could make another
 
 We've been using [`Waker::noop`] to supply a dummy `Waker` since Part One. When
 `Sleep` was the only source of blocking, there was no way for one task to
-unblock another, and all we needed from `Waker` was a placeholder to satisfy
+block another, and all we needed from `Waker` was a placeholder to satisfy
 the compiler. But now things have changed. Our `wrap_with_join_state` function
 is already invoking `Waker`s correctly when tasks finish, and we want to hear
 about it when that happens. How do we write our own `Waker`?
