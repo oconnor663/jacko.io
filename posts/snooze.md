@@ -134,9 +134,11 @@ deadlocked.
 [`Waker`]: https://doc.rust-lang.org/std/task/struct.Waker.html
 [three_parts]: async_intro.html
 
-You probably won't see anyone use `poll!` quite like that in the wild. What
-you'll see is effectively the same thing, but with
-[`select!`](https://docs.rs/tokio/latest/tokio/macro.select.html):[^minimized]
+That example is nice and short, but the `poll!` macro isn't common in real
+programs. What you're more likely to see in practice is something like this
+with [`select!`]:[^minimized]
+
+[`select!`]: https://docs.rs/tokio/latest/tokio/macro.select.html
 
 [^minimized]: The `select!` example in [_Futurelock_][futurelock] doesn't
     involve a loop, but if you pull up [the PR that fixed the
@@ -163,14 +165,15 @@ loop {
 ```
 
 This loop is trying to to drive `future1` to completion, while waking up every
-so often to do some background work. The `select!` macro polls `&mut future1`
-and a [`Sleep`] future until one of them is ready, then it drops both of them
-and runs the `=>` body of the winner.[^output] The loop creates a new `Sleep`
-future each time around, but it doesn't want to restart `foo`, so it selects on
-`future1` _by reference_. But that only keeps `future1` alive; it doesn't mean
-that it keeps getting polled. The intent is to poll `future1` again in the next
-loop iteration, but we're snoozing it during the background work, which happens
-to include another call to `foo`, so we're deadlocked again.
+so often to do some background work. The `select!` macro polls both `&mut
+future1` and a [`Sleep`] future until one of them is ready, then it drops both
+of them and runs the `=>` body of the winner.[^output] The loop creates a new
+`Sleep` future each time around, but it doesn't want to restart `foo`, so it
+selects on `future1` _by reference_. But that only keeps `future1` alive; it
+doesn't mean that it keeps getting polled. The intent is to poll `future1`
+again in the next loop iteration, but we're snoozing it during the background
+work, which happens to include another call to `foo`, so we're deadlocked
+again.
 
 [`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
 
