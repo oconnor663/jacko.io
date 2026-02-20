@@ -39,9 +39,10 @@ Before we dive in, I want to be clear that snoozing and cancellation are
 different things. If a snoozed future eventually wakes up, then clearly it
 wasn't cancelled. On the other hand, a cancelled future can also be snoozed, if
 there's a gap between when it's last polled and when it's finally
-dropped.[^define_cancellation] Cancellation bugs are a [big topic] in async
-Rust, and it's good that we're talking about them, but cancellation _itself_
-isn't a bug. Snoozing _is_ a bug, and I don't think we talk about it enough.
+dropped.[^define_cancellation] Cancellation bugs are a [big
+topic][cancelling_async_rust] in async Rust, and it's good that we're talking
+about them, but cancellation _itself_ isn't a bug. Snoozing _is_ a bug, and I
+don't think we talk about it enough.
 
 [^define_cancellation]: We often say that cancelling a future _means_ dropping
     it, but a future that's never going to be polled again has also arguably
@@ -49,7 +50,7 @@ isn't a bug. Snoozing _is_ a bug, and I don't think we talk about it enough.
     better? I'm not sure, but if we agree that snoozing is a bug, then the
     difference only matters to buggy programs.
 
-[big topic]: https://sunshowers.io/posts/cancelling-async-rust/
+[cancelling_async_rust]: https://sunshowers.io/posts/cancelling-async-rust/
 
 ## Deadlocks
 
@@ -321,8 +322,8 @@ The Windows `TerminateThread` function [warns us about this][terminatethread]:
 released."[^dangerous] The classic cause of these problems on Unix is `fork`,
 which copies the whole address space of a process but only one of its running
 threads.[^fork_example][^fork] There's nothing a function like `foo` can
-realistically do to protect itself from this,[^cleanup] so instead "Don't kill
-threads" is a general rule.
+realistically do to protect itself from this,[^cleanup] so instead the general
+rule is "Don't kill threads."
 
 [terminatethread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread
 
@@ -368,13 +369,12 @@ it can only trust that they clean up after themselves.
 [^unaliased]: Related to that, Rust knows that no part of an object is borrowed
     at the point where we `drop` it.
 
-Similarly, another way to deadlock with the non-async `foo` is to _pause_ the
-thread it's running on. The Windows docs [warn us about this
-too][suspendthread]: "Calling `SuspendThread` on a thread that owns a
-synchronization object, such as a mutex or critical section, can lead to a
-deadlock if the calling thread tries to obtain a synchronization object owned
-by a suspended thread." The classic cause of these problems Unix is signal
-handlers, which hijack a thread whenever they
+Another way to deadlock with the non-async `foo` is to _pause_ the thread it's
+running on. The Windows docs [warn us about this too][suspendthread]: "Calling
+`SuspendThread` on a thread that owns a synchronization object, such as a mutex
+or critical section, can lead to a deadlock if the calling thread tries to
+obtain a synchronization object owned by a suspended thread." The classic cause
+of these problems Unix is signal handlers, which hijack a thread whenever they
 run.[^signal_example][^signalfd][^signal_safe] Again there's nothing `foo` can
 realistically do to protect itself from this, so the general rule is "Don't
 pause threads."
@@ -405,11 +405,12 @@ pause threads."
 In contrast to cancellation, pausing ("snoozing") a future is no better than
 pausing a thread. Async locks aren't as common as regular ones, so futurelock
 isn't as well understood as the classic problems with `fork` and signal
-handlers, but it's fundamentally the same problem. Whenever a thread or a
+handlers, but it's fundamentally the same problem. Whenever one thread or
 future waits for another in any way &mdash; whether that's with locks,
-channels, [`join`], anything &mdash; it's assuming that the other can make
-independent progress. If "forces beyond our control" can violate that
-assumption, then writing correct, concurrent programs is almost impossible.
+channels, [`join`], or anything &mdash; we need to know that the graph of
+who's-waiting-on-whom doesn't contain cycles. If "forces beyond our control"
+can add edges to that graph, then there's no way for us to write correct
+concurrent programs.
 
 [`join`]: https://doc.rust-lang.org/std/thread/struct.JoinHandle.html#method.join
 
@@ -428,6 +429,100 @@ today.
     there's no point having a function that cannot be called safely."<br>
     \- [Raymond Chen][oldnewthing]
 
+## What is to be done: `select!`
+
+Using `select!` with owned futures is no problem,[^exception] as long as we're
+ok with cancellation, because `select!` drops all its "scrutinee" futures
+promptly. Using `select!` with references is what we really need to avoid.
+Unfortunately, that's easier said than done.
+
+[^exception]: We saw an exception above: `stream.next()` returned a future, but
+    selecting on it still caused a deadlock. We'll get to that.
+
+Running each future on its own task with [`tokio::spawn`][spawn] is one way to
+prevent snoozing &mdash; like threads, tasks have a "life of their own" &mdash;
+but it comes with a `'static` bound that clashes with any sort of
+borrowing.[^arc_mutex] The [`moro`] crate provides a non-`'static` task
+spawning API similar to [`std::thread::scope`], and it can solve some of these
+problems.[^moro] But Niko Matsakis' ["case study of pub-sub in
+mini-redis"][mini_redis] illustrates how `select!` is more flexible than scoped
+tasks: `select!` macro-expands into a `match`, and different `match` arms are
+allowed to mutate the same variables.[^mutate_scrutinees] Lots of real projects
+take advantage of that.
+
+[^arc_mutex]: The most common way to fix these errors is by liberally applying
+    `Arc<Mutex<_>>`, but that's annoying at best, and it can require a large
+    refactoring if the borrow was coming from the caller.
+
+[^moro]: `moro` runs all its tasks on the same thread (i.e. within the current
+    task), which avoids the ["Scoped Task Trilemma"][trilemma]. Running scoped
+    tasks on different threads safely is a major open problem in async Rust.
+
+[^mutate_scrutinees]: In fact, if we're selecting on a reference to a future or
+    a stream, the arm bodies can even mutate that future or stream itself,
+    because the reference gets dropped before the `match`. In other words, the
+    fact that scrutinees get snoozed is visible to the borrow checker, in a way
+    that real code in the wild depends on! Supporting these patterns without
+    any risk of snoozing is [very complicated][mutable_access].
+
+[mutable_access]: https://github.com/oconnor663/join_me_maybe#mutable-access-to-futures-and-streams
+
+[spawn]: https://docs.rs/tokio/latest/tokio/task/fn.spawn.html
+[`moro`]: https://github.com/nikomatsakis/moro
+[`std::thread::scope`]: https://doc.rust-lang.org/std/thread/fn.scope.html
+[trilemma]: https://without.boats/blog/the-scoped-task-trilemma/
+[mini_redis]: https://smallcultfollowing.com/babysteps/blog/2022/06/13/async-cancellation-a-case-study-of-pub-sub-in-mini-redis/
+
+I have an experimental crate aimed at addressing this: [`join_me_maybe`]. It
+provides a snooze-free `join!` macro with some `select!`-like features. Here's
+how it replaces the `select!` loop above:[^alternatives]
+
+[^alternatives]: `join_me_maybe` has several ways to express this. Apart from
+    [the `maybe` keyword][cancel_maybe] shown here, you can also [`.cancel()` a
+    labeled arm][cancel_method] or [`return` from the calling
+    function][cancel_return].
+
+[cancel_maybe]: https://github.com/oconnor663/join_me_maybe#maybe-cancellation
+[cancel_method]: https://github.com/oconnor663/join_me_maybe#label-and-cancel
+[cancel_return]: https://github.com/oconnor663/join_me_maybe#arm-bodies-with-
+
+```rust
+join_me_maybe::join!(
+    foo(),
+    // Do some periodic background work while the first `foo` is
+    // running. `join!` runs both arms concurrently, but the `maybe`
+    // keyword means it doesn't wait for this arm to finish.
+    maybe async {
+        loop {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+            foo().await;
+        }
+    }
+);
+```
+
+[`join_me_maybe`]: https://github.com/oconnor663/join_me_maybe/
+
+Like most "join" idioms today, this `join!` macro owns the futures that it
+polls, and there's no window for the caller to snooze
+anything.[^join_reference] It needs some real-world feedback before I can
+recommend it for general use, but it can currently tackle both [the original
+"Futurelock" `select!`][join_me_maybe_omicron] and [the `select!` that
+frustrated `moro` in mini-redis][join_me_maybe_mini_redis]. There's a wide open
+design space for concurrency patterns like this, and I think there's also room
+for [new language features] that could allow for even more concurrency than
+`select!` supports today.
+
+[join_me_maybe_mini_redis]: https://github.com/oconnor663/mini-redis/pull/1
+[join_me_maybe_omicron]: https://github.com/oconnor663/omicron/pull/1
+[new language features]: https://github.com/oconnor663/join_me_maybe#help-needed-from-the-compiler
+
+[^join_reference]: Or more accurately, it _can_ own them, and there's no
+    particular reason for us to go out of our way to `pin!` a `foo` future and
+    pass it in by reference. But that's still possible, and we can still cause
+    snoozing by doing it. Macros like `join_me_maybe::join!` let us express
+    more with owned futures, but banning await-by-reference is a separate
+    question. More on that below.
 
 ## What is to be done?
 

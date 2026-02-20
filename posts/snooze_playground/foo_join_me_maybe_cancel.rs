@@ -14,9 +14,10 @@ async fn main() {
             foo().await;
             background_work.cancel();
         },
-        // Do some periodic background work while the first `foo` is running. Without the `maybe`
-        // keyword, `join` tries to run both arms to completion. This arm is an infinite loop, but
-        // the `.cancel()` call above cancels it.
+        // Do some periodic background work while the first `foo` is
+        // running. Without the `maybe` keyword, `join` tries to run both
+        // arms to completion. This arm is an infinite loop, but the
+        // `.cancel()` call above cancels it.
         background_work: async {
             loop {
                 tokio::time::sleep(Duration::from_millis(5)).await;

@@ -11,8 +11,9 @@ async fn foo() {
 async fn main() {
     join_me_maybe::join!(
         foo(),
-        // Do some periodic background work while the first `foo` is running. The `join` runs both
-        // arms concurrently, but the `maybe` keyword means it doesn't wait for this arm to finish.
+        // Do some periodic background work while the first `foo` is
+        // running. `join!` runs both arms concurrently, but the `maybe`
+        // keyword means it doesn't wait for this arm to finish.
         maybe async {
             loop {
                 tokio::time::sleep(Duration::from_millis(5)).await;

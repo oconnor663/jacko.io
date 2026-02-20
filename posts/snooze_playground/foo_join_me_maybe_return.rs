@@ -11,9 +11,10 @@ async fn foo() {
 async fn main() {
     join_me_maybe::join!(
         _ = foo() => return,
-        // Do some periodic background work while the first `foo` is running. Without the `maybe`
-        // keyword, `join` tries to run both arms to completion. This arm is an infinite loop, but
-        // the `return` above short-circuits the whole function.
+        // Do some periodic background work while the first `foo` is
+        // running. Without the `maybe` keyword, `join` tries to run both
+        // arms to completion. This arm is an infinite loop, but the
+        // `return` above short-circuits the whole function.
         async {
             loop {
                 tokio::time::sleep(Duration::from_millis(5)).await;
