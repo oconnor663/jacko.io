@@ -8,13 +8,6 @@
 
 [barbara]: https://rust-lang.github.io/wg-async/vision/submitted_stories/status_quo/barbara_battles_buffered_streams.html#-status-quo-stories-barbara-battles-buffered-streams
 
-> Any time you have a single task polling multiple futures concurrently, be
-> extremely careful that the task never stops polling a future that it
-> previously started polling.<br>
-> \- [_Futurelock_][futurelock]
-
-[futurelock]: https://rfd.shared.oxide.computer/rfd/0609
-
 > Buffer data, not code.<br>
 > \- [boats][order]
 
@@ -53,6 +46,13 @@ don't think we talk about it enough.
 [cancelling_async_rust]: https://sunshowers.io/posts/cancelling-async-rust/
 
 ## Deadlocks
+
+> Any time you have a single task polling multiple futures concurrently, be
+> extremely careful that the task never stops polling a future that it
+> previously started polling.<br>
+> \- [_Futurelock_][futurelock]
+
+[futurelock]: https://rfd.shared.oxide.computer/rfd/0609
 
 Snoozing can cause mysterious latencies and timeouts, but the clearest and most
 dramatic snoozing bugs are deadlocks ("futurelocks"). Let's look at several
@@ -429,7 +429,12 @@ today.
     there's no point having a function that cannot be called safely."<br>
     \- [Raymond Chen][oldnewthing]
 
-## What is to be done: `select!`
+## What can we do about `select!`
+
+> Fine-grained cancellation in `select!` is what enables async Rust to be a
+> zero-cost abstraction and to avoid the need to create either locks or actors
+> all over the place.<br>
+\- [Niko Matsakis][mini_redis]
 
 Using `select!` with owned futures is no problem,[^exception] as long as we're
 ok with cancellation, because `select!` drops all its "scrutinee" futures
@@ -447,8 +452,8 @@ spawning API similar to [`std::thread::scope`], and it can solve some of these
 problems.[^moro] But Niko Matsakis' ["case study of pub-sub in
 mini-redis"][mini_redis] illustrates how `select!` is more flexible than scoped
 tasks: `select!` macro-expands into a `match`, and different `match` arms are
-allowed to mutate the same variables.[^mutate_scrutinees] Lots of real projects
-take advantage of that.
+allowed to mutate the same variables, while concurrent tasks are
+not.[^mutate_scrutinees]
 
 [^arc_mutex]: The most common way to fix these errors is by liberally applying
     `Arc<Mutex<_>>`, but that's annoying at best, and it can require a large
@@ -473,7 +478,7 @@ take advantage of that.
 [trilemma]: https://without.boats/blog/the-scoped-task-trilemma/
 [mini_redis]: https://smallcultfollowing.com/babysteps/blog/2022/06/13/async-cancellation-a-case-study-of-pub-sub-in-mini-redis/
 
-I have an experimental crate aimed at addressing this: [`join_me_maybe`]. It
+I have an experimental crate that aims to compete here: [`join_me_maybe`]. It
 provides a snooze-free `join!` macro with some `select!`-like features. Here's
 how it replaces the `select!` loop above:[^alternatives]
 
@@ -489,9 +494,11 @@ how it replaces the `select!` loop above:[^alternatives]
 ```rust
 join_me_maybe::join!(
     foo(),
-    // Do some periodic background work while the first `foo` is
-    // running. `join!` runs both arms concurrently, but the `maybe`
-    // keyword means it doesn't wait for this arm to finish.
+    // Do some periodic background work while the first `foo` is running.
+    // `join!` runs both arms concurrently, but the `maybe` keyword means
+    // it doesn't wait for this arm to finish. I don't love that this reads
+    // as "maybe async", though. It's really "maybe <future>", where
+    // <future> is an `async` block. Room for improvement in the syntax...
     maybe async {
         loop {
             tokio::time::sleep(Duration::from_millis(5)).await;
@@ -506,12 +513,12 @@ join_me_maybe::join!(
 Like most "join" idioms today, this `join!` macro owns the futures that it
 polls, and there's no window for the caller to snooze
 anything.[^join_reference] It needs some real-world feedback before I can
-recommend it for general use, but it can currently tackle both [the original
-"Futurelock" `select!`][join_me_maybe_omicron] and [the `select!` that
-frustrated `moro` in mini-redis][join_me_maybe_mini_redis]. There's a wide open
-design space for concurrency patterns like this, and I think there's also room
-for [new language features] that could allow for even more concurrency than
-`select!` supports today.
+recommend it for general use, but it can currently tackle both [the
+original "Futurelock" `select!`][join_me_maybe_omicron] and [the `select!`
+that frustrated `moro` in mini-redis][join_me_maybe_mini_redis]. There's a
+wide open design space for more concurrency patterns like this, and I think
+there's also room for [new language features] that could give us even more
+flexibility than `select!` does today.
 
 [join_me_maybe_mini_redis]: https://github.com/oconnor663/mini-redis/pull/1
 [join_me_maybe_omicron]: https://github.com/oconnor663/omicron/pull/1
@@ -524,7 +531,7 @@ for [new language features] that could allow for even more concurrency than
     more with owned futures, but banning await-by-reference is a separate
     question. More on that below.
 
-## What is to be done: streams
+## What can we do about streams
 
 > This method is cancel safe.<br>
 > \- [`.next()`][tokio_next]
@@ -551,12 +558,12 @@ with `next` and `select!`.
 
 [`tokio::sync::Mutex::lock`]: https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#method.lock
 
-The other two streams deadlocks above, the ones using [`buffered`][buffered]
-and [`FuturesUnordered`], are a separate problem. Those examples don't cancel
-any calls to `next`.[^buffered_next] Instead, those streams hold pending
-futures internally, and they snooze those futures if anything else gets
-`.await`ed between calls to `next`. I don't have a smoking gun, but I bet this
-causes deadlocks in the wild today.
+The other two streams deadlocks above, the ones using
+[`buffered`][buffered] and [`FuturesUnordered`], are a separate problem.
+These examples don't cancel any calls to `next`.[^buffered_next] Instead,
+these streams hold pending futures internally, and they snooze those
+futures if anything else gets `.await`ed between calls to `next`. I don't
+have a smoking gun, but I bet this causes deadlocks in the wild today.
 
 [^buffered_next]: This part is subtle. The `FuturesUnordered` example
     definitely doesn't cancel a `next` call; we can see that it doesn't. But
@@ -568,15 +575,16 @@ causes deadlocks in the wild today.
     effectively the same as cancelling a call to `next`. That isn't the source
     of snoozing here, but we could come up with another examples where it was.
 
-I see two possible solutions to this problem, and the [`Stream`] trait will
-need to pick one.[^async_iterator][^por_qué_no_los_dos] The first possibility
-is that we keep `next` and declare that gaps between calls to it are expected
-and allowed.[^move_stream] In that case, `buffered` and `FuturesUnordered`
-would be unfixable, and we'd need to deprecate them. Alternatively, we could
-add a [`poll_progress`] method to the `Stream` trait and declare that anything
-that calls `poll_next` must also call `poll_progress` until it returns `Ready`.
-Most stream combinators could be adapted to follow that new rule, but `next`
-would be unfixable, we'd need to deprecate it.
+I see two possible solutions to this problem, and the [`Stream`] trait
+itself will ultimately need to pick
+one.[^async_iterator][^por_qué_no_los_dos] The first possibility is that we
+keep `next` and declare that gaps between calls to it are expected and
+allowed.[^move_stream] In that case, `buffered` and `FuturesUnordered`
+would be unfixable, and we'd need to deprecate them. Alternatively, we
+could add a [`poll_progress`] method to the `Stream` trait and declare that
+anything that calls `poll_next` must also call `poll_progress` until it
+returns `Ready`. Most stream combinators could be adapted to follow that
+new rule, but `next` would be unfixable, and we'd need to deprecate it.
 
 [`Stream`]: https://docs.rs/futures/latest/futures/prelude/trait.Stream.html
 [`AsyncIterator`]: https://doc.rust-lang.org/std/async_iter/trait.AsyncIterator.html
@@ -587,10 +595,10 @@ would be unfixable, we'd need to deprecate it.
     eventually get stabilized with. But most of the ecosystem currently uses
     [`Stream` from the `futures` crate][`Stream`].
 
-[^por_qué_no_los_dos]: Alternatively, we could pick both, by defining two
-    different `Stream`-like traits. That sounds pretty complicated, though, and
-    either way we'll have to pick one when Rust eventually stabilizes
-    `gen`/`yield` syntax.
+[^por_qué_no_los_dos]: Or maybe we could pick both, by defining two
+    different `Stream`-like traits. But I think we'll still have to pick
+    one when Rust eventually stabilizes `gen`/`yield` syntax, to be the
+    trait that that syntax implements.
 
 [^move_stream]: To solve the cancel safety problem, maybe `next` could take the
     `self` stream by value and return it in a tuple with the optional next
@@ -602,3 +610,57 @@ would be unfixable, we'd need to deprecate it.
     and `FuturesUnordered` is independent of this cancel safety question.
 
 [linear_types]: https://without.boats/blog/asynchronous-clean-up/#linear-types
+
+## What can we do in general
+
+> The promise of Rust is that you don’t need to do this kind of non-local
+> reasoning—that you can understand important behavior by looking at code
+> directly around the behavior, then use the type system to scale that up to
+> global correctness.<br>
+> \- [Rain][cancelling_async_rust]
+
+Even if we accept those suggestions for `select!` and streams, we don't want to
+come up with bespoke rules for every async idiom. We want a general principle
+that we can reason about locally, and ideally something that tools like Clippy
+can enforce mechanically.
+
+In theory the perfect rule for avoiding futurelocks is "Never snooze a future
+that takes any lock that you might also take before you un-snooze it." But we
+can't tell whether code is following that rule when we read it, nor can we
+check that rule mechanically.[^spinlock] Simplifying that to "Never snooze a
+future" is better, but even that is tricky to spot in practice, and I'm not
+sure how to lint it. For async functions and high-level application
+logic,[^poll_functions] we really need something mechanical. Here's what I
+propose:
+
+[^spinlock]: For example, as far as I know there's no objective way to tell an
+    atomic spinlock apart from any other use of atomics. We'd also be callint
+    it a compatibility break for a library crate to start using a private async
+    lock internally, or to add any transitive dependency that does.
+
+[^poll_functions]: As opposed to `Future::poll` implementations and other
+    things that call `Future::poll` explicitly. These are "advanced mode" for
+    async Rust, and we can live with that.
+
+**Futures and streams should only be polled by their owners.**
+
+Following this rule doesn't guarantee that snoozing wont't happen, but it helps
+us localize blame to an owning primitive.[^select_function] And I think it's
+possible to enforce this rule mechanically, by warning on the use of a
+`Pin<&mut _>` in any place with a `Future` bound. That is, warn on any use of
+[the `Future` impl for `Pin<&mut impl Future>`][impl]. That warning would flag
+all the `poll!` and `select!` deadlocks in the examples above.
+
+[impl]: https://doc.rust-lang.org/std/future/trait.Future.html#impl-Future-for-Pin%3CP%3E
+
+[^select_function]: For example, the [`futures::future::select`] function (not
+    the macro) owns the two futures that it polls, but it returns the "loser"
+    to the caller instead of dropping it. [This can cause
+    deadlocks][foo_select_function] just like the ones above. In this case the
+    caller is following the only-owners-poll rule by passing ownership of the
+    `foo` future to the `select` call, and the blame in this case ultimately
+    falls on the `select` function itself for cancelling `foo` but not dropping
+    it.
+
+[`futures::future::select`]: futures::future::select`
+[foo_select_function]: playground://snooze_playground/foo_select_function.rs
