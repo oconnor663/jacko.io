@@ -406,9 +406,9 @@ code, pre > code {
     opacity: .4;
 }
 
-h1 > code,
-h2 > code,
-h3 > code {
+h1 code,
+h2 code,
+h3 code {
     font-size: 0.80em;
 }
 
