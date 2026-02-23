@@ -416,7 +416,7 @@ concurrent programs.
 
 So, were the async examples in the last section "holding it wrong"? Maybe in
 the same sense that programs that call `TerminateThread` are holding it wrong.
-[The only right way to hold it is not to hold it.][not_to_play] It arguably
+[The only right way to hold it is not to hold it.][not_to_play] It probably
 shouldn't exist.[^shouldnt_exist] No async runtime has a `pause_task` function,
 either, because the docs would just say "Don't use this". And yet that's what
 we have, implicitly, when we use `select!`-by-reference or buffered streams
@@ -429,7 +429,7 @@ today.
     there's no point having a function that cannot be called safely."<br>
     \- [Raymond Chen][oldnewthing]
 
-## What can we do about `select!`
+## `select!`
 
 > Fine-grained cancellation in `select!` is what enables async Rust to be a
 > zero-cost abstraction and to avoid the need to create either locks or actors
@@ -531,7 +531,7 @@ flexibility than `select!` does today.
     more with owned futures, but banning await-by-reference is a separate
     question. More on that below.
 
-## What can we do about streams
+## Streams
 
 > This method is cancel safe.<br>
 > \- [`.next()`][tokio_next]
@@ -611,7 +611,7 @@ new rule, but `next` would be unfixable, and we'd need to deprecate it.
 
 [linear_types]: https://without.boats/blog/asynchronous-clean-up/#linear-types
 
-## What can we do in general
+## A general rule
 
 > The promise of Rust is that you don’t need to do this kind of non-local
 > reasoning—that you can understand important behavior by looking at code
@@ -644,7 +644,7 @@ propose:
 
 **Futures and streams should only be polled by their owners.**
 
-Following this rule doesn't guarantee that snoozing wont't happen, but it helps
+Following this rule doesn't guarantee that snoozing won't happen, but it helps
 us localize blame to an owning primitive.[^select_function] And I think it's
 possible to enforce this rule mechanically, by warning on the use of a
 `Pin<&mut _>` in any place with a `Future` bound. That is, warn on any use of
