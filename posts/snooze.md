@@ -228,10 +228,10 @@ it.[^stream_snoozing]
 [`poll_next`]: https://docs.rs/futures/latest/futures/stream/trait.Stream.html#tymethod.poll_next
 [async_gen]: playground://snooze_playground/async_gen_example.rs?version=nightly
 
-Speaking of streams, another category of futurelocks comes from ["buffered"]
-streams:
+Speaking of streams, another category of futurelocks comes from
+["buffered"][buffered] streams:
 
-["buffered"]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.buffered
+[buffered]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.buffered
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_buffered.rs
@@ -524,18 +524,81 @@ for [new language features] that could allow for even more concurrency than
     more with owned futures, but banning await-by-reference is a separate
     question. More on that below.
 
-## What is to be done?
+## What is to be done: streams
 
 > This method is cancel safe.<br>
-> \- [`tokio_stream::StreamExt::next`](https://docs.rs/tokio-stream/latest/tokio_stream/trait.StreamExt.html#method.next)
+> \- [`.next()`][tokio_next]
 
-\[work in progress\]
+"Cancel safety" isn't yet formally defined, but roughly speaking we say that an
+async function is cancel-safe if a cancelled call is guaranteed not to have any
+side effects.[^fair2] Deadlocks are certainly a side effect, and I think the
+definition of cancel safety needs to expand to include not snoozing any other
+futures. The `.next()` method on streams, as it's defined today both [in
+`futures`][futures_next] and [in `tokio`][tokio_next], is not generally
+cancel-safe in this expanded sense. That's how we produced the deadlock above
+with `next` and `select!`.
 
-replacing `select!`-by-reference:
+[futures_next]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.next
+[tokio_next]: https://docs.rs/tokio-stream/latest/tokio_stream/trait.StreamExt.html#method.next
 
-- <https://github.com/oconnor663/join_me_maybe>
+[^fair2]: We might also ask whether there's a difference between a program that
+    calls the function over and over in say a timeout loop, until it eventually
+    succeeds within the timeout, compared to a version of the same program that
+    calls the function once and awaits the result. This framing lets us capture
+    the "fairness" property of functions like [`tokio::sync::Mutex::lock`],
+    where cancelling the future they return has the side effect of "giving up
+    your place in line".
 
-fixing streams:
+[`tokio::sync::Mutex::lock`]: https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#method.lock
 
-- <https://github.com/oconnor663/roughage>
-- <https://without.boats/blog/poll-progress>
+The other two streams deadlocks above, the ones using [`buffered`][buffered]
+and [`FuturesUnordered`], are a separate problem. Those examples don't cancel
+any calls to `next`.[^buffered_next] Instead, those streams hold pending
+futures internally, and they snooze those futures if anything else gets
+`.await`ed between calls to `next`. I don't have a smoking gun, but I bet this
+causes deadlocks in the wild today.
+
+[^buffered_next]: This part is subtle. The `FuturesUnordered` example
+    definitely doesn't cancel a `next` call; we can see that it doesn't. But
+    the `buffered` example operates at a lower level, calling `poll_next`
+    internally on the `iter` stream. In this specific case those calls both
+    return `Ready(Some(_))`, so they're effectively the same as calls to `next`
+    that complete immediately. However, if `poll_next` returned `Pending`
+    instead, and the caller didn't keep polling after that, that would be
+    effectively the same as cancelling a call to `next`. That isn't the source
+    of snoozing here, but we could come up with another examples where it was.
+
+I see two possible solutions to this problem, and the [`Stream`] trait will
+need to pick one.[^async_iterator][^por_qué_no_los_dos] The first possibility
+is that we keep `next` and declare that gaps between calls to it are expected
+and allowed.[^move_stream] In that case, `buffered` and `FuturesUnordered`
+would be unfixable, and we'd need to deprecate them. Alternatively, we could
+add a [`poll_progress`] method to the `Stream` trait and declare that anything
+that calls `poll_next` must also call `poll_progress` until it returns `Ready`.
+Most stream combinators could be adapted to follow that new rule, but `next`
+would be unfixable, we'd need to deprecate it.
+
+[`Stream`]: https://docs.rs/futures/latest/futures/prelude/trait.Stream.html
+[`AsyncIterator`]: https://doc.rust-lang.org/std/async_iter/trait.AsyncIterator.html
+[`poll_progress`]: https://without.boats/blog/poll-progress/
+
+[^async_iterator]: The nightly-only version of `Stream` that's in the standard
+    library is called [`AsyncIterator`]. It's not clear which name it'll
+    eventually get stabilized with. But most of the ecosystem currently uses
+    [`Stream` from the `futures` crate][`Stream`].
+
+[^por_qué_no_los_dos]: Alternatively, we could pick both, by defining two
+    different `Stream`-like traits. That sounds pretty complicated, though, and
+    either way we'll have to pick one when Rust eventually stabilizes
+    `gen`/`yield` syntax.
+
+[^move_stream]: To solve the cancel safety problem, maybe `next` could take the
+    `self` stream by value and return it in a tuple with the optional next
+    value when it completes. Then cancelling the `next` future would drop the
+    whole stream instead of snoozing it. That's a viable design, but it seems
+    awkward, and I'm not sure anyone would like it. Alternatively, Rust could
+    let us define [futures that can't be cancelled][linear_types], and `next`
+    could be one of those. In any case, the snoozing problem with `buffered`
+    and `FuturesUnordered` is independent of this cancel safety question.
+
+[linear_types]: https://without.boats/blog/asynchronous-clean-up/#linear-types
