@@ -8,11 +8,6 @@
 
 [barbara]: https://rust-lang.github.io/wg-async/vision/submitted_stories/status_quo/barbara_battles_buffered_streams.html#-status-quo-stories-barbara-battles-buffered-streams
 
-> Buffer data, not code.<br>
-> \- [boats][order]
-
-[order]: https://without.boats/blog/futures-unordered/
-
 When a future is ready to make progress, but it's not getting polled, I call
 that "snoozing".[^starvation] Snoozing is to blame for a lot of hangs and
 deadlocks in async Rust, including the recent ["Futurelock"][futurelock] case
@@ -104,11 +99,10 @@ There are two calls to `foo` here. We get `future1` from the first call and
 [`poll!`] it,[^poll_macro] which runs it to the point where it's acquired the
 `LOCK` and started sleeping. Then we call `foo` again, it gives us another
 future, and this time we `.await` it. In other words, we poll the second `foo`
-future (and _only_ the second one) in a loop until it's finished.[^three_parts]
-But it tries to take the same lock, and `future1` isn't going to release that
-lock until we either poll `future1` again or drop it. Our loop will never do
-either of those things &mdash; we've "snoozed" `future1` &mdash; so we're
-deadlocked.
+future in a loop until it's finished.[^three_parts] But it tries to take the
+same lock, and `future1` isn't going to release that lock until we either poll
+`future1` again or drop it. Our loop will never do either of those things
+&mdash; we've "snoozed" `future1` &mdash; so we're deadlocked.
 
 [^poll_macro]: The `poll!` macro calls [`Future::poll`] exactly once. In effect
     it's a more general version of [`Mutex::try_lock`] or [`Child::try_wait`],
