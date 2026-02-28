@@ -6,7 +6,7 @@
 > making progress?<br>
 > \- [_Barbara battles buffered streams_][barbara]
 
-[barbara]: https://rust-lang.github.io/wg-async/vision/submitted_stories/status_quo/barbara_battles_buffered_streams.html#-status-quo-stories-barbara-battles-buffered-streams
+[barbara]: https://rust-lang.github.io/wg-async/vision/submitted_stories/status_quo/barbara_battles_buffered_streams.html
 
 When a future is ready to make progress, but it's not getting polled, I call
 that "snoozing".[^starvation] Snoozing is to blame for a lot of hangs and
@@ -52,7 +52,7 @@ don't think we talk about it enough.
 Snoozing can cause mysterious latencies and timeouts, but the clearest and most
 dramatic snoozing bugs are deadlocks ("futurelocks"). Let's look at several
 examples. Our test subject today will be `foo`, a toy function that takes a
-private async lock and pretends to do some work:[^nothing_wrong]
+private async lock and pretends to do some work:[^nothing_wrong][^private]
 
 [^nothing_wrong]: I want to emphasize that there's nothing wrong with `foo`. We
     could make examples like these with of any form of async blocking:
@@ -65,6 +65,11 @@ private async lock and pretends to do some work:[^nothing_wrong]
 [what_kind_of_mutex]: https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#which-kind-of-mutex-should-you-use
 [`OnceCell`]: https://docs.rs/tokio/latest/tokio/sync/struct.OnceCell.html
 [internally]: https://github.com/tokio-rs/tokio/blob/0ec0a8546105b9f250f868b77e42c82809703aab/tokio/src/sync/mpsc/bounded.rs#L162
+
+[^private]: Nothing besides `foo` is going to touch `LOCK`, so it would be
+    equivalent and arguably cleaner to move this `static` into `foo`'s body.
+    I'm keeping it this way because not everyone has seen function-local
+    `static`s before, and they can be confusing the first time you see them.
 
 ```rust
 static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -101,14 +106,14 @@ There are two calls to `foo` here. We get `future1` from the first call and
 future, and this time we `.await` it. In other words, we poll the second `foo`
 future in a loop until it's finished.[^three_parts] But it tries to take the
 same lock, and `future1` isn't going to release that lock until we either poll
-`future1` again or drop it. Our loop will never do either of those things
+`future1` again or drop it. Our loop isn't going to do either of those things
 &mdash; we've "snoozed" `future1` &mdash; so we're deadlocked.
 
-[^poll_macro]: The `poll!` macro calls [`Future::poll`] exactly once. In effect
-    it's a more general version of [`Mutex::try_lock`] or [`Child::try_wait`],
-    i.e. "try this potentially blocking operation, but if it would block, give
-    up instead." We could also do the same thing with [`poll_fn`] or by
-    [writing a `Future` "by hand"][poll_struct].
+[^poll_macro]: The `poll!` macro calls [`Future::poll`] exactly once. It's
+    effectively a more general version of [`Mutex::try_lock`] or
+    [`Child::try_wait`], i.e. "try this potentially blocking operation, but if
+    it does need to block, give up instead." We could also do the same thing
+    with [`poll_fn`] or by [writing a `Future` "by hand"][poll_struct].
 
 [`poll!`]: https://docs.rs/futures/latest/futures/macro.poll.html
 [`Future::poll`]: https://doc.rust-lang.org/std/future/trait.Future.html#tymethod.poll
@@ -166,9 +171,8 @@ of them and runs the `=>` body of the winner.[^output] The loop creates a new
 `Sleep` future each time around, but it doesn't want to restart `foo`, so it
 selects on `future1` _by reference_. But that only keeps `future1` alive; it
 doesn't mean that it keeps getting polled. The intent is to poll `future1`
-again in the next loop iteration, but we're snoozing it during the background
-work, which happens to include another call to `foo`, so we're deadlocked
-again.
+again in the next loop iteration, but we snooze it during the background work,
+which happens to include another call to `foo`, and we're deadlocked again.
 
 [`Sleep`]: https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html
 
@@ -271,19 +275,19 @@ while let Some(_) = futures.next().await {
 }
 ```
 
-Invisible deadlocks are bad, but what's worse is that it's hard to describe
-what exactly these examples are doing wrong.[^chilling] Is `foo` broken?[^no]
-Are `select!` and buffered streams broken? Are these programs "holding them
-wrong"?
+Deadlocks are bad, but what's worse is that it's hard to pinpoint exactly what
+these examples have done wrong.[^chilling] Is `foo` broken? Are `select!`
+and buffered streams broken? Are these programs "holding them wrong"?
 
 [^chilling]: "There's no one abstraction, construct, or programming pattern we
     can point to here and say 'never do this'."<br>
     \- [_Futurelock_][futurelock]
 
-[^no]: No, `foo` is not broken.
+Rather than jumping straight into answering those questions,[^answers] I want
+to ask an entirely different question: Why don't we have deadlocks like these
+when we use regular locks and threads?
 
-I want to answer those questions with a different question: Why don't we have
-these problems when we use regular locks and threads?
+[^answers]: No, no, yes, and it's complicated.
 
 ## Threads
 
@@ -305,25 +309,31 @@ fn foo() {
 }
 ```
 
-Again there's only one lock here, and this non-async `foo` always releases it
-after 10 ms. It should be _impossible_ for this function to participate in a
-deadlock. Right?
+Assuming that this `foo` is the only function that touches this `LOCK`, is it
+even _possible_ for there to be a deadlock here?
 
-Well...sort of. I don't think we'd ever _blame_ `foo` for a deadlock. But it is
-possible to deadlock with `foo`, if we somehow kill the thread it's running on.
-The Windows `TerminateThread` function [warns us about this][terminatethread]:
-"If the target thread owns a critical section, the critical section will not be
-released."[^dangerous] The classic cause of these problems on Unix is `fork`,
-which copies the whole address space of a process but only one of its running
-threads.[^fork_example][^fork] There's nothing a function like `foo` can
-realistically do to protect itself from this,[^cleanup] so instead the general
-rule is "Don't kill threads."
+The short, reasonable answer is no. But the long, pedantic answer is yes, if
+we're willing to break a [long-standing rule][ancient_wisdom] of systems
+programming and kill the thread that `foo` is running on. The Windows
+`TerminateThread` function [warns us about this][terminatethread]: "If the
+target thread owns a critical section, the critical section will not be
+released."[^dangerous][^shouldnt_exist] The classic cause of these problems on
+Unix is `fork`, which copies the whole address space of a process but only one
+of its running threads.[^fork_example][^fork] There's nothing a function like
+`foo` can realistically do to protect itself from this,[^cleanup] so instead
+the general rule is "Never kill a thread."
 
+[ancient_wisdom]: https://users.rust-lang.org/t/pthread-cancel-undefined-behavior/38477/3
 [terminatethread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminatethread
 
 [^dangerous]: The docs also call it "a dangerous function that should only be
     used in the most extreme cases". They don't elaborate on what counts as an
     extreme case.
+
+[^shouldnt_exist]: "The original designers felt strongly that no such function
+    should exist because there was no safe way to terminate a thread, and
+    there's no point having a function that cannot be called safely." \-
+    [Raymond Chen][oldnewthing]
 
 [^fork_example]: [Playground example][fork_example]
 
@@ -357,21 +367,21 @@ Given the historical tire fire that is thread cancellation, it's remarkable
 that cancelling futures works as well as it does. The crucial difference is
 that Rust knows how to `drop` a future and clean up the resources it owns,
 particularly the lock guards.[^unaliased] The OS can clean up a whole process
-when it exits, but it can't tell which threads within a process own what, and
-it can only trust that they clean up after themselves.
+when it exits, but until then it doesn't know which thread owns what.
 
-[^unaliased]: Related to that, Rust knows that no part of an object is borrowed
-    at the point where we `drop` it.
+[^unaliased]: Rust also knows that no part of an object is borrowed at the
+    point where we `drop` it.
 
-Another way to deadlock with the non-async `foo` is to _pause_ the thread it's
-running on. The Windows docs [warn us about this too][suspendthread]: "Calling
-`SuspendThread` on a thread that owns a synchronization object, such as a mutex
-or critical section, can lead to a deadlock if the calling thread tries to
-obtain a synchronization object owned by a suspended thread." The classic cause
-of these problems Unix is signal handlers, which hijack a thread whenever they
+It's also possible to deadlock with this version of `foo` if we _pause_ the
+thread it's running on. The Windows docs [warn us about this
+too][suspendthread]: "Calling `SuspendThread` on a thread that owns a
+synchronization object, such as a mutex or critical section, can lead to a
+deadlock if the calling thread tries to obtain a synchronization object owned
+by a suspended thread." The classic cause of these problems Unix is signal
+handlers, which hijack a thread whenever they
 run.[^signal_example][^signalfd][^signal_safe] Again there's nothing `foo` can
-realistically do to protect itself from this, so the general rule is "Don't
-pause threads."
+realistically do to protect itself from this, so the general rule is "Never
+pause a thread."
 
 [suspendthread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-suspendthread
 
@@ -396,32 +406,30 @@ pause threads."
     functions comes from. The rules for what you can do after `fork` are mostly
     the same as what you can do in a signal handler.
 
-In contrast to cancellation, pausing ("snoozing") a future is no better than
-pausing a thread. Async locks aren't as common as regular ones, so futurelock
-isn't as well understood as the classic problems with `fork` and signal
-handlers, but it's fundamentally the same problem. Whenever one thread or
-future waits for another in any way &mdash; whether that's with locks,
-channels, [`join`], or anything &mdash; we need to know that the graph of
-who's-waiting-on-whom doesn't contain cycles. If "forces beyond our control"
-can add edges to that graph, then there's no way for us to write correct
-concurrent programs.
+In contrast to cancellation, snoozing a future is no better than pausing a
+thread. Futurelock is a new spin on the old problems that `SuspendThread` and
+Unix signal handlers have always had:[^podcast] Normal application code touches
+global locks _constantly_, for example whenever we print, allocate memory, or
+talk to DNS.[^oldnewthing2] If we pause some "normal code", and we don't want
+to deadlock with it, then we had better not touch any locks ourselves until we
+unpause it. That's doable in some very low-level, very unsafe contexts, but in
+"normal code" it's pretty much hopeless.
 
-[`join`]: https://doc.rust-lang.org/std/thread/struct.JoinHandle.html#method.join
+[^podcast]: The [_Futurelock_ episode of the _Oxide and Friends_
+    podcast][podcast] also mentions this similarity.
 
-So, were the async examples in the last section "holding it wrong"? Maybe in
-the same sense that programs that call `TerminateThread` are holding it wrong.
-[The only right way to hold it is not to hold it.][not_to_play] It probably
-shouldn't exist.[^shouldnt_exist] No async runtime has a `pause_task` function,
-either, because the docs would just say "Don't use this". And yet that's what
-we have, implicitly, when we use `select!`-by-reference or buffered streams
-today.
+[podcast]: https://oxide-and-friends.transistor.fm/episodes/futurelock/transcript
 
-[not_to_play]: https://youtu.be/MpmGXeAtWUw?t=90
+[^oldnewthing2]: "In Win32, the process heap is a threadsafe object, and since
+    it’s hard to do very much in Win32 at all without accessing the heap,
+    suspending a thread in Win32 has a very high chance of deadlocking your
+    process." <br>
+    \- [Raymond Chen][oldnewthing2]
 
-[^shouldnt_exist]: "The original designers felt strongly that no such function
-    should exist because there was no safe way to terminate a thread, and
-    there's no point having a function that cannot be called safely."<br>
-    \- [Raymond Chen][oldnewthing]
+[oldnewthing2]: https://devblogs.microsoft.com/oldnewthing/20031209-00/?p=41573
+
+And yet that's what we're dealing with, implicitly, when we use
+`select!`-by-reference or buffered streams today. What can we do about that?
 
 ## `select!`
 
@@ -492,7 +500,7 @@ join_me_maybe::join!(
     // `join!` runs both arms concurrently, but the `maybe` keyword means
     // it doesn't wait for this arm to finish. I don't love that this reads
     // as "maybe async", though. It's really "maybe <future>", where
-    // <future> is an `async` block. Room for improvement in the syntax...
+    // <future> is an `async` block. Room for improvement in the syntax?
     maybe async {
         loop {
             tokio::time::sleep(Duration::from_millis(5)).await;
@@ -571,7 +579,7 @@ have a smoking gun, but I bet this causes deadlocks in the wild today.
 
 I see two possible solutions to this problem, and the [`Stream`] trait
 itself will ultimately need to pick
-one.[^async_iterator][^por_qué_no_los_dos] The first possibility is that we
+one.[^por_qué_no_los_dos][^async_iterator] The first possibility is that we
 keep `next` and declare that gaps between calls to it are expected and
 allowed.[^move_stream] In that case, `buffered` and `FuturesUnordered`
 would be unfixable, and we'd need to deprecate them. Alternatively, we
@@ -584,15 +592,15 @@ new rule, but `next` would be unfixable, and we'd need to deprecate it.
 [`AsyncIterator`]: https://doc.rust-lang.org/std/async_iter/trait.AsyncIterator.html
 [`poll_progress`]: https://without.boats/blog/poll-progress/
 
-[^async_iterator]: The nightly-only version of `Stream` that's in the standard
-    library is called [`AsyncIterator`]. It's not clear which name it'll
-    eventually get stabilized with. But most of the ecosystem currently uses
-    [`Stream` from the `futures` crate][`Stream`].
-
 [^por_qué_no_los_dos]: Or maybe we could pick both, by defining two
     different `Stream`-like traits. But I think we'll still have to pick
     one when Rust eventually stabilizes `gen`/`yield` syntax, to be the
     trait that that syntax implements.
+
+[^async_iterator]: The nightly-only version of `Stream` that's in the standard
+    library is called [`AsyncIterator`]. It's not clear which name it'll
+    eventually get stabilized with. But most of the ecosystem currently uses
+    [`Stream` from the `futures` crate][`Stream`].
 
 [^move_stream]: To solve the cancel safety problem, maybe `next` could take the
     `self` stream by value and return it in a tuple with the optional next
@@ -613,24 +621,25 @@ new rule, but `next` would be unfixable, and we'd need to deprecate it.
 > global correctness.<br>
 > \- [Rain][cancelling_async_rust]
 
-Even if we accept those suggestions for `select!` and streams, we don't want to
+Even if we accept these suggestions for `select!` and streams, we don't want to
 come up with bespoke rules for every async idiom. We want a general principle
-that we can reason about locally, and ideally something that tools like Clippy
-can enforce mechanically.
+that we can reason about locally, ideally something that tools like Clippy can
+enforce mechanically.
 
 In theory the perfect rule for avoiding futurelocks is "Never snooze a future
 that takes any lock that you might also take before you un-snooze it." But we
 can't tell whether code is following that rule when we read it, nor can we
 check that rule mechanically.[^spinlock] Simplifying that to "Never snooze a
 future" is better, but even that is tricky to spot in practice, and I'm not
-sure how to lint it. For async functions and high-level application
+sure how to lint it directly. For async functions and high-level application
 logic,[^poll_functions] we really need something mechanical. Here's what I
 propose:
 
-[^spinlock]: For example, as far as I know there's no objective way to tell an
-    atomic spinlock apart from any other use of atomics. We'd also be callint
-    it a compatibility break for a library crate to start using a private async
-    lock internally, or to add any transitive dependency that does.
+[^spinlock]: An async lock might be little more than a `bool` and a list of
+    `Waker`s, and there's no easy way to tell it apart from any other struct.
+    We'd also be calling it a compatibility break for a library crate to start
+    using a private async lock internally, or to add any transitive dependency
+    that does.
 
 [^poll_functions]: As opposed to `Future::poll` implementations and other
     things that call `Future::poll` explicitly. These are "advanced mode" for
@@ -640,10 +649,10 @@ propose:
 
 Following this rule doesn't guarantee that snoozing won't happen, but it helps
 us localize blame to an owning primitive.[^select_function] And I think it's
-possible to enforce this rule mechanically, by warning on the use of a
-`Pin<&mut _>` in any place with a `Future` bound. That is, warn on any use of
-[the `Future` impl for `Pin<&mut impl Future>`][impl]. That warning would flag
-all the `poll!` and `select!` deadlocks in the examples above.
+possible to lint this rule by warning on the use of a `Pin<&mut _>` in any
+place with a `Future` bound. That is, warn on any use of [the `Future` impl for
+`Pin<&mut impl Future>`][impl]. That warning would flag all the `poll!` and
+`select!` deadlocks in the examples above.
 
 [impl]: https://doc.rust-lang.org/std/future/trait.Future.html#impl-Future-for-Pin%3CP%3E
 
