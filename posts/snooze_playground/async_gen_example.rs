@@ -27,7 +27,7 @@ async fn main() {
     // it every second.
     let (send, recv) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
-        for i in 1..=10 {
+        for i in 1..=5 {
             send.send(i).unwrap();
             sleep(Duration::from_secs(1)).await;
         }

@@ -9,28 +9,29 @@
 [barbara]: https://rust-lang.github.io/wg-async/vision/submitted_stories/status_quo/barbara_battles_buffered_streams.html
 
 When a future is ready to make progress, but it's not getting polled, I call
-that "snoozing".[^starvation] Snoozing is to blame for a lot of hangs and
-deadlocks in async Rust, including the recent ["Futurelock"][futurelock] case
-study from the folks at Oxide. I'm going to argue that snoozing is almost
-always a bug, that the tools and patterns that expose us to it should be
-considered harmful, and that reliable and convenient replacements are possible.
-
-[^starvation]: Snoozing is similar to "starvation", but starvation usually
-    means that some other call to `poll` has blocked instead of returning
-    quickly, which stops the executor from polling anything else while it
-    waits. Snoozing is when the executor is running fine, but some futures
-    still aren't getting polled.
+that "snoozing". Snoozing is to blame for a lot of hangs and deadlocks in async
+Rust, including the recent ["Futurelock"][futurelock] case study from the folks
+at Oxide. I'm going to argue that snoozing is almost always a bug, that the
+tools and patterns that expose us to it should be considered harmful, and that
+reliable and convenient replacements are possible.
 
 [`FusedIterator`]: https://doc.rust-lang.org/std/iter/trait.FusedIterator.html
 
 Before we dive in, I want to be clear that snoozing and cancellation are
-different things. If a snoozed future eventually wakes up, then clearly it
-wasn't cancelled. On the other hand, a cancelled future can also be snoozed, if
-there's a gap between when it's last polled and when it's finally
+different things.[^starvation] If a snoozed future eventually wakes up, then
+clearly it wasn't cancelled. On the other hand, a cancelled future can also be
+snoozed, if there's a gap between when it's last polled and when it's finally
 dropped.[^define_cancellation] Cancellation bugs are a [big
 topic][cancelling_async_rust] in async Rust, and it's good that we're talking
 about them, but cancellation _itself_ isn't a bug. Snoozing _is_ a bug, and I
 don't think we talk about it enough.
+
+[^starvation]: Snoozing and starvation are also different things. Starvation is
+    when something is hogging the executor and getting in the way of polling
+    other futures. Snoozing is when everything runs smoothly to idle, but some
+    future that requested a wakeup still doesn't get polled.
+
+["biased"]: https://docs.rs/tokio/latest/tokio/macro.select.html#fairness
 
 [^define_cancellation]: We often say that cancelling a future _means_ dropping
     it, but a future that's never going to be polled again has also arguably
@@ -54,22 +55,21 @@ dramatic snoozing bugs are deadlocks ("futurelocks"). Let's look at several
 examples. Our test subject today will be `foo`, a toy function that takes a
 private async lock and pretends to do some work:[^nothing_wrong][^private]
 
-[^nothing_wrong]: I want to emphasize that there's nothing wrong with `foo`. We
-    could make examples like these with of any form of async blocking:
-    semaphores, bounded channels, even [`OnceCell`]s. There's some [interesting
-    advice in the Tokio docs][what_kind_of_mutex] about using regular locks
-    instead of async locks as much as possible, and that's good advice, but
-    consider that even `tokio::sync::mpsc` channels [use a semaphore
-    internally][internally].
+[^nothing_wrong]: There's nothing wrong with `foo`. We could make examples like
+    these with of any form of async waiting: semaphores, bounded channels, even
+    [`OnceCell`]s. There's some [interesting advice in the Tokio
+    docs][what_kind_of_mutex] about using regular locks instead of async locks
+    as much as possible, and that's good advice, but consider that even
+    `tokio::sync::mpsc` channels [use a semaphore internally][internally].
 
 [what_kind_of_mutex]: https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#which-kind-of-mutex-should-you-use
 [`OnceCell`]: https://docs.rs/tokio/latest/tokio/sync/struct.OnceCell.html
 [internally]: https://github.com/tokio-rs/tokio/blob/0ec0a8546105b9f250f868b77e42c82809703aab/tokio/src/sync/mpsc/bounded.rs#L162
 
 [^private]: Nothing besides `foo` is going to touch `LOCK`, so it would be
-    equivalent and arguably cleaner to move this `static` into `foo`'s body.
-    I'm keeping it this way because not everyone has seen function-local
-    `static`s before, and they can be confusing the first time you see them.
+    cleaner to move it into `foo`'s body. I'm keeping it this way because not
+    everyone has seen function-local `static`s before, and they can be
+    confusing the first time you see them.
 
 ```rust
 static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -87,8 +87,9 @@ future can all be far apart from each other.[^ghidra] With that in mind, here's
 the minimal futurelock:
 
 [^ghidra]: In the [original issue thread][gh9259] that inspired "Futurelock",
-    they had to look at core dumps in [Ghidra] to find the bug. That's what we
-    call ["type 2 fun"](https://essentialwilderness.com/type-1-2-and-3-fun/).
+    they had to look at core dumps in [Ghidra] to narrow down the bug. That's
+    what we call ["type 2
+    fun"](https://essentialwilderness.com/type-1-2-and-3-fun/).
 
 [gh9259]: https://github.com/oxidecomputer/omicron/issues/9259
 [Ghidra]: https://github.com/NationalSecurityAgency/ghidra
@@ -145,7 +146,7 @@ with [`select!`]:[^minimized]
     bug][futurelock_pr], there's a loop just like this one. Looping is usually
     what forces us to select by reference, but where possible we can and should
     select by value, which drops cancelled futures promptly and [prevents this
-    sort of deadlock][select_value].
+    sort of deadlock][select_value]. More on this below.
 
 [futurelock_pr]: https://github.com/oxidecomputer/omicron/pull/9268/changes#diff-26ed102e2389f81dd6551debec14f18eabf18cfa15b4e9321b20f61d3a925d12L516-L517
 [select_value]: playground://snooze_playground/foo_select_value.rs
@@ -195,41 +196,56 @@ select! {
 foo().await; // Deadlock!
 ```
 
-In this case the [`Next`] future isn't a reference, and `select!` does drop it,
-but we've managed to snooze the stream itself and the `foo` future inside of
-it.[^stream_snoozing]
+In this case the [`stream.next()`][next] future is a value, not a reference,
+and it does get dropped after the `sleep` finishes. But it _contains_ a
+reference to the stream, and we still end up snoozing the `foo` future inside
+that stream when we cancel `next`.[^stream_snoozing]
 
-[`Next`]: https://docs.rs/futures/latest/futures/stream/struct.Next.html
+[next]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.next
 
-[^stream_snoozing]: The problem of snoozing streams is especially subtle. It's
-    normal and expected to call [`next`] to pull an item from the stream, and
-    then to not do that again for a while. That's just iteration, not snoozing.
-    In particular, when [`poll_next`] returns `Ready(Some(_))`, it doesn't
-    register a wakeup. Wakeups are only registered when polling returns
-    `Pending`. In generator terms (using the nightly-only [`gen`, `async gen`,
-    and `yield` keywords][async_gen]) returning an item is a _yield point_.
-    Note that there's no way for a stream to somehow "inject" a yield point
-    into `foo`'s critical section. (Other than by committing a snoozing crime
-    internally, which isn't the case here, though see `FuturesUnordered`
-    below). But in this example, we haven't paused the stream at a yield point.
-    Instead, we've paused it at an _await point_, which _has_ registered a
-    wakeup and which _does_ expect to get polled promptly when it's ready.
-    That's why this example still counts as snoozing. When we start a call to
-    `next`, or in general when `poll_next` returns `Pending`, we either need to
-    keep driving the stream until it yields an item, or else we need to drop
-    _the whole stream_. (TODO: This rules out selecting on channel receivers,
-    which probably goes to far. Maybe we can make an exception for `Unpin`
-    types? Or maybe channel receivers should expose non-`Stream` APIs. I'm not
-    sure.)
+[^stream_snoozing]: What it means to snooze a stream is tricky, and it's also
+    possible that [the low-level API contract will change][poll_progress]
+    before it's finally stabilized. (Even the name is uncertain: today we use
+    the [`Stream`] trait from the `futures` crate, but the nightly-only version
+    in the standard library is called [`AsyncIterator`].) The key detail is
+    that [`Future::poll`] represents two possible states, while
+    [`Stream::poll_next`][poll_next] represents _three_. Futures and streams
+    both return `Ready(_)` and `Ready(None)` respectively when they're
+    finished. And they also both return `Pending` when they've registered a
+    wakeup and need to be polled again later. In async function terms that's an
+    "await point", and it's where snoozing can happen. But streams have a third
+    state: `Ready(Some(_))` yields a value from the stream. A stream that
+    yields a value isn't finished, but at the same time it (typically,
+    currently) does _not_ register a wakeup. This is a "yield point", not an
+    await point, and it corresponds to the `yield` keyword in the [nightly-only
+    `gen` / `async gen` syntax][async_gen]. Cancelling a call to `.next()`
+    leaves the stream (and any futures it might contain) at an arbitrary await
+    point, which is how we snooze `foo` and get a deadlock in this example. But
+    completing a call to `.next()` leaves the stream at a yield point, not an
+    await point. We probably don't want to count that as "snoozing the stream".
+    More on this below.
 
-[`next`]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.next
-[`poll_next`]: https://docs.rs/futures/latest/futures/stream/trait.Stream.html#tymethod.poll_next
+[poll_progress]: https://without.boats/blog/poll-progress/
+[`Stream`]: https://docs.rs/futures/latest/futures/prelude/trait.Stream.html
+[`AsyncIterator`]: https://doc.rust-lang.org/std/async_iter/trait.AsyncIterator.html
+[poll_next]: https://docs.rs/futures/latest/futures/stream/trait.Stream.html#tymethod.poll_next
 [async_gen]: playground://snooze_playground/async_gen_example.rs?version=nightly
 
 Speaking of streams, another category of futurelocks comes from
-["buffered"][buffered] streams:
+[`buffered`][buffered] streams:[^buffered]
 
 [buffered]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.buffered
+
+[^buffered]: Like most of the methods on [`StreamExt`], [`buffered`][buffered]
+    takes a stream of inputs and adapts it into another stream. But unlike most
+    of the other methods, `buffered` assumes that the inputs _are themselves
+    futures_, and it awaits them and collects their outputs internally. This
+    [`iter`] stream's `Item` type, `foo` futures, is totally different from the
+    [`once`] stream's `Item` type in the previous example, `()`.
+
+[`StreamExt`]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html
+[`iter`]: https://docs.rs/futures/latest/futures/stream/fn.iter.html
+[`once`]: https://docs.rs/futures/latest/futures/stream/fn.once.html
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_buffered.rs
@@ -263,7 +279,8 @@ of those directly:[^stream_fault]
 [^stream_fault]: Contrast this example with the `stream::once` example above.
     There we were "at fault" for snoozing the stream in between yield points,
     but here our program faithfully drives `FuturesUnordered` to a yield point,
-    and it still snoozes the other `foo` internally.
+    and it still snoozes the other `foo` internally. I think we'll ultimately
+    need different fixes for these different cases. More on this below.
 
 ```rust
 LINK: Playground ## playground://snooze_playground/foo_unordered.rs
@@ -350,14 +367,15 @@ the general rule is "Never kill a thread."
 
 [fork_in_the_road]: https://www.microsoft.com/en-us/research/wp-content/uploads/2019/04/fork-hotos19.pdf
 
-[^cleanup]: On Unix it's technically possible to do cleanup in these situations
-    with hooks like [`pthread_atfork`] and [`pthread_cleanup_push`], but it's
-    not practical. Preventing memory leaks, for example, would mean registering
-    callbacks for every single allocation. Even worse, we'd need to do that
-    _atomically_, so that cancellation or forking can't occur in between an
-    allocation and its registration. We can postpone cancellations with
-    [`pthread_setcancelstate`], but forking has no equivalent. And there are no
-    cleanup hooks for `TerminateThread` on Windows.
+[^cleanup]: On Unix it's possible to do cleanup in these situations with
+    [`pthread_atfork`] and [`pthread_cleanup_push`], but it's not practical.
+    Preventing memory leaks would mean registering callbacks for every single
+    allocation, and we'd need to do that atomically somehow, so that
+    cancellation or forking can't occur in between an allocation and its
+    registration. (We can postpone cancellations with
+    [`pthread_setcancelstate`], but forking has no equivalent.) We'd also need
+    to figure out how all of this interacts with move semantics, which would
+    presumably require changes to the compiler itself.
 
 [`pthread_atfork`]: https://man7.org/linux/man-pages/man3/pthread_atfork.3.html
 [`pthread_cleanup_push`]: https://man7.org/linux/man-pages/man3/pthread_cleanup_push.3.html
@@ -372,16 +390,15 @@ when it exits, but until then it doesn't know which thread owns what.
 [^unaliased]: Rust also knows that no part of an object is borrowed at the
     point where we `drop` it.
 
-It's also possible to deadlock with this version of `foo` if we _pause_ the
-thread it's running on. The Windows docs [warn us about this
-too][suspendthread]: "Calling `SuspendThread` on a thread that owns a
-synchronization object, such as a mutex or critical section, can lead to a
-deadlock if the calling thread tries to obtain a synchronization object owned
-by a suspended thread." The classic cause of these problems Unix is signal
-handlers, which hijack a thread whenever they
-run.[^signal_example][^signalfd][^signal_safe] Again there's nothing `foo` can
-realistically do to protect itself from this, so the general rule is "Never
-pause a thread."
+It's also possible to deadlock this version of `foo` if we _pause_ the thread
+it's running on. The Windows docs [warn us about this too][suspendthread]:
+"Calling `SuspendThread` on a thread that owns a synchronization object, such
+as a mutex or critical section, can lead to a deadlock if the calling thread
+tries to obtain a synchronization object owned by a suspended thread." The
+classic cause of these problems Unix is signal handlers, which hijack a thread
+whenever they run.[^signal_example][^signalfd][^signal_safe] Again there's
+nothing `foo` can realistically do to protect itself from this, so the general
+rule is "Never pause a thread."
 
 [suspendthread]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-suspendthread
 
@@ -409,14 +426,14 @@ pause a thread."
 In contrast to cancellation, snoozing a future is no better than pausing a
 thread. Futurelock is a new spin on the old problems that `SuspendThread` and
 Unix signal handlers have always had:[^podcast] Normal application code touches
-global locks _constantly_, for example whenever we print, allocate memory, or
-talk to DNS.[^oldnewthing2] If we pause some "normal code", and we don't want
-to deadlock with it, then we had better not touch any locks ourselves until we
-unpause it. That's doable in some very low-level, very unsafe contexts, but in
-"normal code" it's pretty much hopeless.
+global locks _constantly_, like when we print, allocate memory, load dynamic
+libraries, or talk to DNS. If we freeze some "normal code", and we don't want
+to risk deadlocking with it, then we need to avoid touching any locks ourselves
+until we unfreeze it. That's doable in some very low-level, very unsafe
+contexts, but in "normal code" it's almost hopeless.[^oldnewthing2]
 
 [^podcast]: The [_Futurelock_ episode of the _Oxide and Friends_
-    podcast][podcast] also mentions this similarity.
+    podcast][podcast] also mentions the resemblance to signal handling bugs.
 
 [podcast]: https://oxide-and-friends.transistor.fm/episodes/futurelock/transcript
 
@@ -428,7 +445,7 @@ unpause it. That's doable in some very low-level, very unsafe contexts, but in
 
 [oldnewthing2]: https://devblogs.microsoft.com/oldnewthing/20031209-00/?p=41573
 
-And yet that's what we're dealing with, implicitly, when we use
+And yet that's what we're confronted with, implicitly, when we use
 `select!`-by-reference or buffered streams today. What can we do about that?
 
 ## `select!`
@@ -438,8 +455,8 @@ And yet that's what we're dealing with, implicitly, when we use
 > all over the place.<br>
 \- [Niko Matsakis][mini_redis]
 
-Using `select!` with owned futures is no problem,[^exception] as long as we're
-ok with cancellation, because `select!` drops all its "scrutinee" futures
+Using `select!` with owned futures is usually fine,[^exception] as long as
+we're ok with cancellation, because `select!` drops all its "scrutinee" futures
 promptly. Using `select!` with references is what we really need to avoid.
 Unfortunately, that's easier said than done.
 
@@ -459,19 +476,23 @@ not.[^mutate_scrutinees]
 
 [^arc_mutex]: The most common way to fix these errors is by liberally applying
     `Arc<Mutex<_>>`, but that's annoying at best, and it can require a large
-    refactoring if the borrow was coming from the caller.
+    refactoring if the borrow was coming from the caller. It can also introduce
+    new deadlocks.
 
 [^moro]: `moro` runs all its tasks on the same thread (i.e. within the current
     task), which avoids the ["Scoped Task Trilemma"][trilemma]. Running scoped
     tasks on different threads safely is a major open problem in async Rust.
 
-[^mutate_scrutinees]: In fact, if we're selecting on a reference to a future or
-    a stream, the arm bodies can even mutate that future or stream itself,
-    because the reference gets dropped before the `match`. In other words, the
-    fact that scrutinees get snoozed is visible to the borrow checker, in a way
-    that real code in the wild depends on! Supporting these patterns without
-    any risk of snoozing is [very complicated][mutable_access].
+[^mutate_scrutinees]: In fact, if we're selecting on a reference to a stream,
+    the arm bodies can even mutate the stream itself, because the reference
+    gets dropped before the `match`. In other words, the fact that scrutinees
+    get snoozed is visible to the borrow checker, in a way that real code in
+    the wild depends on! (Compare [this `select!` scrutinee][real_code_1] to
+    [this mutation in another arm][real_code_2].) Supporting these patterns
+    without any risk of snoozing is [complicated][mutable_access].
 
+[real_code_1]: https://github.com/tokio-rs/mini-redis/blob/e186482ca00f8d884ddcbe20417f3654d03315a4/src/cmd/subscribe.rs#L132
+[real_code_2]: https://github.com/tokio-rs/mini-redis/blob/e186482ca00f8d884ddcbe20417f3654d03315a4/src/cmd/subscribe.rs#L145
 [mutable_access]: https://github.com/oconnor663/join_me_maybe#mutable-access-to-futures-and-streams
 
 [spawn]: https://docs.rs/tokio/latest/tokio/task/fn.spawn.html
@@ -487,7 +508,9 @@ how it replaces the `select!` loop above:[^alternatives]
 [^alternatives]: `join_me_maybe` has several ways to express this. Apart from
     [the `maybe` keyword][cancel_maybe] shown here, you can also [`.cancel()` a
     labeled arm][cancel_method] or [`return` from the calling
-    function][cancel_return].
+    function][cancel_return]. Also note that what reads as "maybe async" here
+    is really "`maybe <future>`" where `<future>` is an `async` block. Room for
+    improvement in the syntax?
 
 [cancel_maybe]: https://github.com/oconnor663/join_me_maybe#maybe-cancellation
 [cancel_method]: https://github.com/oconnor663/join_me_maybe#label-and-cancel
@@ -498,9 +521,7 @@ join_me_maybe::join!(
     foo(),
     // Do some periodic background work while the first `foo` is running.
     // `join!` runs both arms concurrently, but the `maybe` keyword means
-    // it doesn't wait for this arm to finish. I don't love that this reads
-    // as "maybe async", though. It's really "maybe <future>", where
-    // <future> is an `async` block. Room for improvement in the syntax?
+    // it doesn't wait for this arm to finish.
     maybe async {
         loop {
             tokio::time::sleep(Duration::from_millis(5)).await;
@@ -536,7 +557,9 @@ flexibility than `select!` does today.
 ## Streams
 
 > This method is cancel safe.<br>
-> \- [`.next()`][tokio_next]
+> \- [`.next()`][cancel_safe]
+
+[cancel_safe]: https://docs.rs/tokio-stream/latest/tokio_stream/trait.StreamExt.html#cancel-safety
 
 "Cancel safety" isn't yet formally defined, but roughly speaking we say that an
 async function is cancel-safe if a cancelled call is guaranteed not to have any
@@ -545,7 +568,7 @@ definition of cancel safety needs to expand to include not snoozing any other
 futures. The `.next()` method on streams, as it's defined today both [in
 `futures`][futures_next] and [in `tokio`][tokio_next], is not generally
 cancel-safe in this expanded sense. That's how we produced the deadlock above
-with `next` and `select!`.
+with `select!` and `next`.
 
 [futures_next]: https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.next
 [tokio_next]: https://docs.rs/tokio-stream/latest/tokio_stream/trait.StreamExt.html#method.next
@@ -577,30 +600,19 @@ have a smoking gun, but I bet this causes deadlocks in the wild today.
     effectively the same as cancelling a call to `next`. That isn't the source
     of snoozing here, but we could come up with another examples where it was.
 
-I see two possible solutions to this problem, and the [`Stream`] trait
-itself will ultimately need to pick
-one.[^por_qué_no_los_dos][^async_iterator] The first possibility is that we
-keep `next` and declare that gaps between calls to it are expected and
-allowed.[^move_stream] In that case, `buffered` and `FuturesUnordered`
-would be unfixable, and we'd need to deprecate them. Alternatively, we
-could add a [`poll_progress`] method to the `Stream` trait and declare that
-anything that calls `poll_next` must also call `poll_progress` until it
-returns `Ready`. Most stream combinators could be adapted to follow that
-new rule, but `next` would be unfixable, and we'd need to deprecate it.
+I see two possible solutions to this problem, and the [`Stream`] trait itself
+will ultimately need to pick one.[^por_qué_no_los_dos] The first possibility is
+that we keep `next` and declare that gaps between calls to it are expected and
+allowed.[^move_stream] In that case, `buffered` and `FuturesUnordered` would be
+unfixable, and we'd need to deprecate them. Alternatively, we could add a
+[`poll_progress`][poll_progress] method to the `Stream` trait and declare that
+anything that calls `poll_next` must also call `poll_progress` until it returns
+`Ready`. Most stream combinators could be adapted to follow that new rule, but
+`next` would be unfixable, and we'd need to deprecate it.
 
-[`Stream`]: https://docs.rs/futures/latest/futures/prelude/trait.Stream.html
-[`AsyncIterator`]: https://doc.rust-lang.org/std/async_iter/trait.AsyncIterator.html
-[`poll_progress`]: https://without.boats/blog/poll-progress/
-
-[^por_qué_no_los_dos]: Or maybe we could pick both, by defining two
-    different `Stream`-like traits. But I think we'll still have to pick
-    one when Rust eventually stabilizes `gen`/`yield` syntax, to be the
-    trait that that syntax implements.
-
-[^async_iterator]: The nightly-only version of `Stream` that's in the standard
-    library is called [`AsyncIterator`]. It's not clear which name it'll
-    eventually get stabilized with. But most of the ecosystem currently uses
-    [`Stream` from the `futures` crate][`Stream`].
+[^por_qué_no_los_dos]: Or maybe we could pick both, by defining two different
+    `Stream`-like traits. But eventually we'd still have to pick one, when we
+    stabilize the `gen`/`yield` syntax.
 
 [^move_stream]: To solve the cancel safety problem, maybe `next` could take the
     `self` stream by value and return it in a tuple with the optional next
@@ -620,6 +632,8 @@ new rule, but `next` would be unfixable, and we'd need to deprecate it.
 > directly around the behavior, then use the type system to scale that up to
 > global correctness.<br>
 > \- [Rain][cancelling_async_rust]
+
+JUST DON'T PIN THINGS?!
 
 Even if we accept these suggestions for `select!` and streams, we don't want to
 come up with bespoke rules for every async idiom. We want a general principle
