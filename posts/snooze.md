@@ -1,5 +1,5 @@
 # Never snooze a future
-###### 2026 January 14<sup>th</sup> DRAFT
+###### 2026 March 2<sup>nd</sup>
 
 > Huh, that's confusing, because the task ought to be able to execute other
 > futures in that case &mdash; so why are her connections stalling out without
