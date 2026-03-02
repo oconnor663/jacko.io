@@ -458,17 +458,23 @@ promptly. Using `select!` with references is what we really need to avoid.
 Unfortunately, that's easier said than done.
 
 [^exception]: We saw an exception above: `stream.next()` returned a future, but
-    selecting on it still caused a deadlock. We'll get to that.
+    selecting on it still caused a deadlock. That's not specific to `select!`,
+    though, and we can reproduce it with any form of cancellation. Here's a
+    version [using a timeout][foo_stream_timeout]. This is really a problem
+    with `next` itself. More on this below.
+
+[foo_stream_timeout]: playground://snooze_playground/foo_stream_timeout.rs
 
 Running each future on its own task with [`tokio::spawn`][spawn] is one way to
 prevent snoozing &mdash; like threads, tasks have a "life of their own" &mdash;
 but it comes with a `'static` bound that clashes with any sort of
 borrowing.[^arc_mutex] The [`moro`] crate provides a non-`'static` task
-spawning API similar to [`std::thread::scope`], and it can solve some of these
-problems.[^moro] But Niko Matsakis' ["case study of pub-sub in
-mini-redis"][mini_redis] illustrates how `select!` is more flexible than scoped
-tasks: `select!` macro-expands into a `match`, and different `match` arms are
-allowed to mutate the same variables, while concurrent tasks are
+spawning API similar to [`std::thread::scope`], and it can solve many of these
+problems.[^moro] I recommend it enthusiastically, and I'm surprised it isn't
+more widely used. But `moro` can't replace `select!` entirely. Niko Matsakis'
+["case study of pub-sub in mini-redis"][mini_redis] discusses a case that only
+`select!` can handle: it macro-expands into a `match`, and different `match`
+arms are allowed to mutate the same variables, while concurrent tasks are
 not.[^mutate_scrutinees]
 
 [^arc_mutex]: The most common way to fix these errors is by liberally applying
@@ -498,9 +504,9 @@ not.[^mutate_scrutinees]
 [trilemma]: https://without.boats/blog/the-scoped-task-trilemma/
 [mini_redis]: https://smallcultfollowing.com/babysteps/blog/2022/06/13/async-cancellation-a-case-study-of-pub-sub-in-mini-redis/
 
-I have an experimental crate that aims to compete here: [`join_me_maybe`]. It
-provides a snooze-free `join!` macro with some `select!`-like features. Here's
-how it replaces the `select!` loop above:[^alternatives]
+I have an experimental crate that aims to close this gap: [`join_me_maybe`]. It
+provides a `join!` macro with some `select!`-like features. Here's one way it
+can replace the `select!` loop above:[^alternatives]
 
 [^alternatives]: `join_me_maybe` has several ways to express this. Apart from
     [the `maybe` keyword][cancel_maybe] shown here, you can also [`.cancel()` a
@@ -530,15 +536,14 @@ join_me_maybe::join!(
 
 [`join_me_maybe`]: https://github.com/oconnor663/join_me_maybe/
 
-Like most "join" idioms today, this `join!` macro owns the futures that it
-polls, and there's no window for the caller to snooze
-anything.[^join_reference] It needs some real-world feedback before I can
-recommend it for general use, but it can currently tackle both [the
-original "Futurelock" `select!`][join_me_maybe_omicron] and [the `select!`
-that frustrated `moro` in mini-redis][join_me_maybe_mini_redis]. There's a
-wide open design space for more concurrency patterns like this, and I think
-there's also room for [new language features] that could give us even more
-flexibility than `select!` does today.
+Like other "join" patterns, this `join!` macro owns the futures that it polls,
+so there's no risk of snoozing anything.[^join_reference] It needs some
+real-world feedback before I can recommend it for general use, but it can
+currently tackle both [the original "Futurelock"
+`select!`][join_me_maybe_omicron] and [the `select!` that frustrated `moro` in
+mini-redis][join_me_maybe_mini_redis]. There's a wide open design space for
+more concurrency patterns like this, and there's also room for [new language
+features] here that could give us even more borrow checker flexibility.
 
 [join_me_maybe_mini_redis]: https://github.com/oconnor663/mini-redis/pull/1
 [join_me_maybe_omicron]: https://github.com/oconnor663/omicron/pull/1
@@ -548,8 +553,8 @@ flexibility than `select!` does today.
     particular reason for us to go out of our way to `pin!` a `foo` future and
     pass it in by reference. But that's still possible, and we can still cause
     snoozing by doing it. Macros like `join_me_maybe::join!` let us express
-    more with owned futures, but banning await-by-reference is a separate
-    question. More on that below.
+    more with owned futures, but banning await-by-reference entirely is a
+    separate question. More on that below.
 
 ## Streams
 
@@ -609,16 +614,16 @@ anything that calls `poll_next` must also call `poll_progress` until it returns
 
 [^por_qué_no_los_dos]: Or maybe we could pick both, by defining two different
     `Stream`-like traits. But eventually we'd still have to pick one, when we
-    stabilize the `gen`/`yield` syntax.
+    stabilize `gen`/`yield` syntax.
 
 [^move_stream]: To solve the cancel safety problem, maybe `next` could take the
     `self` stream by value and return it in a tuple with the optional next
     value when it completes. Then cancelling the `next` future would drop the
-    whole stream instead of snoozing it. That's a viable design, but it seems
-    awkward, and I'm not sure anyone would like it. Alternatively, Rust could
-    let us define [futures that can't be cancelled][linear_types], and `next`
-    could be one of those. In any case, the snoozing problem with `buffered`
-    and `FuturesUnordered` is independent of this cancel safety question.
+    whole stream instead of snoozing it. That could work, but it seems awkward,
+    and I'm not sure anyone would like it. Alternatively, Rust could let us
+    define [futures that can't be cancelled][linear_types], and `next` could be
+    one of those. In any case, the snoozing problem with `buffered` and
+    `FuturesUnordered` is independent of this cancel safety question.
 
 [linear_types]: https://without.boats/blog/asynchronous-clean-up/#linear-types
 
@@ -628,10 +633,11 @@ anything that calls `poll_next` must also call `poll_progress` until it returns
 > reasoning—that you can understand important behavior by looking at code
 > directly around the behavior, then use the type system to scale that up to
 > global correctness.<br>
-> \- [Rain][cancelling_async_rust]
+> \- [_Cancelling async Rust_][cancelling_async_rust]
 
-Even if we like the suggestions above, what's the general rule here? We really
-need something that tools like Clippy can check automatically. I propose:
+Even if we like the suggestions above, what's the general rule here? For
+high-level application code, we need something that tools like Clippy can check
+automatically. I propose:
 
 **Don't pin things in async functions.**[^handle]
 
@@ -641,13 +647,14 @@ need something that tools like Clippy can check automatically. I propose:
 
 There's nothing wrong with pinning _per se_. It's a critical building block of
 async Rust, and we need it whenever we implement the `Future` trait "by
-hand".[^confusing] But when we need pinning in async functions, it's usually
-because something is polling a future that it doesn't own.[^select_function]
-That's exactly what happened in the `poll!` and `select!` examples above. It's
-also what happened in the first stream example that used `select!` and `next`.
-Internally the `next` future polled the stream by reference, and it's no
-coincidence that that example doesn't compile without `pin!`. Whenever we poll
-something that we don't own and can't `drop`, we're at risk of snoozing it.
+hand".[^confusing] But when we have to pin things in async functions, it's
+usually because something is polling a future that it doesn't
+own.[^select_function] That's what's happening in the `poll!` and `select!`
+examples above. It's also what happening in the first stream example that used
+`select!` and `next`. Internally the `next` future polls the stream by
+reference, and it's no coincidence that that example doesn't compile without
+`pin!`. Whenever we poll something that we don't own and can't `drop`, we're at
+risk of snoozing it.
 
 [^confusing]: On the other hand, pinning is arguably the most confusing part of
     async Rust, and today we still need to teach it to beginners. If we could
@@ -665,10 +672,11 @@ something that we don't own and can't `drop`, we're at risk of snoozing it.
 [`futures::future::select`]: https://docs.rs/futures/latest/futures/future/fn.select.html
 [foo_select_function]: playground://snooze_playground/foo_select_function.rs
 
-That said, there are plenty of [`Unpin`] futures out there that we can poll by
-reference without pinning, and there's no reason in principle that snoozing one
-of those couldn't hold a lock across an await point.[^unlikely] If we wanted to
-close that loophole, we could consider another rule:
+On the other hand, there are plenty of [`Unpin`] futures out there that we can
+poll by reference without pinning, and there's no reason in principle that
+snoozing one of those couldn't hold a lock across an await point.[^unlikely]
+I'm not aware of any real-world cases, but if we wanted to close that loophole,
+we could consider an additional rule:
 
 [`Unpin`]: https://doc.rust-lang.org/std/marker/trait.Unpin.html
 
@@ -683,11 +691,11 @@ close that loophole, we could consider another rule:
 [impl1]: https://doc.rust-lang.org/std/future/trait.Future.html#impl-Future-for-%26mut+F
 [impl2]: https://doc.rust-lang.org/std/future/trait.Future.html#impl-Future-for-Pin%3CP%3E
 
-It will probably always be possible to snooze things when we're implementing
-`Future` by hand, and I don't think there's a simple, mechanical rule that
-could forbid it. But I also think we can live with that. Writing `poll`
-functions is "advanced mode" in async Rust. We don't often need to do it in
-application logic, and we don't need to teach it to beginners. We can just
+That said, it will probably always be possible to snooze things when we're
+implementing `Future` by hand, and I don't think there's a simple, mechanical
+rule that could forbid it. But I also think we can live with that. Writing
+`poll` functions is "advanced mode" in async Rust. We don't often need to do it
+in application logic, and we don't need to teach it to beginners. We can just
 remember when we're looking at these things in code review:[^humans]
 
 [^humans]: As long as human beings are still doing code review I guess? But AIs

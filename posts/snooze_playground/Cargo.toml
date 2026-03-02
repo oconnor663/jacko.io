@@ -63,6 +63,10 @@ name = "foo_select_streams"
 path = "foo_select_streams.rs"
 
 [[bin]]
+name = "foo_stream_timeout"
+path = "foo_stream_timeout.rs"
+
+[[bin]]
 name = "foo_select_function"
 path = "foo_select_function.rs"
 
