@@ -5,6 +5,12 @@
 <description>Jack O'Connor's blog</description>
 
 <item>
+<title>Never Snooze a Future</title>
+<link>https://jacko.io/snooze.html</link>
+<pubDate>02 Mar 2026 05:00 PST</pubDate>
+</item>
+
+<item>
 <title>From Rust to C and Back Again: an introduction to "foreign functions"</title>
 <link>https://www.youtube.com/watch?v=LLAUzghhNHg</link>
 <pubDate>25 Apr 2025 14:30 PST</pubDate>

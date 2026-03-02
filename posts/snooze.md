@@ -698,7 +698,7 @@ In general, there probably isn't a simple, mechanical rule to prove that a
 we write those. But I think we can live with that. Writing `poll` and
 `poll_next` functions is "advanced mode" async Rust. We don't often need to do
 it in application logic, and we don't need to teach it to beginners. When we're
-looking at these low-level bits in code review,[^humans] we'll just try our
+looking at these low-level bits in code review,[^humans] we can just try our
 best to remember:
 
 [^humans]: As long as human beings are still doing code review I guess? But AIs
