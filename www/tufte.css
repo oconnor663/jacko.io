@@ -80,14 +80,6 @@ body {
     display: none;
 }
 
-/* Adds dark mode */
-@media (prefers-color-scheme: dark) {
-    body {
-        background-color: #151515;
-        color: #ddd;
-    }
-}
-
 h1 {
     font-weight: 400;
     margin-top: 4rem;
@@ -402,6 +394,8 @@ code, pre > code {
     border-radius: 5px;
 }
 
+.syn-comment { color: #93a1a1; }
+
 .faded_code {
     opacity: .4;
 }
@@ -498,6 +492,28 @@ label.margin-toggle:not(.sidenote-number) {
     left: 0;
     width: 100%;
     height: 100%;
+}
+
+/* Adds dark mode — must come after all base styles to win by source order */
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: #151515;
+        color: #ddd;
+    }
+    pre > code {
+        background: #1c1c1c;
+        color: #839496;
+    }
+    .code-bg {
+        background: #2a2a2a;
+    }
+    div.code_link a {
+        background-color: #1c1c1c;
+        color: #aaa;
+        border-color: #555;
+    }
+    /* Override only the base-dependent color; accent colors are the same */
+    .syn-comment { color: #657b83; }
 }
 
 @media (max-width: 760px) {

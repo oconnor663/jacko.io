@@ -290,7 +290,13 @@ impl Output {
                     .highlight_line(line_text, &syntax_set)
                     .unwrap();
                 let line_html =
-                    styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No).unwrap();
+                    styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No)
+                        .unwrap()
+                        // Strip the default text color so it inherits from `pre > code`,
+                        // which changes in the dark mode media query. Same for comments.
+                        .replace("style=\"color:#657b83;\"", "")
+                        .replace("style=\"color:#586e75;\"", "")
+                        .replace("style=\"color:#93a1a1;\"", "class=\"syn-comment\"");
                 // Line numbers conventionally start with 1.
                 let line_number = i + 1;
                 if code_lines.highlighted_lines.is_faded(line_number) {
