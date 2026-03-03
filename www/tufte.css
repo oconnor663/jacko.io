@@ -497,20 +497,20 @@ label.margin-toggle:not(.sidenote-number) {
 /* Adds dark mode — must come after all base styles to win by source order */
 @media (prefers-color-scheme: dark) {
     body {
-        background-color: #151515;
-        color: #ddd;
+        background-color: #002b36;
+        color: #eee8d5;
     }
     pre > code {
-        background: #1c1c1c;
+        background: #073642;
         color: #839496;
     }
     .code-bg {
-        background: #2a2a2a;
+        background: #073642;
     }
     div.code_link a {
-        background-color: #1c1c1c;
-        color: #aaa;
-        border-color: #555;
+        background-color: #073642;
+        color: #93a1a1;
+        border-color: #586e75;
     }
     /* Override only the base-dependent color; accent colors are the same */
     .syn-comment { color: #657b83; }
