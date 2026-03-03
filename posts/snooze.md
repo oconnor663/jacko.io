@@ -55,8 +55,9 @@ private async lock and pretends to do some work:[^nothing_wrong][^private]
     these with any form of async waiting: semaphores, bounded channels, even
     [`OnceCell`]s. There's some [interesting advice in the Tokio
     docs][what_kind_of_mutex] about using regular locks instead of async locks
-    as much as possible, and that's good advice, but consider that even
-    `tokio::sync::mpsc` channels [use a semaphore internally][internally].
+    as much as possible, and that's good advice, but consider that [the
+    original "Futurelock" bug][gh9259] was a deadlock on [a semaphore that
+    `tokio::sync::mpsc` channels use internally][internally].
 
 [what_kind_of_mutex]: https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#which-kind-of-mutex-should-you-use
 [`OnceCell`]: https://docs.rs/tokio/latest/tokio/sync/struct.OnceCell.html
@@ -82,10 +83,9 @@ the lock, the future that's holding it, and the mistake that snoozes that
 future can all be far apart from each other.[^ghidra] With that in mind, here's
 the minimal futurelock:
 
-[^ghidra]: In the [original issue thread][gh9259] that inspired "Futurelock",
-    they had to look at core dumps in [Ghidra] to narrow down the bug. That's
-    what we call ["type 2
-    fun"](https://essentialwilderness.com/type-1-2-and-3-fun/).
+[^ghidra]: In the [original "Futurelock" investigation][gh9259] they had to
+    look at core dumps in [Ghidra] to narrow down the bug. That's what we call
+    ["type 2 fun"](https://essentialwilderness.com/type-1-2-and-3-fun/).
 
 [gh9259]: https://github.com/oxidecomputer/omicron/issues/9259
 [Ghidra]: https://github.com/NationalSecurityAgency/ghidra
@@ -443,7 +443,15 @@ contexts, but in "normal code" it's almost hopeless.[^oldnewthing2]
 [oldnewthing2]: https://devblogs.microsoft.com/oldnewthing/20031209-00/?p=41573
 
 And yet that's what we're confronted with, implicitly, when we use
-`select!`-by-reference or buffered streams today. What can we do about that?
+`select!`-by-reference or buffered streams today.[^await_points] What can we do
+about that?
+
+[^await_points]: To be clear, snoozing a future can't deadlock e.g. the global
+    `malloc` lock, because we don't hold that particular lock across await
+    points. But as async programming gets more popular and async applications
+    get more complicated, it's increasingly common to manage shared resources
+    with async locks. Remember that [the original "Futurelock" bug][gh9259] was
+    a deadlock on [a semaphor in `tokio::sync::mpsc`][internally].
 
 ## `select!`
 
