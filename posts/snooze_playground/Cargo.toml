@@ -4,6 +4,7 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
+async-stream = "0.3.6"
 futures = "0.3.31"
 join_me_maybe = "0.5.0"
 libc = "0.2.180"
@@ -65,6 +66,10 @@ path = "foo_select_streams.rs"
 [[bin]]
 name = "foo_stream_timeout"
 path = "foo_stream_timeout.rs"
+
+[[bin]]
+name = "foo_stream_macro"
+path = "foo_stream_macro.rs"
 
 [[bin]]
 name = "foo_select_function"
