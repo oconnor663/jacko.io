@@ -714,3 +714,9 @@ best to remember:
     a time to be alive. Also what a time to be&hellip;whatever Claude is.
 
 **Never snooze a future.**
+
+---
+
+Discussion threads on
+[r/rust](https://old.reddit.com/r/rust/comments/1risdcd/never_snooze_a_future/),
+and [lobste.rs](https://lobste.rs/s/isuqoa/never_snooze_future).
