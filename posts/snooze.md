@@ -423,7 +423,7 @@ rule is "Never pause a thread."
 In contrast to cancellation, snoozing a future is no better than pausing a
 thread. Futurelock is a new spin on the old problems that `SuspendThread` and
 Unix signal handlers have always had:[^podcast] Normal application code touches
-global locks _constantly_, like when we print, allocate memory, load dynamic
+locks _constantly_, like when we print, allocate memory, load dynamic
 libraries, or talk to DNS. If we freeze some "normal code", and we don't want
 to risk deadlocking with it, then we need to avoid touching any locks ourselves
 until we unfreeze it. That's doable in some very low-level, very unsafe
