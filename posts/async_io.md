@@ -665,7 +665,7 @@ LINK: Playground ## https://play.rust-lang.org/?version=stable&mode=debug&editio
 HIGHLIGHT: 6-15
 // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been
 // set. Polling futures that aren't ready yet is inefficient but allowed.
-if awake_flag.check_and_clear() {
+if *awake_flag.0.lock().unwrap() {
     continue;
 }
 // All tasks are either sleeping or blocked on IO. Use libc::poll to wait

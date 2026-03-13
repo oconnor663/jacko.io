@@ -649,6 +649,7 @@ fn main() {
         };
         other_tasks.retain_mut(is_pending);
         // Handle NEW_TASKS and WAKE_TIMES...
+        …
 ```
 
 Done! That was a lot of changes all at once. Fortunately, it all builds. It
@@ -761,15 +762,6 @@ private implementation details of our main loop. Here's our glorified `bool`:
 LINK: Playground ## playground://async_playground/tasks.rs
 struct AwakeFlag(Mutex<bool>);
 
-impl AwakeFlag {
-    fn check_and_clear(&self) -> bool {
-        let mut guard = self.0.lock().unwrap();
-        let check = *guard;
-        *guard = false;
-        check
-    }
-}
-
 impl Wake for AwakeFlag {
     fn wake(self: Arc<Self>) {
         *self.0.lock().unwrap() = true;
@@ -777,26 +769,26 @@ impl Wake for AwakeFlag {
 }
 ```
 
-We can create an `AwakeFlag` and make a `Waker` from it at the start of `main`:
+We can create an `AwakeFlag` and make a `Waker` from it at the top of `main`.
+We'll clear it each time through the main loop:
 
 ```rust
 LINK: Playground ## playground://async_playground/tasks.rs
-HIGHLIGHT: 2-4
+HIGHLIGHT: 2-4,8-9
 fn main() {
     let awake_flag = Arc::new(AwakeFlag(Mutex::new(false)));
     let waker = Waker::from(Arc::clone(&awake_flag));
     let mut context = Context::from_waker(&waker);
-    …
+    let mut main_task = Box::pin(async_main());
+    let mut other_tasks: Vec<DynFuture> = Vec::new();
+    loop {
+        // Clear the AwakeFlag before polling.
+        *awake_flag.0.lock().unwrap() = false;
+        …
 ```
 
-And if that `AwakeFlag` is set, the main loop should
-re-poll:[^another_deadlock]
-
-[^another_deadlock]: The reason I defined `check_and_clear` above is that we
-    can create another deadlock if we lock `awake_flag` here but don't drop the
-    `MutexGuard` as soon as we're done with it. The last thing the main loop
-    does is invoking `Waker`s, which ends up calling `AwakeFlag::wake` and
-    taking the same lock.
+And then if it's set after polling, the main loop knows it might need to
+re-poll:
 
 ```rust
 LINK: Playground ## playground://async_playground/tasks.rs
@@ -812,13 +804,14 @@ loop {
 }
 // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been
 // set. Polling futures that aren't ready yet is inefficient but allowed.
-if awake_flag.check_and_clear() {
+if *awake_flag.0.lock().unwrap() {
     continue;
 }
-// Otherwise handle WAKERS and sleep as in Part One...
+// Otherwise handle WAKE_TIMES and sleep as in Part One...
+…
 ```
 
-It works! We've implemented tasks.[^spawn_wake]
+That worked! We've implemented tasks.[^spawn_wake]
 
 [^spawn_wake]: Our `wake` and `spawn` functions are thread-safe, but if we call
     them from a background thread while the main thread is sleeping, we don't

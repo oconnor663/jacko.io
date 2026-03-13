@@ -99,15 +99,6 @@ where
 // In production we'd use AtomicBool instead of Mutex<bool>.
 struct AwakeFlag(Mutex<bool>);
 
-impl AwakeFlag {
-    fn check_and_clear(&self) -> bool {
-        let mut guard = self.0.lock().unwrap();
-        let check = *guard;
-        *guard = false;
-        check
-    }
-}
-
 impl Wake for AwakeFlag {
     fn wake(self: Arc<Self>) {
         *self.0.lock().unwrap() = true;
@@ -229,6 +220,8 @@ fn main() -> io::Result<()> {
     let mut main_task = Box::pin(async_main());
     let mut other_tasks: Vec<DynFuture> = Vec::new();
     loop {
+        // Clear the AwakeFlag before polling.
+        *awake_flag.0.lock().unwrap() = false;
         // Poll the main task and exit immediately if it's done.
         if let Poll::Ready(result) = main_task.as_mut().poll(&mut context)
         {
@@ -255,7 +248,7 @@ fn main() -> io::Result<()> {
         }
         // Some tasks might wake other tasks. Re-poll if the AwakeFlag has been set. Polling
         // futures that aren't ready yet is inefficient but allowed.
-        if awake_flag.check_and_clear() {
+        if *awake_flag.0.lock().unwrap() {
             continue;
         }
         // Sleep until the next Waker is scheduled and then invoke Wakers that are ready.
