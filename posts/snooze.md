@@ -451,7 +451,7 @@ about that?
     points. But as async programming gets more popular and async applications
     get more complicated, it's increasingly common to manage shared resources
     with async locks. Remember that [the original "Futurelock" bug][gh9259] was
-    a deadlock on [a semaphor in `tokio::sync::mpsc`][internally].
+    a deadlock on [a semaphore in `tokio::sync::mpsc`][internally].
 
 ## `select!`
 
