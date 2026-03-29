@@ -1,15 +1,64 @@
 use anyhow::Context;
+use lumis::languages::Language;
 use pulldown_cmark::{
     BrokenLink, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{Style, ThemeSet};
-use syntect::html::{IncludeBackground, styled_line_to_highlighted_html};
-use syntect::parsing::SyntaxSet;
 use url::Url;
+
+fn lumis_language(name: &str) -> Option<Language> {
+    // Language::guess handles "rust", "python", "c", "cpp", etc.
+    // For "c++" from markdown, we normalize to "cpp".
+    let normalized = match name {
+        "c++" => "cpp",
+        other => other,
+    };
+    match Language::guess(Some(normalized), "") {
+        Language::PlainText => None,
+        lang => Some(lang),
+    }
+}
+
+/// Highlight source code using lumis with solarized themes (light + dark via CSS variables).
+/// Returns the inner HTML (the content of the `<code>` element) with `<div class="line">`
+/// wrappers per line.
+fn highlight_code(source: &str, language: &str) -> Option<String> {
+    let lang = lumis_language(language)?;
+
+    let theme_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut themes = HashMap::new();
+    themes.insert(
+        "light".to_string(),
+        lumis::themes::from_file(theme_dir.join("solarized_light.json"))
+            .expect("solarized_light.json"),
+    );
+    themes.insert(
+        "dark".to_string(),
+        lumis::themes::from_file(theme_dir.join("solarized_dark.json"))
+            .expect("solarized_dark.json"),
+    );
+
+    let formatter = lumis::HtmlMultiThemesBuilder::new()
+        .lang(lang)
+        .themes(themes)
+        .default_theme("light")
+        .build()
+        .ok()?;
+
+    let html = lumis::highlight(source, formatter);
+
+    // Extract the inner content between <code ...> and </code>.
+    let code_start = html.find('>').map(|i| {
+        // Skip past the <pre ...> tag, then past the <code ...> tag.
+        let after_pre = &html[i + 1..];
+        let code_tag_end = after_pre.find('>').unwrap();
+        i + 1 + code_tag_end + 1
+    })?;
+    let code_end = html.rfind("</code>")?;
+    Some(html[code_start..code_end].to_string())
+}
 
 const HEADER: &str = r#"<!DOCTYPE html>
 <!-- rendered by https://github.com/oconnor663/jacko.io/blob/master/render_posts/src/main.rs -->
@@ -269,49 +318,36 @@ impl Output {
             );
         }
 
-        if !code_block.language.is_empty() {
-            // The syntect syntax names have names like "Rust" and "C", not "rust" and "c". Make sure
-            // (only) the first letter is capitalized.
-            let mut capitalized_language = code_block.language;
-            capitalized_language[0..1].make_ascii_uppercase();
-            capitalized_language[1..].make_ascii_lowercase();
+        let highlighted_html = if !code_block.language.is_empty() {
+            highlight_code(
+                &code_lines.lines.join("\n"),
+                &code_block.language.to_lowercase(),
+            )
+        } else {
+            None
+        };
 
-            // syntax highlighting
-            // https://github.com/trishume/syntect/blob/c61ce60c72d67ad4e3dd06d60ff3b13ef4d2698c/examples/synhtml.rs
-            let syntax_set = SyntaxSet::load_defaults_nonewlines();
-            let syntax = syntax_set
-                .find_syntax_by_name(&capitalized_language)
-                .expect("unknown language name");
-            let theme_set = ThemeSet::load_defaults();
-            let mut line_highlighter =
-                HighlightLines::new(syntax, &theme_set.themes["Solarized (light)"]);
-            for (i, line_text) in code_lines.lines.iter().enumerate() {
-                let ranges: Vec<(Style, &str)> = line_highlighter
-                    .highlight_line(line_text, &syntax_set)
-                    .unwrap();
-                let line_html =
-                    styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No)
-                        .unwrap()
-                        // Strip the default text color so it inherits from `pre > code`,
-                        // which changes in the dark mode media query. Same for comments.
-                        .replace("style=\"color:#657b83;\"", "")
-                        .replace("style=\"color:#586e75;\"", "")
-                        .replace("style=\"color:#93a1a1;\"", "class=\"syn-comment\"");
-                // Line numbers conventionally start with 1.
-                let line_number = i + 1;
-                if code_lines.highlighted_lines.is_faded(line_number) {
-                    self.document_html += "<span class=\"faded_code\">";
+        if let Some(inner_html) = highlighted_html {
+            // lumis wraps each line in <div class="line" data-line="N">...</div>\n.
+            // We need to apply faded_code to specific lines.
+            if code_lines.highlighted_lines.line_numbers.is_empty() {
+                self.document_html += &inner_html;
+            } else {
+                for (i, line_div) in inner_html.split("<div class=\"line\"").enumerate() {
+                    if line_div.is_empty() {
+                        continue;
+                    }
+                    let line_number = i;
+                    if code_lines.highlighted_lines.is_faded(line_number) {
+                        self.document_html += "<div class=\"line faded_code\"";
+                    } else {
+                        self.document_html += "<div class=\"line\"";
+                    }
+                    self.document_html += line_div;
                 }
-                self.document_html += &line_html;
-                if code_lines.highlighted_lines.is_faded(line_number) {
-                    self.document_html += "</span>";
-                }
-                self.document_html += "<br>";
             }
         } else {
             for (i, line_text) in code_lines.lines.iter().enumerate() {
-                // Line numbers conventionally start with 1.
-                // TODO: There's some unfortunate duplication across branches here.
                 let line_number = i + 1;
                 if code_lines.highlighted_lines.is_faded(line_number) {
                     self.document_html += "<span class=\"faded_code\">";

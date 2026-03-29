@@ -394,7 +394,8 @@ code, pre > code {
     border-radius: 5px;
 }
 
-.syn-comment { color: #93a1a1; }
+/* lumis uses <div class="line"> per line inside <code> */
+pre > code .line { display: block; }
 
 .faded_code {
     opacity: .4;
@@ -512,8 +513,11 @@ label.margin-toggle:not(.sidenote-number) {
         color: #93a1a1;
         border-color: #586e75;
     }
-    /* Override only the base-dependent color; accent colors are the same */
-    .syn-comment { color: #657b83; }
+    /* Switch lumis highlight colors to the dark Solarized theme via CSS variables */
+    pre > code span {
+        color: var(--lumis-dark) !important;
+        font-style: var(--lumis-dark-font-style) !important;
+    }
 }
 
 @media (max-width: 760px) {

@@ -1,0 +1,101 @@
+{
+  "name": "solarized_dark",
+  "appearance": "dark",
+  "revision": "custom",
+  "highlights": {
+    "normal": {
+      "fg": "#839496",
+      "bg": "#002b36"
+    },
+    "highlighted": {
+      "bg": "#073642"
+    },
+
+    "comment": { "fg": "#586e75", "italic": true },
+    "comment.documentation": { "fg": "#586e75", "italic": true },
+    "comment.error": { "fg": "#dc322f", "bold": true },
+    "comment.hint": { "fg": "#cb4b16", "bold": true },
+    "comment.note": { "fg": "#268bd2", "bold": true },
+    "comment.todo": { "fg": "#d33682", "bold": true },
+    "comment.warning": { "fg": "#cb4b16", "bold": true },
+
+    "keyword": { "fg": "#859900" },
+    "keyword.conditional": { "fg": "#859900" },
+    "keyword.debug": { "fg": "#859900" },
+    "keyword.directive": { "fg": "#cb4b16" },
+    "keyword.directive.define": { "fg": "#cb4b16" },
+    "keyword.exception": { "fg": "#cb4b16" },
+    "keyword.function": { "fg": "#859900" },
+    "keyword.import": { "fg": "#cb4b16" },
+    "keyword.modifier": { "fg": "#859900" },
+    "keyword.operator": { "fg": "#859900" },
+    "keyword.repeat": { "fg": "#859900" },
+    "keyword.return": { "fg": "#859900" },
+    "keyword.storage": { "fg": "#859900" },
+    "keyword.type": { "fg": "#859900" },
+
+    "type": { "fg": "#b58900" },
+    "type.builtin": { "fg": "#b58900" },
+    "type.definition": { "fg": "#b58900" },
+    "type.qualifier": { "fg": "#b58900" },
+
+    "function": { "fg": "#268bd2" },
+    "function.builtin": { "fg": "#268bd2" },
+    "function.call": { "fg": "#268bd2" },
+    "function.macro": { "fg": "#cb4b16" },
+    "function.method": { "fg": "#268bd2" },
+    "function.method.call": { "fg": "#268bd2" },
+
+    "string": { "fg": "#2aa198" },
+    "string.escape": { "fg": "#cb4b16" },
+    "string.regex": { "fg": "#2aa198" },
+    "string.regexp": { "fg": "#2aa198" },
+    "string.special": { "fg": "#cb4b16" },
+    "string.special.symbol": { "fg": "#268bd2" },
+    "string.special.url": { "fg": "#6c71c4" },
+
+    "number": { "fg": "#2aa198" },
+    "number.float": { "fg": "#2aa198" },
+    "boolean": { "fg": "#2aa198" },
+    "character": { "fg": "#2aa198" },
+    "character.special": { "fg": "#cb4b16" },
+
+    "constant": { "fg": "#2aa198" },
+    "constant.builtin": { "fg": "#b58900" },
+    "constant.macro": { "fg": "#cb4b16" },
+
+    "variable": { "fg": "#839496" },
+    "variable.builtin": { "fg": "#cb4b16" },
+    "variable.member": { "fg": "#268bd2" },
+    "variable.parameter": { "fg": "#839496" },
+
+    "operator": { "fg": "#859900" },
+
+    "property": { "fg": "#268bd2" },
+
+    "punctuation.bracket": { "fg": "#839496" },
+    "punctuation.delimiter": { "fg": "#859900" },
+    "punctuation.special": { "fg": "#cb4b16" },
+
+    "attribute": { "fg": "#268bd2" },
+    "attribute.builtin": { "fg": "#268bd2" },
+    "constructor": { "fg": "#b58900" },
+    "label": { "fg": "#859900" },
+    "module": { "fg": "#268bd2" },
+
+    "diff.delta": { "fg": "#b58900" },
+    "diff.minus": { "fg": "#dc322f" },
+    "diff.plus": { "fg": "#859900" },
+
+    "error": { "fg": "#dc322f" },
+    "markup.heading": { "fg": "#cb4b16", "bold": true },
+    "markup.italic": { "italic": true },
+    "markup.bold": { "bold": true },
+    "markup.link": { "fg": "#6c71c4" },
+    "markup.link.url": { "fg": "#6c71c4" },
+    "markup.raw": { "fg": "#2aa198" },
+    "tag": { "fg": "#268bd2" },
+    "tag.attribute": { "fg": "#b58900" },
+    "tag.delimiter": { "fg": "#839496" }
+  }
+}
