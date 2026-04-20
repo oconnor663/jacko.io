@@ -620,8 +620,8 @@ anything that calls `poll_next` must also call `poll_progress` until it returns
 `Ready`. Most stream combinators could be adapted to follow that new rule, but
 `next` would be unfixable, and we'd need to deprecate it. That isn't an option
 today, because using `next` with `while let` is the standard way to loop over a
-stream, but it could work if/when Rust adds an `async for` loop that integrates
-with `poll_progress`.
+stream, but it could work if/when Rust adds a [`for await`] loop that
+integrates with `poll_progress`.
 
 [^por_qué_no_los_dos]: Or maybe we could pick both, by defining two different
     `Stream`-like traits. But eventually we'd still have to pick one, when we
@@ -638,6 +638,8 @@ with `poll_progress`.
     `FuturesUnordered` is independent of this cancel safety question.
 
 [linear_types]: https://without.boats/blog/asynchronous-clean-up/#linear-types
+
+[`for await`]: https://github.com/rust-lang/rust/issues/118898
 
 ## A general rule
 
