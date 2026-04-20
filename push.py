@@ -25,7 +25,7 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]] ; then
 fi
 
 git fetch --all
-git reset --hard origin/master
+git reset --hard origin/main
 peru sync --no-cache
 (cd render_posts && cargo run --release)
 """
@@ -39,7 +39,7 @@ def main():
         print("local repo is dirty")
         return 1
 
-    cmd("git", "push", "origin", "master").run()
+    cmd("git", "push", "origin", "main").run()
 
     output = cmd("ssh", "jacko@jacko.io", "/usr/bin/bash").stdin_bytes(SSH_BASH).unchecked().run()
     if output.status != 0:
