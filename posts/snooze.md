@@ -663,9 +663,9 @@ There's nothing wrong with pinning _per se_. It's a fundamental building block
 of async Rust, and we need it when we implement `Future` or `Stream` "by
 hand".[^confusing] But when we have to pin things in an `async fn`, it's
 usually because something is polling a future that it doesn't
-own.[^select_function] That's what's happening in the `poll!` and `select!`
-examples above, including the `stream.next()` case. Polling something we don't
-own and can't `drop` is a recipe for snoozing.
+own.[^select_function][^three_problems] That's what's happening in the `poll!`
+and `select!` examples above, including the `stream.next()` case. Polling
+something we don't own and can't `drop` is a recipe for snoozing.
 
 [^confusing]: On the other hand, pinning is arguably the most confusing part of
     async Rust, and today we still need to teach it to beginners. If we could
@@ -681,6 +681,17 @@ own and can't `drop` is a recipe for snoozing.
 
 [`futures::future::select`]: https://docs.rs/futures/latest/futures/future/fn.select.html
 [foo_select_function]: playground://snooze_playground/foo_select_function.rs
+
+[^three_problems]: The third case in [_Three problems of
+    pinning_][three_problems] is a false positive for this proposed lint:
+    `Box::pin` (not just `Box::new`) is required in recursive async functions
+    and cases where we don't want a large future to touch the stack, because
+    [`impl Future for Box<Fut>`][box_future_impl] has a `Fut: Unpin` bound.
+    Callers could add `#[allow(...)]` attributes in these cases, or a helper
+    function could call `Box::into_pin` internally.
+
+[three_problems]: https://without.boats/blog/three-problems-of-pinning/
+[box_future_impl]: https://doc.rust-lang.org/std/boxed/struct.Box.html#impl-Future-for-Box%3CF,+A%3E
 
 There are also plenty of [`Unpin`] futures out there that we can poll by
 reference without pinning, and there's no reason in principle that snoozing one
