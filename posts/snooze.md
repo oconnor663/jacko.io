@@ -52,15 +52,15 @@ examples. Our test subject today will be `foo`, a toy function that takes a
 private async lock and pretends to do some work:[^nothing_wrong][^private]
 
 [^nothing_wrong]: There's nothing wrong with `foo`. We could make examples like
-    these with any form of async waiting: semaphores, bounded channels, even
-    [`OnceCell`]s. There's some [interesting advice in the Tokio
-    docs][what_kind_of_mutex] about using regular locks instead of async locks
-    as much as possible, and that's good advice, but consider that [the
+    these with any form of async waiting: semaphores, bounded channels, [even
+    `OnceCell`s][once_cell_example]. There's some [interesting advice in the
+    Tokio docs][what_kind_of_mutex] about using regular locks instead of async
+    locks as much as possible, and that's good advice, but consider that [the
     original "Futurelock" bug][gh9259] was a deadlock on [a semaphore that
     `tokio::sync::mpsc` channels use internally][internally].
 
 [what_kind_of_mutex]: https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#which-kind-of-mutex-should-you-use
-[`OnceCell`]: https://docs.rs/tokio/latest/tokio/sync/struct.OnceCell.html
+[once_cell_example]: playground://snooze_playground/once_cell_example.rs
 [internally]: https://github.com/tokio-rs/tokio/blob/0ec0a8546105b9f250f868b77e42c82809703aab/tokio/src/sync/mpsc/bounded.rs#L162
 
 [^private]: Nothing besides `foo` is going to touch `LOCK`, so it would be
