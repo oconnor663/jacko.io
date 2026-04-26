@@ -734,5 +734,6 @@ best to remember:
 ---
 
 Discussion threads on
-[r/rust](https://old.reddit.com/r/rust/comments/1risdcd/never_snooze_a_future/)
-and [lobste.rs](https://lobste.rs/s/isuqoa/never_snooze_future).
+[r/rust](https://old.reddit.com/r/rust/comments/1risdcd/never_snooze_a_future/),
+[lobste.rs](https://lobste.rs/s/isuqoa/never_snooze_future),
+and [Hacker News](https://news.ycombinator.com/item?id=47296426).
