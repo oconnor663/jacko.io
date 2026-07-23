@@ -569,7 +569,7 @@ that it accepts any `Output` type and returns a `JoinHandle`:[^send_bound]
 
 [^send_bound]: The future returned by `wrap_with_join_state` needs to be
     coercible to `DynFuture`, which means the `JoinState<T>` that it contains
-    needs to be `Send` and `'static`, which means T needs to be `Send` and
+    needs to be `Send` and `'static`, which means `T` needs to be `Send` and
     `'static`. This time around I'll skip the "discovery" phase and just write
     the bounds correctly the first time.
 
@@ -592,8 +592,6 @@ where
 
 We'll collect and `.await` those `JoinHandle`s in `async_main`, similar to how
 we managed Tokio tasks above:[^unwrap]
-
-[an iterator]: https://doc.rust-lang.org/std/vec/struct.IntoIter.html
 
 [^unwrap]: The Tokio version had an extra `.unwrap()` after `handle.await`,
     because Tokio catches panics and converts them to `Result`s, like

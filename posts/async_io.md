@@ -327,8 +327,6 @@ behavior of [`Write::write_all`].[^write_all]
     if `Write::write` needs to block after it's already written some bytes, it
     returns `Ok(n)` first, and then the _next_ call returns `WouldBlock`.
 
-[`Write::write_all`]: https://doc.rust-lang.org/std/io/trait.Write.html#method.write_all
-
 Those are the async building blocks we needed for the server, and now we can
 write the async version of `server_main`:[^rely_on_pin]
 

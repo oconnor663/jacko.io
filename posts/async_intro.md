@@ -209,8 +209,8 @@ thread handles above. But [`join_all`] is very different from the [`join`]
 method we used with threads. Previously joining meant waiting on something, but
 here it means combining multiple "futures" together somehow. We'll get to the
 details in [Part One], but for now we can [add some more prints][tokio_10_dbg]
-to see that `join_all` doesn't take any time, and none of `foo`s start running
-until we `.await` the joined future.
+to see that `join_all` doesn't take any time, and none of the `foo`s start
+running until we `.await` the joined future.
 
 [`join_all`]: https://docs.rs/futures/latest/futures/future/fn.join_all.html
 [`join`]: https://doc.rust-lang.org/std/thread/struct.JoinHandle.html#method.join

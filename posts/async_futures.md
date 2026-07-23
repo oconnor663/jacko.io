@@ -397,8 +397,6 @@ shouldn't poll them again after that.
     clever algorithm that "walks" two pointers through the `Vec` and moves each
     element at most once.
 
-[`Vec::remove`]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.remove
-
 There's nothing else new here. From the outside, running all these futures at
 the same time seemed like magic, but on the inside, all we're doing is calling
 `poll` on the elements of a `Vec`. This is the flip side of the compromise we
@@ -411,7 +409,7 @@ which has no output. The real `join_all` returns `Vec<F::Output>`, which
 requires some more bookkeeping. This is left as an exercise for the reader, as
 they say.[^not_either_version]
 
-[^not_either_version]: As we did `foo`, we're going to put the original
+[^not_either_version]: As we did with `foo`, we're going to put the original
     `join_all` back in going forward. This time though, the two versions aren't
     exactly the same, even apart from the shortcut we just mentioned. We'll
     make another "important mistake" in the [Main](#main) section below, which
