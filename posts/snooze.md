@@ -653,11 +653,27 @@ Even if we like the suggestions above, what's the general rule here? For
 high-level application code, we need something that tools like Clippy can check
 automatically. I propose:
 
-**Don't pin things in async functions.**[^handle]
+**Don't pin things in async functions.**[^handle][^mistake]
 
 [^handle]: Pinning is a safe operation that can hide in non-async helpers, so
     in practice we'd probably want to expand that to "Don't handle `Pin<_>`
     values in async functions."
+
+[^mistake]: In retrospect (August 2026), there's a legitimate reason to break
+    this rule, which might be common enough to make it impractical as a lint.
+    When futures get very large, we sometimes need to `Box` them to keep them
+    off the callstack. However, because `Box` is always `Unpin`, `Box<impl
+    Future>` [only implements `Future` when its contents are also
+    `Unpin`][box_impl]. We generally need need to use `Pin<Box<impl Future>>`
+    instead, not because we're calling any `Pin<&mut _>` methods, but just
+    because we're passing it to an API that expects a `Future`. Boats [has
+    called this][mistake] "the biggest mistake we made in designing
+    async/await". The other lint below still seems viable, though, and we could
+    also [warn when an idle futures lives across a suspension point][idle].
+
+[box_impl]: https://doc.rust-lang.org/std/future/trait.Future.html#impl-Future-for-Box%3CF,+A%3E
+[mistake]: https://without.boats/blog/three-problems-of-pinning/#awaiting-an-indirect-future
+[idle]: https://old.reddit.com/r/rust/comments/1risdcd/never_snooze_a_future/o88d0ft/
 
 There's nothing wrong with pinning _per se_. It's a fundamental building block
 of async Rust, and we need it when we implement `Future` or `Stream` "by
