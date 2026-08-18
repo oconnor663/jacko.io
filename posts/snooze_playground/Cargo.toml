@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 async-stream = "0.3.6"
 futures = "0.3.31"
-join_me_maybe = "0.5.0"
+join_me_maybe = "0.6.1"
 libc = "0.2.180"
 moro = "0.4.0"
 reqwest = "0.13.2"
