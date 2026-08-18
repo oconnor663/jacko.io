@@ -9,7 +9,7 @@ debug = true
 [dependencies]
 anyhow = "1.0.69"
 html-escape = "0.2.13"
-lumis = { version = "0.2.1", default-features = false, features = ["lang-rust", "lang-python", "lang-c", "lang-cpp"] }
+lumis = { version = "0.13.0", default-features = false, features = ["lang-rust", "lang-python", "lang-c", "lang-cpp"] }
 pulldown-cmark = "0.13.0"
 serde = { version = "1.0.208", features = ["derive"] }
 toml = "1.0.1"

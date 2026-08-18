@@ -41,7 +41,7 @@ fn highlight_code(source: &str, language: &str) -> Option<String> {
     );
 
     let formatter = lumis::HtmlMultiThemesBuilder::new()
-        .lang(lang)
+        .language(lang)
         .themes(themes)
         .default_theme("light")
         .build()
